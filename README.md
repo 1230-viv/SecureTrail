@@ -18,8 +18,6 @@
 - [Usage](#usage)
 - [Project Structure](#project-structure)
 - [Team](#team)
-- [Roadmap](#roadmap)
-- [Contributing](#contributing)
 - [License](#license)
 
 ## 🎯 Overview
@@ -480,9 +478,9 @@ securetrail/
 
 **Team Members:**
 - Parth Chavan - Team Lead & DevOps
-- Vivek Swami - Cybersecurity & Code Analysis
-- Sarthak Kshirsagar - Cybersecurity & Vulnerability Research
-- Meghal Kulkarni - AI/ML Integration & Prompt Engineering
+- Vivek Swami - Cybersecurity 
+- Sarthak Kshirsagar - Cybersecurity
+- Meghal Kulkarni - AI/ML Integration 
 
 ## 🤖 Responsible AI & Ethics
 
@@ -513,30 +511,6 @@ SecureTrail is committed to responsible AI practices:
 - Vulnerability detection is based on established security standards (OWASP, CWE)
 - Regular audits ensure fair and unbiased operation
 
-## 🗺️ Roadmap
-
-### Phase 1 (MVP - Hackathon) ✅
-- [x] Code upload and GitHub integration
-- [x] Static analysis for JavaScript and Python
-- [x] AI-powered vulnerability explanations
-- [x] Developer dashboard
-- [x] User authentication
-- [x] Basic learning mode
-
-### Phase 2 (6-12 months)
-- [ ] IDE integration (VS Code, IntelliJ)
-- [ ] Additional language support (Java, Go, Ruby, PHP)
-- [ ] Advanced analysis (dynamic analysis, dependency scanning)
-- [ ] CI/CD integration (GitHub Actions, GitLab CI, Jenkins)
-- [ ] Team collaboration features
-
-### Phase 3 (12-24 months)
-- [ ] Interactive security challenges and CTF exercises
-- [ ] Gamification with badges and achievements
-- [ ] Security certification program
-- [ ] Enterprise features (SSO, custom policies, compliance reporting)
-- [ ] Mobile applications (iOS, Android)
-
 ## 🎯 Success Metrics
 
 ### User Engagement
@@ -562,25 +536,6 @@ SecureTrail is committed to responsible AI practices:
 - **Target:** 60% of users demonstrate improved secure coding patterns
 - **Goal:** Establish partnerships with 5 educational institutions by end of Year 1
 
-## 🤝 Contributing
-
-We welcome contributions from the community! Please read our [Contributing Guidelines](CONTRIBUTING.md) before submitting pull requests.
-
-### Development Workflow
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-### Code Standards
-
-- Follow ESLint/Prettier configurations
-- Write unit tests for new features
-- Update documentation as needed
-- Follow conventional commit messages
-
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
@@ -594,8 +549,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📞 Contact
 
-- **Project Link:** [https://github.com/strawhats/securetrail](https://github.com/strawhats/securetrail)
-- **Team Leader:** Parth Chavan - [email@example.com](mailto:email@example.com)
+- **Project Link:** [https://github.com/1230-viv/SecureTrail.git](https://github.com/1230-viv/SecureTrail.git)
+- **Team Leader:** Parth Chavan - [parthchavan219@example.com](mailto:viveksj1230@example.com)
 - **Documentation:** [https://docs.securetrail.dev](https://docs.securetrail.dev)
 - **Demo:** [https://demo.securetrail.dev](https://demo.securetrail.dev)
 
