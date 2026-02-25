@@ -1,9 +1,13 @@
-from fastapi import APIRouter, HTTPException, Header
+from fastapi import APIRouter, HTTPException, Header, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 import os
 from github import Github, GithubException
 from Controller.models import GitHubAuthResponse
 import httpx
+
+from Database.connection import get_db_session
+from Database.repositories import user_repo
 
 router = APIRouter()
 
@@ -21,7 +25,7 @@ async def github_login():
     return {"auth_url": auth_url}
 
 @router.get("/github/callback")
-async def github_callback(code: str):
+async def github_callback(code: str, db: AsyncSession = Depends(get_db_session)):
     """Handle GitHub OAuth callback"""
     client_id = os.getenv("GITHUB_CLIENT_ID")
     client_secret = os.getenv("GITHUB_CLIENT_SECRET")
@@ -53,16 +57,33 @@ async def github_callback(code: str):
     # Get user info
     try:
         g = Github(access_token)
-        user = g.get_user()
-        
+        github_user = g.get_user()
+
+        github_data = {
+            "id":         github_user.id,
+            "login":      github_user.login,
+            "name":       github_user.name,
+            "email":      github_user.email,
+            "avatar_url": github_user.avatar_url,
+            "html_url":   github_user.html_url,
+        }
+
+        # Persist / update the user record in PostgreSQL
+        try:
+            db_user = await user_repo.upsert_github_user(db, github_data)
+            user_id = str(db_user.id)
+        except Exception:
+            user_id = None   # non-fatal — don't block the login flow
+
         return GitHubAuthResponse(
             access_token=access_token,
             user={
-                "id": user.id,
-                "login": user.login,
-                "name": user.name,
-                "email": user.email,
-                "avatar_url": user.avatar_url
+                "id":         github_user.id,
+                "internal_id": user_id,
+                "login":      github_user.login,
+                "name":       github_user.name,
+                "email":      github_user.email,
+                "avatar_url": github_user.avatar_url,
             }
         )
     except GithubException as e:

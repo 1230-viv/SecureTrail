@@ -18,6 +18,26 @@ from Utils.logger import get_logger
 
 logger = get_logger("bedrock_client")
 
+
+class BedrockPermanentError(RuntimeError):
+    """
+    Raised when the Bedrock error is permanent and will not be resolved by
+    retrying — e.g. model access not approved, invalid credentials, quota exceeded.
+    Callers should circuit-break immediately rather than retrying.
+    """
+
+# Error codes that are permanent (no point retrying any further calls)
+_PERMANENT_ERROR_CODES = {
+    "ResourceNotFoundException",      # model not approved / wrong model ID
+    "AccessDeniedException",           # IAM permissions missing
+    "UnauthorizedException",           # bad credentials
+    "UnrecognizedClientException",     # invalid / expired security token
+    "InvalidClientTokenId",            # key ID not valid
+    "AuthFailure",                     # general auth failure
+    "ValidationException",             # malformed request / model ID wrong format
+    "ServiceQuotaExceededException",   # hard quota hit
+}
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Configuration — no hardcoded values
 # ──────────────────────────────────────────────────────────────────────────────
@@ -74,6 +94,10 @@ def invoke_claude(system_prompt: str, user_message: str) -> str:
     except ClientError as e:
         error_code = e.response["Error"]["Code"]
         logger.error(f"Bedrock ClientError [{error_code}]: {e}")
+        if error_code in _PERMANENT_ERROR_CODES:
+            raise BedrockPermanentError(
+                f"Bedrock permanent error [{error_code}]: {e}"
+            ) from e
         raise RuntimeError(f"Bedrock API error: {error_code}") from e
     except Exception as e:
         logger.error(f"Unexpected Bedrock error: {e}")

@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, Tuple
 
 from Scanners.semgrep_scanner import run_semgrep
-from Scanners.npm_audit_scanner import run_npm_audit
+from Scanners.trivy_scanner import run_trivy
 from Scanners.gitleaks_scanner import run_gitleaks
 from Utils.logger import JobLogger
 
@@ -33,13 +33,13 @@ async def run_all_scanners(
 
     start = time.monotonic()
 
-    semgrep_task    = asyncio.create_task(_safe_run("semgrep",    run_semgrep(project_dir, job_id),    log))
-    npm_audit_task  = asyncio.create_task(_safe_run("npm_audit",  run_npm_audit(project_dir, job_id),  log))
-    gitleaks_task   = asyncio.create_task(_safe_run("gitleaks",   run_gitleaks(project_dir, job_id),   log))
+    semgrep_task   = asyncio.create_task(_safe_run("semgrep",   run_semgrep(project_dir, job_id),   log))
+    trivy_task     = asyncio.create_task(_safe_run("trivy",     run_trivy(project_dir, job_id),     log))
+    gitleaks_task  = asyncio.create_task(_safe_run("gitleaks",  run_gitleaks(project_dir, job_id),  log))
 
-    semgrep_result, semgrep_err     = await semgrep_task
-    npm_audit_result, npm_audit_err = await npm_audit_task
-    gitleaks_result, gitleaks_err   = await gitleaks_task
+    semgrep_result, semgrep_err    = await semgrep_task
+    trivy_result,   trivy_err      = await trivy_task
+    gitleaks_result, gitleaks_err  = await gitleaks_task
 
     elapsed = time.monotonic() - start
     log.info(f"All scanners finished in {elapsed:.1f}s")
@@ -52,10 +52,10 @@ async def run_all_scanners(
     if semgrep_err:
         errors["semgrep"] = semgrep_err
 
-    if npm_audit_result is not None:
-        results["npm_audit"] = npm_audit_result
-    if npm_audit_err:
-        errors["npm_audit"] = npm_audit_err
+    if trivy_result is not None:
+        results["trivy"] = trivy_result
+    if trivy_err:
+        errors["trivy"] = trivy_err
 
     if gitleaks_result is not None:
         results["gitleaks"] = gitleaks_result

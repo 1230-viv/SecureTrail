@@ -1,51 +1,63 @@
 import React from 'react';
+import { useLocation } from 'react-router-dom';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import Sidebar from './components/Sidebar';
-import RepositoryUpload from './components/RepositoryUpload';
-import RiskSummary from './components/RiskSummary';
-import RecentScans from './components/RecentScans';
+import Navbar  from './components/Navbar';
+import AppRoutes from './routes/AppRoutes';
+import { ScanProvider } from './context/ScanContext';
+import { AuthProvider } from './context/AuthContext';
+
+/**
+ * AppShell — chooses layout based on the current route.
+ *   /             → Public layout  (Navbar only)
+ *   /dashboard/*  → Protected layout (Sidebar + main content)
+ */
+const AppShell = () => {
+  const { pathname } = useLocation();
+  const isPublic = pathname === '/';
+
+  if (isPublic) {
+    return (
+      <>
+        <Navbar />
+        <AppRoutes />
+      </>
+    );
+  }
+
+  return (
+    <div className="flex min-h-screen bg-gray-100">
+      <Sidebar />
+      <main className="ml-64 flex-1 p-8">
+        <div className="max-w-7xl mx-auto">
+          <AppRoutes />
+        </div>
+      </main>
+    </div>
+  );
+};
 
 function App() {
   return (
-    <div className="flex min-h-screen bg-gray-100">
-      {/* Sidebar */}
-      <Sidebar />
-
-      {/* Main Content */}
-      <div className="ml-64 flex-1 p-8">
-        <div className="max-w-7xl mx-auto">
-          {/* Main Grid Layout */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Left Column - Repository Upload (Takes 2 columns) */}
-            <div className="lg:col-span-2">
-              <RepositoryUpload />
-            </div>
-
-            {/* Right Column - Risk Summary and Recent Scans */}
-            <div className="space-y-6">
-              <RiskSummary />
-              <RecentScans />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Toast Notifications */}
-      <ToastContainer
-        position="top-right"
-        autoClose={3000}
-        hideProgressBar={false}
-        newestOnTop={false}
-        closeOnClick
-        rtl={false}
-        pauseOnFocusLoss
-        draggable
-        pauseOnHover
-        theme="light"
-      />
-    </div>
+    <AuthProvider>
+      <ScanProvider>
+        <AppShell />
+        <ToastContainer
+          position="top-right"
+          autoClose={4000}
+          hideProgressBar={false}
+          newestOnTop
+          closeOnClick
+          pauseOnFocusLoss
+          draggable
+          pauseOnHover
+          theme="light"
+        />
+      </ScanProvider>
+    </AuthProvider>
   );
 }
 
 export default App;
+

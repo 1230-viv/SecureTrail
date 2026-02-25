@@ -78,6 +78,14 @@ _CATEGORY_KEYWORDS: List[tuple[str, VulnerabilityCategory]] = [
 ]
 
 
+def _coerce_str(value: Any) -> str:
+    """Semgrep metadata fields (owasp, cwe) can be a list or a string.
+    If a list, join elements with '; '. Always returns a plain string."""
+    if isinstance(value, list):
+        return "; ".join(str(v) for v in value)
+    return str(value) if value is not None else ""
+
+
 def _map_severity(raw: str) -> Severity:
     return _SEVERITY_MAP.get(raw.lower().strip(), Severity.UNKNOWN)
 
@@ -133,8 +141,8 @@ def normalize_semgrep(raw: Dict[str, Any], job_id: str) -> List[NormalizedVulner
                 severity=_map_severity(str(extra.get("severity", "medium"))),
                 confidence=Confidence.HIGH,
                 source=ScannerSource.SEMGREP,
-                cwe_id=str(metadata.get("cwe", metadata.get("cwe_id", ""))),
-                owasp_id=metadata.get("owasp", ""),
+                cwe_id=_coerce_str(metadata.get("cwe", metadata.get("cwe_id", ""))),
+                owasp_id=_coerce_str(metadata.get("owasp", "")),
                 metadata={
                     "rule_id": check_id,
                     "rule_url": f"https://semgrep.dev/r/{check_id}",
@@ -151,62 +159,80 @@ def normalize_semgrep(raw: Dict[str, Any], job_id: str) -> List[NormalizedVulner
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# npm audit normalizer  (supports v6 and v7+ formats)
+# Trivy normalizer  (schema v2 — filesystem scan output)
 # ──────────────────────────────────────────────────────────────────────────────
 
-def normalize_npm_audit(raw: Dict[str, Any], job_id: str) -> List[NormalizedVulnerability]:
-    log = JobLogger(job_id, "normalizer.npm_audit")
+def normalize_trivy(raw: Dict[str, Any], job_id: str) -> List[NormalizedVulnerability]:
+    """
+    Normalize Trivy JSON v2 filesystem scan output.
+    Handles all language ecosystems Trivy covers:
+    npm, pip, gem, go, maven, cargo, composer, OS packages, etc.
+    """
+    log = JobLogger(job_id, "normalizer.trivy")
     if raw.get("skipped"):
-        log.info("npm audit was skipped — nothing to normalize")
+        log.info("Trivy was skipped — nothing to normalize")
         return []
 
     vulns: List[NormalizedVulnerability] = []
-    # npm v7+ format uses "vulnerabilities" key; v6 uses "advisories"
-    advisories = raw.get("vulnerabilities", raw.get("advisories", {}))
+    results = raw.get("Results", [])
+    if not isinstance(results, list):
+        log.warning("Trivy 'Results' field is not a list")
+        return []
 
-    for pkg_name, advisory in advisories.items():
-        try:
-            # v7 format nests advisories differently
-            via = advisory.get("via", [])
-            advisory_list = [v for v in via if isinstance(v, dict)]
-            if not advisory_list:
-                advisory_list = [advisory]
+    for result_block in results:
+        target = result_block.get("Target", "")
+        ecosystem = result_block.get("Type", "unknown")
+        vulnerabilities = result_block.get("Vulnerabilities") or []
 
-            for adv in advisory_list:
-                severity_raw = adv.get("severity", advisory.get("severity", "unknown"))
-                title = adv.get("title", adv.get("name", pkg_name))
-                url = adv.get("url", adv.get("url", ""))
-                cve_ids = adv.get("cves", [])
-                cve_id = cve_ids[0] if cve_ids else None
-                cwe_raw = adv.get("cwe", [])
-                cwe_id = (cwe_raw[0] if isinstance(cwe_raw, list) and cwe_raw else str(cwe_raw)) or None
-                fixed_in = adv.get("fixAvailable", advisory.get("fixAvailable", {}))
+        for finding in vulnerabilities:
+            try:
+                cve_id     = finding.get("VulnerabilityID", "")
+                pkg_name   = finding.get("PkgName", "")
+                installed  = finding.get("InstalledVersion", "")
+                fixed      = finding.get("FixedVersion", "")
+                severity_r = finding.get("Severity", "UNKNOWN")
+                title      = finding.get("Title", cve_id)
+                desc       = finding.get("Description", "")
+                refs       = finding.get("References", [])
+                cwe_list   = finding.get("CweIDs", [])
+                cwe_id     = cwe_list[0] if cwe_list else None
+                primary_url = finding.get("PrimaryURL", refs[0] if refs else "")
+
+                # Extract CVSS v3 score if available
+                cvss_score: Any = None
+                cvss_block = finding.get("CVSS", {})
+                for src in ("nvd", "redhat", "ghsa"):
+                    if src in cvss_block:
+                        cvss_score = cvss_block[src].get("V3Score")
+                        break
 
                 vuln = NormalizedVulnerability(
                     type="dependency-vulnerability",
                     category=VulnerabilityCategory.DEPENDENCY_CVE,
-                    title=f"[{pkg_name}] {title}",
-                    description=adv.get("overview", str(adv.get("title", ""))),
-                    file="package.json",
-                    severity=_map_severity(severity_raw),
+                    title=f"[{pkg_name}] {title}" if title != cve_id else f"[{pkg_name}] {cve_id}",
+                    description=desc or title,
+                    file=target,
+                    severity=_map_severity(severity_r),
                     confidence=Confidence.HIGH,
-                    source=ScannerSource.NPM_AUDIT,
-                    cve_id=cve_id,
+                    source=ScannerSource.TRIVY,
+                    cve_id=cve_id or None,
                     cwe_id=str(cwe_id) if cwe_id else None,
                     owasp_id=_OWASP_MAP.get("using-components-with-known-vulnerabilities", "A06:2021"),
                     metadata={
                         "package": pkg_name,
-                        "affected_range": adv.get("range", advisory.get("range", "")),
-                        "fix_available": fixed_in,
-                        "advisory_url": url,
-                        "patched_versions": adv.get("patched_versions", ""),
+                        "ecosystem": ecosystem,
+                        "installed_version": installed,
+                        "fixed_version": fixed,
+                        "advisory_url": primary_url,
+                        "cvss_v3_score": cvss_score,
+                        "references": refs[:5],
                     },
                 )
                 vulns.append(vuln)
-        except Exception as e:
-            log.warning(f"Failed to normalize npm advisory for {pkg_name}: {e}")
+            except Exception as e:
+                log.warning(f"Failed to normalize Trivy finding for {finding.get('PkgName', '?')}: {e}")
 
-    log.info(f"Normalized {len(vulns)} npm audit findings")
+    log.info(f"Normalized {len(vulns)} Trivy findings across {len(results)} targets")
     return vulns
 
 
@@ -282,8 +308,8 @@ def normalize_all(
     if "semgrep" in scanner_results:
         all_vulns.extend(normalize_semgrep(scanner_results["semgrep"], job_id))
 
-    if "npm_audit" in scanner_results:
-        all_vulns.extend(normalize_npm_audit(scanner_results["npm_audit"], job_id))
+    if "trivy" in scanner_results:
+        all_vulns.extend(normalize_trivy(scanner_results["trivy"], job_id))
 
     if "gitleaks" in scanner_results:
         all_vulns.extend(normalize_gitleaks(scanner_results["gitleaks"], job_id))
