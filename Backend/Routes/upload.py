@@ -1,97 +1,89 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse
 import os
-import zipfile
 import shutil
 from pathlib import Path
 import aiofiles
+
 from Controller.models import UploadResponse
+from Jobs.job_manager import job_manager, JobStatus
+from Utils.temp_manager import create_job_directory, safe_extract_zip, find_project_root
+from Utils.logger import get_logger
 
 router = APIRouter()
+logger = get_logger("route.upload")
 
-# Get upload directory from env
-UPLOAD_DIR = os.getenv("UPLOAD_DIR", "./uploads")
 MAX_UPLOAD_SIZE = int(os.getenv("MAX_UPLOAD_SIZE", 104857600))  # 100MB
 
-# Create upload directory if it doesn't exist
-os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-@router.post("/zip", response_model=UploadResponse)
-async def upload_zip(file: UploadFile = File(...)):
-    """Upload and extract a ZIP file"""
-    
-    # Validate file type
-    if not file.filename.endswith('.zip'):
+@router.post("/zip")
+async def upload_zip(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+):
+    """
+    Upload a ZIP archive and immediately queue it for security analysis.
+    Returns a job_id for status polling via GET /api/scan/status/{job_id}.
+    """
+    if not file.filename or not file.filename.lower().endswith(".zip"):
         raise HTTPException(status_code=400, detail="Only ZIP files are allowed")
-    
-    # Create a unique directory for this upload
-    upload_id = os.urandom(16).hex()
-    upload_path = os.path.join(UPLOAD_DIR, upload_id)
-    os.makedirs(upload_path, exist_ok=True)
-    
-    zip_file_path = os.path.join(upload_path, file.filename)
-    
-    try:
-        # Save uploaded file
-        content = await file.read()
-        
-        # Check file size
-        if len(content) > MAX_UPLOAD_SIZE:
-            shutil.rmtree(upload_path)
-            raise HTTPException(
-                status_code=400, 
-                detail=f"File too large. Maximum size is {MAX_UPLOAD_SIZE / 1048576}MB"
-            )
-        
-        async with aiofiles.open(zip_file_path, 'wb') as f:
-            await f.write(content)
-        
-        # Extract ZIP file
-        extract_path = os.path.join(upload_path, "extracted")
-        os.makedirs(extract_path, exist_ok=True)
-        
-        with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
-            # Security check: prevent path traversal
-            for file_info in zip_ref.filelist:
-                if file_info.filename.startswith('/') or '..' in file_info.filename:
-                    shutil.rmtree(upload_path)
-                    raise HTTPException(status_code=400, detail="Invalid ZIP file structure")
-            
-            zip_ref.extractall(extract_path)
-        
-        # Count extracted files
-        files_count = sum(1 for _ in Path(extract_path).rglob('*') if _.is_file())
-        
-        # Remove the ZIP file after extraction
-        os.remove(zip_file_path)
-        
-        return UploadResponse(
-            success=True,
-            message="Extracted Successfully",
-            repository_name=file.filename.replace('.zip', ''),
-            files_count=files_count
-        )
-    
-    except zipfile.BadZipFile:
-        if os.path.exists(upload_path):
-            shutil.rmtree(upload_path)
-        raise HTTPException(status_code=400, detail="Invalid or corrupted ZIP file")
-    
-    except Exception as e:
-        if os.path.exists(upload_path):
-            shutil.rmtree(upload_path)
-        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
-@router.delete("/cleanup/{upload_id}")
-async def cleanup_upload(upload_id: str):
-    """Cleanup uploaded files"""
-    upload_path = os.path.join(UPLOAD_DIR, upload_id)
-    
-    if not os.path.exists(upload_path):
-        raise HTTPException(status_code=404, detail="Upload not found")
-    
+    repo_name = file.filename[:-4]  # strip .zip
+    job_id = job_manager.create_job(repository_name=repo_name, source_type="zip")
+    job_dir = create_job_directory(job_id)
+
     try:
-        shutil.rmtree(upload_path)
-        return {"success": True, "message": "Cleanup successful"}
+        content = await file.read()
+        if len(content) > MAX_UPLOAD_SIZE:
+            job_manager.update_job(job_id, status=JobStatus.FAILED, error="File too large")
+            raise HTTPException(
+                status_code=400,
+                detail=f"File too large. Maximum size is {MAX_UPLOAD_SIZE // 1048576}MB",
+            )
+
+        zip_path = job_dir / file.filename
+        async with aiofiles.open(zip_path, "wb") as f:
+            await f.write(content)
+
+        # Extract with path-traversal protection
+        extract_dir = job_dir / "extracted"
+        files_count = safe_extract_zip(zip_path, extract_dir)
+        zip_path.unlink(missing_ok=True)
+
+        # Find the actual project root (handles GitHub single-folder ZIPs)
+        project_root = find_project_root(extract_dir)
+
+        job_manager.update_job(job_id, stage="queued", progress=2)
+
+        # Launch scan pipeline in background — non-blocking
+        background_tasks.add_task(_run_pipeline, job_id, project_root, repo_name)
+
+        logger.info(f"ZIP upload complete for job {job_id}: {files_count} files")
+        return {
+            "success": True,
+            "job_id": job_id,
+            "repository_name": repo_name,
+            "files_count": files_count,
+            "message": "File uploaded and scan queued. Poll /api/scan/status/{job_id} for progress.",
+        }
+
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Cleanup failed: {str(e)}")
+        logger.error(f"Upload failed for job {job_id}: {e}")
+        job_manager.update_job(job_id, status=JobStatus.FAILED, error=str(e))
+        shutil.rmtree(job_dir, ignore_errors=True)
+        raise HTTPException(status_code=500, detail=f"Upload failed: {e}")
+
+
+async def _run_pipeline(job_id: str, project_root: Path, repo_name: str) -> None:
+    """Background task wrapper for the scan pipeline."""
+    from pipeline import run_scan_pipeline
+    job_manager.update_job(job_id, status=JobStatus.RUNNING, stage="running", progress=3)
+    await run_scan_pipeline(
+        job_id=job_id,
+        project_dir=project_root,
+        repository_name=repo_name,
+        cleanup_after=True,
+    )
+

@@ -1,52 +1,96 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 import os
+import time
 
-# Load environment variables
+# Load environment variables from .env before anything else
 load_dotenv()
 
 # Import routes
 from Routes.auth import router as auth_router
 from Routes.repository import router as repository_router
 from Routes.upload import router as upload_router
+from Routes.scan import router as scan_router
+from Utils.logger import get_logger
+
+logger = get_logger("main")
 
 app = FastAPI(
     title="SecureTrail API",
-    description="AI Security Mentor - Backend API",
-    version="1.0.0"
+    description="AI-Powered DevSecOps Security Analysis Platform",
+    version="2.0.0",
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+    openapi_url="/api/openapi.json",
 )
 
-# CORS Configuration
-origins = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
-
+# ── CORS ──────────────────────────────────────────────────────────────────────
+origins = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=[o.strip() for o in origins],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
 )
 
-# Include routers
-app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
-app.include_router(repository_router, prefix="/api/repository", tags=["Repository"])
-app.include_router(upload_router, prefix="/api/upload", tags=["Upload"])
+# ── Request timing middleware ─────────────────────────────────────────────────
+@app.middleware("http")
+async def add_timing_header(request: Request, call_next):
+    start = time.monotonic()
+    response = await call_next(request)
+    elapsed = round((time.monotonic() - start) * 1000, 1)
+    response.headers["X-Response-Time"] = f"{elapsed}ms"
+    return response
 
-@app.get("/")
+# ── Routers ───────────────────────────────────────────────────────────────────
+app.include_router(auth_router,       prefix="/api/auth",       tags=["Authentication"])
+app.include_router(repository_router, prefix="/api/repository", tags=["Repository"])
+app.include_router(upload_router,     prefix="/api/upload",     tags=["Upload"])
+app.include_router(scan_router,       prefix="/api/scan",       tags=["Scan"])
+
+
+@app.get("/", tags=["Health"])
 async def root():
     return {
-        "message": "Welcome to SecureTrail API",
-        "version": "1.0.0",
-        "status": "running"
+        "service": "SecureTrail API",
+        "version": "2.0.0",
+        "status": "running",
+        "docs": "/api/docs",
     }
 
-@app.get("/health")
+
+@app.get("/health", tags=["Health"])
 async def health_check():
-    return {"status": "healthy"}
+    from Jobs.job_manager import job_manager
+    jobs = job_manager.all_jobs()
+    return {
+        "status": "healthy",
+        "active_jobs": sum(1 for j in jobs.values() if j["status"] == "running"),
+        "total_jobs": len(jobs),
+    }
+
+
+# ── Startup / Shutdown ────────────────────────────────────────────────────────
+@app.on_event("startup")
+async def startup_event():
+    logger.info("SecureTrail API v2.0.0 starting up")
+    # Ensure temp directory exists
+    from Utils.temp_manager import ensure_temp_root
+    ensure_temp_root()
+    logger.info("Temp directory ready")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    logger.info("SecureTrail API shutting down")
+
 
 if __name__ == "__main__":
     import uvicorn
     host = os.getenv("HOST", "0.0.0.0")
     port = int(os.getenv("PORT", 8000))
-    uvicorn.run("main:app", host=host, port=port, reload=True)
+    debug = os.getenv("DEBUG", "false").lower() == "true"
+    uvicorn.run("main:app", host=host, port=port, reload=debug)
