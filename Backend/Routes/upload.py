@@ -9,6 +9,8 @@ from Controller.models import UploadResponse
 from Jobs.job_manager import job_manager, JobStatus
 from Utils.temp_manager import create_job_directory, safe_extract_zip, find_project_root
 from Utils.logger import get_logger
+from Database.connection import get_session
+from Database.repositories import scan_repo as db_scan_repo
 
 router = APIRouter()
 logger = get_logger("route.upload")
@@ -31,6 +33,15 @@ async def upload_zip(
     repo_name = file.filename[:-4]  # strip .zip
     job_id = job_manager.create_job(repository_name=repo_name, source_type="zip")
     job_dir = create_job_directory(job_id)
+
+    # Persist job record to DB (non-fatal if DB unavailable)
+    try:
+        async with get_session() as db:
+            await db_scan_repo.create_scan_job(
+                db, job_id=job_id, repository_name=repo_name, source_type="zip"
+            )
+    except Exception as _db_exc:
+        logger.warning(f"Failed to persist scan job to DB: {_db_exc}")
 
     try:
         content = await file.read()

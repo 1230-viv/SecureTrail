@@ -14,7 +14,7 @@ import json
 import os
 from typing import Any, Dict, List, Optional
 
-from Engines.ai.bedrock_client import invoke_claude
+from Engines.ai.bedrock_client import invoke_claude, BedrockPermanentError
 from Engines.ai.prompt_builder import (
     SYSTEM_PROMPT,
     build_batch_summary_prompt,
@@ -65,12 +65,20 @@ async def explain_vulnerabilities(
     if not priority_vulns:
         return vulns, None
 
+    # Circuit-breaker flag — set to True on first permanent Bedrock error so we
+    # skip all remaining calls instantly rather than retrying 18 times in a row.
+    permanent_failure: list[str] = []   # use a mutable container for closure
+
     # Process in batches to respect concurrency limit
     semaphore = asyncio.Semaphore(AI_MAX_CONCURRENT)
     loop = asyncio.get_event_loop()
 
     async def _analyze_one(vuln: NormalizedVulnerability) -> None:
+        if permanent_failure:
+            return  # circuit-breaker: skip immediately
         async with semaphore:
+            if permanent_failure:
+                return  # re-check after acquiring semaphore
             payload = build_ai_prompt_payload(vuln)
             prompt = build_single_vuln_prompt(payload)
             try:
@@ -81,23 +89,38 @@ async def explain_vulnerabilities(
                 if explanation:
                     vuln.ai_explanation = explanation
                     log.debug(f"AI explained vuln {vuln.id[:8]}")
+            except BedrockPermanentError as e:
+                permanent_failure.append(str(e))
+                log.error(
+                    f"Bedrock permanent error — disabling AI for this job. "
+                    f"Details: {e}"
+                )
             except Exception as e:
                 log.warning(f"AI analysis failed for vuln {vuln.id[:8]}: {e}")
 
     await asyncio.gather(*[_analyze_one(v) for v in priority_vulns])
 
-    # Generate executive summary
+    # Generate executive summary (skip if circuit-breaker tripped)
     executive_summary = None
-    try:
-        summary_prompt = build_batch_summary_prompt(vulns, repo_name)
-        raw_summary = await loop.run_in_executor(
-            None, invoke_claude, SYSTEM_PROMPT, summary_prompt
+    if not permanent_failure:
+        try:
+            summary_prompt = build_batch_summary_prompt(vulns, repo_name)
+            raw_summary = await loop.run_in_executor(
+                None, invoke_claude, SYSTEM_PROMPT, summary_prompt
+            )
+            executive_summary = _safe_json_parse(raw_summary)
+            if executive_summary:
+                log.info("Executive summary generated")
+        except BedrockPermanentError as e:
+            log.error(f"Executive summary skipped — permanent Bedrock error: {e}")
+        except Exception as e:
+            log.warning(f"Executive summary generation failed: {e}")
+    else:
+        log.warning(
+            "Skipping executive summary — Bedrock permanently unavailable. "
+            "Check AWS account model access at: "
+            "https://console.aws.amazon.com/bedrock/home#/modelaccess"
         )
-        executive_summary = _safe_json_parse(raw_summary)
-        if executive_summary:
-            log.info("Executive summary generated")
-    except Exception as e:
-        log.warning(f"Executive summary generation failed: {e}")
 
     explained = sum(1 for v in priority_vulns if v.ai_explanation)
     log.info(f"AI analysis complete: {explained}/{len(priority_vulns)} findings explained")

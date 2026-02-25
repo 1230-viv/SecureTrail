@@ -27,7 +27,7 @@ class Confidence(str, Enum):
 
 class ScannerSource(str, Enum):
     SEMGREP = "semgrep"
-    NPM_AUDIT = "npm_audit"
+    TRIVY = "trivy"
     GITLEAKS = "gitleaks"
     CODEQL = "codeql"
     INTERNAL_AUTH = "internal_auth"

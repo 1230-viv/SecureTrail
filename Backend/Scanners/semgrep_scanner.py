@@ -14,11 +14,14 @@ from typing import Any, Dict, List
 
 from Utils.logger import JobLogger
 
-# Semgrep ruleset — configurable via env
-SEMGREP_RULES = os.getenv("SEMGREP_RULES", "auto")
+# Semgrep ruleset — configurable via env.
+# Default is 'p/default' (bundled inside the Docker image — works fully offline).
+# 'auto' requires internet access to semgrep.dev and will fail with --network=none.
+SEMGREP_RULES = os.getenv("SEMGREP_RULES", "p/default")
 DOCKER_MEMORY_LIMIT = os.getenv("SEMGREP_DOCKER_MEM", "512m")
 DOCKER_CPU_LIMIT = os.getenv("SEMGREP_DOCKER_CPU", "1")
 SCAN_TIMEOUT = int(os.getenv("SEMGREP_TIMEOUT", "180"))
+SEMGREP_IMAGE = os.getenv("SEMGREP_IMAGE", "returntocorp/semgrep:latest")
 
 
 async def run_semgrep(project_dir: Path, job_id: str) -> Dict[str, Any]:
@@ -40,11 +43,15 @@ async def run_semgrep(project_dir: Path, job_id: str) -> Dict[str, Any]:
             "docker", "run", "--rm",
             "--memory", DOCKER_MEMORY_LIMIT,
             "--cpus", DOCKER_CPU_LIMIT,
-            "--network", "none",
+            # Network access required: semgrep downloads ruleset (e.g. p/default) from semgrep.dev
+            # Telemetry/metrics are suppressed via env vars below
+            "-e", "SEMGREP_SEND_METRICS=off",
+            "-e", "SEMGREP_SETTINGS_FILE=/dev/null",
             "-v", f"{abs_project_dir}:/src",
-            "semgrep/semgrep:latest",
+            SEMGREP_IMAGE,
             "semgrep", "--config", SEMGREP_RULES,
             "--json", "--no-git-ignore",
+            "--metrics=off",
             "--timeout", "60",
             "/src",
         ]
@@ -53,6 +60,7 @@ async def run_semgrep(project_dir: Path, job_id: str) -> Dict[str, Any]:
         cmd = [
             "semgrep", "--config", SEMGREP_RULES,
             "--json", "--no-git-ignore",
+            "--metrics=off",
             "--timeout", "60",
             str(project_dir),
         ]

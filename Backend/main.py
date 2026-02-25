@@ -65,9 +65,12 @@ async def root():
 @app.get("/health", tags=["Health"])
 async def health_check():
     from Jobs.job_manager import job_manager
+    from Database.connection import check_db_connection
     jobs = job_manager.all_jobs()
+    db_ok = await check_db_connection()
     return {
-        "status": "healthy",
+        "status": "healthy" if db_ok else "degraded",
+        "database": "ok" if db_ok else "unavailable",
         "active_jobs": sum(1 for j in jobs.values() if j["status"] == "running"),
         "total_jobs": len(jobs),
     }
@@ -77,6 +80,12 @@ async def health_check():
 @app.on_event("startup")
 async def startup_event():
     logger.info("SecureTrail API v2.0.0 starting up")
+
+    # Initialise PostgreSQL connection pool
+    from Database.connection import init_db
+    await init_db()
+    logger.info("Database ready")
+
     # Ensure temp directory exists
     from Utils.temp_manager import ensure_temp_root
     ensure_temp_root()
@@ -86,6 +95,8 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     logger.info("SecureTrail API shutting down")
+    from Database.connection import close_db
+    await close_db()
 
 
 if __name__ == "__main__":
@@ -93,4 +104,11 @@ if __name__ == "__main__":
     host = os.getenv("HOST", "0.0.0.0")
     port = int(os.getenv("PORT", 8000))
     debug = os.getenv("DEBUG", "false").lower() == "true"
-    uvicorn.run("main:app", host=host, port=port, reload=debug)
+    uvicorn.run(
+        "main:app",
+        host=host,
+        port=port,
+        reload=debug,
+        reload_dirs=["./"] if debug else None,   # watch only Backend/
+        reload_excludes=["uploads/*", "__pycache__/*", "alembic/*"] if debug else None,
+    )

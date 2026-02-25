@@ -1,10 +1,16 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { Upload, ChevronDown, Github, FileArchive, X } from 'lucide-react';
 import { toast } from 'react-toastify';
 import RepositorySelector from './RepositorySelector';
 import { uploadAPI, repositoryAPI, authAPI } from '../services/api';
 
-const RepositoryUpload = () => {
+/**
+ * RepositoryUpload
+ *
+ * Props
+ *   onScanStarted({ job_id, repository_name }) — called once a scan is queued on the backend
+ */
+const RepositoryUpload = ({ onScanStarted }) => {
   const [uploadMethod, setUploadMethod] = useState(null); // 'github' or 'zip'
   const [selectedBranch, setSelectedBranch] = useState('main');
   const [showRepoSelector, setShowRepoSelector] = useState(false);
@@ -12,19 +18,6 @@ const RepositoryUpload = () => {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef(null);
-
-  // Auto-show repository selector if user is logged in
-  useEffect(() => {
-    const token = localStorage.getItem('github_token');
-    const user = localStorage.getItem('github_user');
-    
-    if (token && user) {
-      setUploadMethod('github');
-      setShowRepoSelector(true);
-      const userData = JSON.parse(user);
-      toast.success(`Welcome back, ${userData.login || userData.name}!`);
-    }
-  }, []);
 
   const handleMethodSelect = async (method) => {
     if (method === 'github') {
@@ -84,11 +77,11 @@ const RepositoryUpload = () => {
       });
 
       if (response.data.success) {
-        toast.success(response.data.message);
-        setSelectedRepository({
-          name: response.data.repository_name,
-          files_count: response.data.files_count,
-          type: 'zip'
+        toast.success('ZIP uploaded — scan queued!');
+        // Scan already started on backend; hand off to parent immediately
+        onScanStarted?.({
+          job_id: response.data.job_id,
+          repository_name: response.data.repository_name,
         });
       }
     } catch (error) {
@@ -110,20 +103,22 @@ const RepositoryUpload = () => {
     }
 
     try {
-      if (selectedRepository.type === 'zip') {
-        toast.info('Starting security scan for ZIP upload...');
-        // Here you would call the scan API
-      } else {
-        // Clone GitHub repository
-        const response = await repositoryAPI.cloneRepository(
-          selectedRepository.full_name,
-          selectedBranch
-        );
-        toast.success(response.data.message);
+      // GitHub repository — clone + scan via backend
+      toast.info('Queuing security scan…');
+      const response = await repositoryAPI.scanRepository(
+        selectedRepository.full_name,
+        selectedBranch
+      );
+      if (response.data.success) {
+        toast.success('Scan queued!');
+        onScanStarted?.({
+          job_id: response.data.job_id,
+          repository_name: response.data.repository_name,
+        });
       }
     } catch (error) {
       console.error('Scan error:', error);
-      toast.error('Failed to start scan');
+      toast.error(error.response?.data?.detail || 'Failed to start scan');
     }
   };
 

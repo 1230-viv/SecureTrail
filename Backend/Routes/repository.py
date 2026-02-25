@@ -5,6 +5,8 @@ from Controller.models import Repository
 from Jobs.job_manager import job_manager, JobStatus
 from Utils.temp_manager import create_job_directory
 from Utils.logger import get_logger
+from Database.connection import get_session
+from Database.repositories import scan_repo as db_scan_repo
 import subprocess
 import os
 
@@ -70,6 +72,16 @@ async def scan_repository(
     job_id = job_manager.create_job(repository_name=repo_name, source_type="github")
     job_dir = create_job_directory(job_id)
     clone_dir = job_dir / "repo"
+
+    # Persist job record to DB (non-fatal if DB unavailable)
+    try:
+        async with get_session() as db:
+            await db_scan_repo.create_scan_job(
+                db, job_id=job_id, repository_name=repo_name,
+                source_type="github", repo_full_name=repo_full_name, branch=branch
+            )
+    except Exception as _db_exc:
+        logger.warning(f"Failed to persist scan job to DB: {_db_exc}")
 
     # Authenticated clone URL (never logged)
     clone_url = f"https://x-access-token:{access_token}@github.com/{repo_full_name}.git"

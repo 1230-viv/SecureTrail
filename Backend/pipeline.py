@@ -15,6 +15,9 @@ import traceback
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from Database.connection import get_session
+from Database.repositories import scan_repo as _scan_repo
+
 from Engines.ai.explanation_engine import explain_vulnerabilities
 from Engines.analyzers.config_orchestrator import run_config_analyzers
 from Engines.business_impact.impact_engine import enrich_business_impact
@@ -116,6 +119,27 @@ async def run_scan_pipeline(
             f"Scan complete: {report.total_vulnerabilities} vulns | "
             f"CRITICAL:{report.critical_count} HIGH:{report.high_count}"
         )
+
+        # Persist final result to database
+        try:
+            async with get_session() as db:
+                await _scan_repo.update_scan_job(
+                    db, job_id,
+                    status=status.value,
+                    progress=100,
+                    stage="completed",
+                    total_vulnerabilities=report.total_vulnerabilities,
+                    critical_count=report.critical_count,
+                    high_count=report.high_count,
+                    medium_count=report.medium_count,
+                    low_count=report.low_count,
+                    info_count=report.info_count,
+                    result_json=report.dict(),
+                    completed_at=datetime.datetime.now(datetime.timezone.utc),
+                )
+        except Exception as _db_exc:
+            log.warning(f"Failed to persist scan result to DB: {_db_exc}")
+
         return report
 
     except Exception as exc:
@@ -127,6 +151,18 @@ async def run_scan_pipeline(
             stage="failed",
             error=str(exc),
         )
+        # Persist failure to database
+        try:
+            async with get_session() as db:
+                await _scan_repo.update_scan_job(
+                    db, job_id,
+                    status="failed",
+                    stage="failed",
+                    error_message=str(exc),
+                    completed_at=datetime.datetime.now(datetime.timezone.utc),
+                )
+        except Exception as _db_exc:
+            log.warning(f"Failed to persist job failure to DB: {_db_exc}")
         # Return minimal failure report
         return ScanReport(
             job_id=job_id,

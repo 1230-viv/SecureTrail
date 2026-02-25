@@ -17,6 +17,7 @@ from Utils.logger import JobLogger
 
 SCAN_TIMEOUT = int(os.getenv("GITLEAKS_TIMEOUT", "120"))
 DOCKER_MEMORY_LIMIT = os.getenv("GITLEAKS_DOCKER_MEM", "256m")
+GITLEAKS_IMAGE = os.getenv("GITLEAKS_IMAGE", "zricethezav/gitleaks:latest")
 
 
 async def run_gitleaks(project_dir: Path, job_id: str) -> Dict[str, Any]:
@@ -40,7 +41,7 @@ async def run_gitleaks(project_dir: Path, job_id: str) -> Dict[str, Any]:
             "--network", "none",
             "-v", f"{abs_dir}:/path",
             "-v", f"{str(project_dir.parent.resolve())}:/reports",
-            "zricethezav/gitleaks:latest",
+            GITLEAKS_IMAGE,
             "detect",
             "--source=/path",
             "--report-path=/reports/gitleaks_report.json",
