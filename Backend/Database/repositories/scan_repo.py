@@ -29,6 +29,7 @@ async def create_scan_job(
     repo_full_name: str | None = None,
     branch: str | None = None,
     user_id: uuid.UUID | None = None,
+    s3_url: str | None = None,
 ) -> ScanJob:
     """Persist a new scan job with status=queued."""
     job = ScanJob(
@@ -38,6 +39,7 @@ async def create_scan_job(
         source_type=source_type,
         repo_full_name=repo_full_name,
         branch=branch,
+        s3_url=s3_url,
         status="queued",
         progress=0,
         created_at=datetime.now(timezone.utc),
@@ -66,7 +68,7 @@ async def update_scan_job(
         "status", "progress", "stage", "error_message",
         "total_vulnerabilities", "critical_count", "high_count",
         "medium_count", "low_count", "info_count",
-        "result_json", "completed_at",
+        "result_json", "completed_at", "s3_url",
     }
     safe = {k: v for k, v in fields.items() if k in _ALLOWED}
     if not safe:

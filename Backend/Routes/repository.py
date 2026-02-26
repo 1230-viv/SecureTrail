@@ -5,6 +5,7 @@ from Controller.models import Repository
 from Jobs.job_manager import job_manager, JobStatus
 from Utils.temp_manager import create_job_directory
 from Utils.logger import get_logger
+from Utils.s3_manager import create_and_upload_zip
 from Database.connection import get_session
 from Database.repositories import scan_repo as db_scan_repo
 import subprocess
@@ -133,6 +134,30 @@ async def _clone_and_scan(
         if proc.returncode != 0:
             err = stderr.decode()[-500:]
             raise RuntimeError(f"git clone failed: {err}")
+
+        log.info(f"GitHub repo cloned successfully: {repo_name}")
+
+        # Create ZIP and upload to S3
+        job_manager.update_job(job_id, stage="uploading_to_s3", progress=3)
+        log.info(f"Creating ZIP and uploading to S3 for job {job_id}")
+        s3_url = create_and_upload_zip(
+            source_dir=Path(clone_dir),
+            job_id=job_id,
+            repository_name=repo_name,
+            source_type="github"
+        )
+        
+        if s3_url:
+            log.info(f"Repository uploaded to S3: {s3_url}")
+            # Update DB with S3 URL
+            try:
+                async with get_session() as db:
+                    await db_scan_repo.update_scan_job(db, job_id, s3_url=s3_url)
+                    # No need to call commit() - get_session() auto-commits
+            except Exception as e:
+                log.warning(f"Failed to update S3 URL in DB: {e}")
+        else:
+            log.warning(f"Failed to upload repository ZIP to S3 for job {job_id}")
 
         job_manager.update_job(job_id, stage="queued", progress=4)
         await run_scan_pipeline(

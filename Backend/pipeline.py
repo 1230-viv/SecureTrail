@@ -137,8 +137,32 @@ async def run_scan_pipeline(
                     result_json=report.dict(),
                     completed_at=datetime.datetime.now(datetime.timezone.utc),
                 )
+                # No need to call commit() - get_session() auto-commits
         except Exception as _db_exc:
             log.warning(f"Failed to persist scan result to DB: {_db_exc}")
+
+        # ── 10. Archive ZIP to S3 (7-day auto-deletion) ─────────────────────
+        # Move the ZIP file to archive/ folder for automatic lifecycle deletion
+        try:
+            from Utils.s3_manager import move_to_archive
+            
+            # Get current S3 URL from database
+            async with get_session() as db:
+                job_record = await _scan_repo.get_scan_job(db, job_id)
+                if job_record and job_record.s3_url:
+                    log.info(f"Moving ZIP to archive folder: {job_record.s3_url}")
+                    archive_url = move_to_archive(job_record.s3_url)
+                    if archive_url:
+                        # Update database with new archive URL
+                        await _scan_repo.update_scan_job(db, job_id, s3_url=archive_url)
+                        # No need to call commit() - get_session() auto-commits
+                        log.info(f"ZIP archived successfully: {archive_url}")
+                    else:
+                        log.warning("Failed to move ZIP to archive")
+                else:
+                    log.debug("No S3 URL found for archiving")
+        except Exception as archive_exc:
+            log.warning(f"Archive operation failed (non-critical): {archive_exc}")
 
         return report
 

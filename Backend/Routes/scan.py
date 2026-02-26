@@ -68,6 +68,7 @@ async def list_jobs(db: AsyncSession = Depends(get_db_session)):
         "source_type":          j.source_type,
         "repo_full_name":       j.repo_full_name,
         "branch":               j.branch,
+        "s3_url":               j.s3_url,
         "status":               j.status,
         "progress":             j.progress,
         "stage":                j.stage,
