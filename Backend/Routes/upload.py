@@ -9,6 +9,7 @@ from Controller.models import UploadResponse
 from Jobs.job_manager import job_manager, JobStatus
 from Utils.temp_manager import create_job_directory, safe_extract_zip, find_project_root
 from Utils.logger import get_logger
+from Utils.s3_manager import upload_zip_to_s3
 from Database.connection import get_session
 from Database.repositories import scan_repo as db_scan_repo
 
@@ -56,10 +57,28 @@ async def upload_zip(
         async with aiofiles.open(zip_path, "wb") as f:
             await f.write(content)
 
+        # Upload ZIP to S3 for permanent storage
+        logger.info(f"Uploading ZIP to S3 for job {job_id}")
+        s3_url = upload_zip_to_s3(zip_path, job_id, repo_name)
+        if s3_url:
+            logger.info(f"ZIP uploaded to S3: {s3_url}")
+            # Update DB with S3 URL
+            try:
+                async with get_session() as db:
+                    await db_scan_repo.update_scan_job(db, job_id, s3_url=s3_url)
+                    # No need to call commit() - get_session() auto-commits
+            except Exception as e:
+                logger.warning(f"Failed to update S3 URL in DB: {e}")
+        else:
+            logger.warning(f"Failed to upload ZIP to S3 for job {job_id}")
+
         # Extract with path-traversal protection
         extract_dir = job_dir / "extracted"
         files_count = safe_extract_zip(zip_path, extract_dir)
+        
+        # Clean up the temporary ZIP file after extraction
         zip_path.unlink(missing_ok=True)
+        logger.debug(f"Cleaned up temporary ZIP file: {zip_path.name}")
 
         # Find the actual project root (handles GitHub single-folder ZIPs)
         project_root = find_project_root(extract_dir)

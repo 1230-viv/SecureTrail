@@ -107,6 +107,7 @@ class ScanJob(Base):
     source_type: Mapped[str] = mapped_column(String(32), nullable=False)   # "github" | "upload"
     repo_full_name: Mapped[str | None] = mapped_column(String(512), nullable=True)
     branch: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    s3_url: Mapped[str | None] = mapped_column(Text, nullable=True)  # S3 URL for stored ZIP file
 
     # Live status — kept in sync from job_manager writes
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="queued")
