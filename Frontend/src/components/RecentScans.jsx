@@ -13,11 +13,13 @@ const STATUS_CONF = {
   queued:    { icon: Clock,        cls: 'text-gray-500',  bg: 'bg-gray-100',  label: 'Queued'    },
 };
 
-// The severity with the highest count drives the badge colour
-// job.result is the embedded ScanReport dict from to_dict()
+// The severity with the highest count drives the badge colour.
+// Counts are exposed directly on the job object from the /jobs endpoint.
 const dominantSeverity = (job) => {
-  if (!job.result) return null;
-  const { critical_count = 0, high_count = 0, medium_count = 0, low_count = 0 } = job.result;
+  // Support both flat job fields (from /jobs list) and nested job.result (legacy)
+  const src = (job.critical_count != null) ? job : (job.result || null);
+  if (!src) return null;
+  const { critical_count = 0, high_count = 0, medium_count = 0, low_count = 0 } = src;
   if (critical_count > 0) return { label: `${critical_count} Critical`, cls: 'bg-red-100 text-red-700' };
   if (high_count     > 0) return { label: `${high_count} High`,         cls: 'bg-orange-100 text-orange-700' };
   if (medium_count   > 0) return { label: `${medium_count} Medium`,     cls: 'bg-yellow-100 text-yellow-700' };
