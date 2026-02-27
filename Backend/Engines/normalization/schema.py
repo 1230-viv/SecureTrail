@@ -35,6 +35,7 @@ class ScannerSource(str, Enum):
     INTERNAL_CORS = "internal_cors"
     INTERNAL_RATE_LIMIT = "internal_rate_limit"
     INTERNAL_FILE_UPLOAD = "internal_file_upload"
+    INTERNAL_ACCESS_CONTROL = "internal_access_control"
 
 
 class VulnerabilityCategory(str, Enum):

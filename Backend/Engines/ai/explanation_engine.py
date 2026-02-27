@@ -28,8 +28,8 @@ from Utils.logger import JobLogger
 AI_SCORE_THRESHOLD = float(os.getenv("AI_SCORE_THRESHOLD", "7.0"))
 # Max concurrent Bedrock calls to avoid throttling
 AI_MAX_CONCURRENT = int(os.getenv("AI_MAX_CONCURRENT", "3"))
-# Disable AI for development/testing
-AI_ENABLED = os.getenv("AI_ENABLED", "true").lower() == "true"
+# Disable AI by default — set AI_ENABLED=true in env to enable Bedrock invocations
+AI_ENABLED = os.getenv("AI_ENABLED", "false").lower() == "true"
 
 
 async def explain_vulnerabilities(
