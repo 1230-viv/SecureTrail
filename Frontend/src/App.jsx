@@ -7,6 +7,7 @@ import Navbar  from './components/Navbar';
 import AppRoutes from './routes/AppRoutes';
 import { ScanProvider } from './context/ScanContext';
 import { AuthProvider } from './context/AuthContext';
+import { ThemeProvider, useTheme } from './context/ThemeContext';
 
 /**
  * AppShell — chooses layout based on the current route.
@@ -15,7 +16,8 @@ import { AuthProvider } from './context/AuthContext';
  */
 const AppShell = () => {
   const { pathname } = useLocation();
-  const isPublic = pathname === '/';
+  const { isDark }   = useTheme();
+  const isPublic     = pathname === '/';
 
   if (isPublic) {
     return (
@@ -27,12 +29,11 @@ const AppShell = () => {
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-100">
+    <div className={`flex min-h-screen transition-colors duration-300
+      ${isDark ? 'bg-[#0d0f17]' : 'bg-[#f0f2f8]'}`}>
       <Sidebar />
-      <main className="ml-64 flex-1 p-8">
-        <div className="max-w-7xl mx-auto">
-          <AppRoutes />
-        </div>
+      <main className="ml-64 flex-1 overflow-x-hidden">
+        <AppRoutes />
       </main>
     </div>
   );
@@ -41,20 +42,22 @@ const AppShell = () => {
 function App() {
   return (
     <AuthProvider>
-      <ScanProvider>
-        <AppShell />
-        <ToastContainer
-          position="top-right"
-          autoClose={4000}
-          hideProgressBar={false}
-          newestOnTop
-          closeOnClick
-          pauseOnFocusLoss
-          draggable
-          pauseOnHover
-          theme="light"
-        />
-      </ScanProvider>
+      <ThemeProvider>
+        <ScanProvider>
+          <AppShell />
+          <ToastContainer
+            position="top-right"
+            autoClose={4000}
+            hideProgressBar={false}
+            newestOnTop
+            closeOnClick
+            pauseOnFocusLoss
+            draggable
+            pauseOnHover
+            theme="colored"
+          />
+        </ScanProvider>
+      </ThemeProvider>
     </AuthProvider>
   );
 }

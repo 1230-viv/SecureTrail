@@ -84,12 +84,47 @@ async def list_jobs(db: AsyncSession = Depends(get_db_session)):
         "error_message":        j.error_message,
     } for j in db_jobs}
 
-    # Override with live in-memory state (more up-to-date for running jobs)
+    # Override with live in-memory state (more up-to-date for running jobs).
+    # Normalize to the same schema as DB rows: ISO timestamps, flat count fields,
+    # no embedded result blob (too large and not needed for the list view).
+    import datetime as _dt
+    def _ts_to_iso(ts) -> str | None:
+        if ts is None:
+            return None
+        if isinstance(ts, float | int):
+            return _dt.datetime.utcfromtimestamp(ts).isoformat()
+        return str(ts)
+
     live_jobs = job_manager.all_jobs()
     for jid, live in live_jobs.items():
-        db_job_map[jid] = live  # in-memory wins for live state
+        result = live.get("result") or {}
+        db_job_map[jid] = {
+            "job_id":                jid,
+            "repository_name":       live.get("repository_name"),
+            "source_type":           live.get("source_type"),
+            "repo_full_name":        live.get("repo_full_name"),
+            "branch":                live.get("branch"),
+            "s3_url":                live.get("s3_url"),
+            "status":                str(live.get("status", "queued")),
+            "progress":              live.get("progress", 0),
+            "stage":                 live.get("stage", "queued"),
+            "total_vulnerabilities": result.get("total_vulnerabilities"),
+            "critical_count":        result.get("critical_count"),
+            "high_count":            result.get("high_count"),
+            "medium_count":          result.get("medium_count"),
+            "low_count":             result.get("low_count"),
+            "info_count":            result.get("info_count"),
+            "created_at":            _ts_to_iso(live.get("created_at")),
+            "updated_at":            _ts_to_iso(live.get("updated_at")),
+            "completed_at":          _ts_to_iso(live.get("completed_at")),
+            "error_message":         live.get("error"),
+        }
 
-    return {"jobs": sorted(db_job_map.values(), key=lambda j: j.get("created_at") or "", reverse=True)}
+    return {"jobs": sorted(
+        db_job_map.values(),
+        key=lambda j: j.get("created_at") or "",
+        reverse=True,
+    )}
 
 
 @router.delete("/cleanup/{job_id}")
