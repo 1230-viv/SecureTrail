@@ -147,10 +147,10 @@ const ScanResults = ({ report, onNewScan }) => {
 
       {/* ── AI Analysis banner ─────────────────────────────────────────── */}
       {aiPending && (
-        <div className={`rounded-2xl px-5 py-3.5 flex items-center gap-3
+        <div className={`rounded-2xl px-5 py-3.5 flex items-center gap-3 border backdrop-blur-xl
           ${isDark
-            ? 'bg-indigo-500/[0.08] border border-indigo-500/20'
-            : 'bg-indigo-50/80 border border-indigo-100'}`}>
+            ? 'bg-indigo-500/[0.06] border-indigo-500/20 shadow-[0_4px_24px_rgba(99,102,241,0.08)]'
+            : 'bg-indigo-50/60 border-indigo-200/60 shadow-[0_4px_24px_rgba(99,102,241,0.06)]'}`}>
           <div className="relative flex-shrink-0">
             <Brain size={18} className={isDark ? 'text-indigo-400' : 'text-indigo-600'} />
             <Loader2 size={10} className={`absolute -bottom-0.5 -right-0.5 animate-spin ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`} />
@@ -162,8 +162,10 @@ const ScanResults = ({ report, onNewScan }) => {
       )}
 
       {/* ── Header Card ────────────────────────────────────────────────── */}
-      <div className={`rounded-2xl overflow-hidden
-        ${isDark ? 'bg-[#161929] border border-white/[0.06]' : 'bg-white border border-slate-100 shadow-sm'}`}>
+      <div className={`rounded-2xl overflow-hidden border backdrop-blur-xl
+        ${isDark
+          ? 'bg-white/[0.03] border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.3)]'
+          : 'bg-white/70 border-white/60 shadow-[0_8px_32px_rgba(99,102,241,0.08)]'}`}>
 
         {/* Gradient accent stripe */}
         <div className="h-1 bg-gradient-to-r from-blue-500 via-violet-500 to-rose-500" />
@@ -196,14 +198,15 @@ const ScanResults = ({ report, onNewScan }) => {
 
             <div className="flex gap-2">
               <button onClick={handleExport}
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-medium transition-colors
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-medium transition-all backdrop-blur-md
                   ${isDark
-                    ? 'bg-white/[0.04] text-slate-300 hover:bg-white/[0.07] ring-1 ring-white/[0.06]'
-                    : 'bg-white text-slate-600 hover:bg-slate-50 ring-1 ring-slate-200'}`}>
+                    ? 'bg-white/[0.04] text-slate-300 hover:bg-white/[0.07] ring-1 ring-white/[0.08]'
+                    : 'bg-white/60 text-slate-600 hover:bg-white/80 ring-1 ring-white/60'}`}>
                 <Download size={14} /> Export
               </button>
               <button onClick={onNewScan}
-                className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-medium hover:bg-blue-700 transition-colors">
+                className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl text-xs font-semibold
+                  hover:from-blue-500 hover:to-indigo-500 transition-all shadow-lg shadow-blue-500/20">
                 <RotateCcw size={14} /> New Scan
               </button>
             </div>
@@ -253,8 +256,10 @@ const ScanResults = ({ report, onNewScan }) => {
       </div>
 
       {/* ── Filter Bar ─────────────────────────────────────────────────── */}
-      <div className={`rounded-2xl p-4
-        ${isDark ? 'bg-[#161929] border border-white/[0.06]' : 'bg-white border border-slate-100 shadow-sm'}`}>
+      <div className={`rounded-2xl p-4 border backdrop-blur-xl
+        ${isDark
+          ? 'bg-white/[0.03] border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.3)]'
+          : 'bg-white/70 border-white/60 shadow-[0_8px_32px_rgba(99,102,241,0.08)]'}`}>
         <div className="flex gap-3 items-center flex-wrap">
           {/* Search */}
           <div className="relative flex-1 min-w-[200px]">
@@ -262,10 +267,10 @@ const ScanResults = ({ report, onNewScan }) => {
               ${isDark ? 'text-slate-600' : 'text-slate-300'}`} />
             <input type="text" placeholder="Search findings…" value={search}
               onChange={e => setSearch(e.target.value)}
-              className={`w-full pl-9 pr-4 py-2 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-shadow
+              className={`w-full pl-9 pr-4 py-2 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-all backdrop-blur-md
                 ${isDark
-                  ? 'bg-white/[0.04] text-white placeholder-slate-600 ring-1 ring-white/[0.06]'
-                  : 'bg-slate-50 text-slate-900 placeholder-slate-300 ring-1 ring-slate-100'}`} />
+                  ? 'bg-white/[0.04] text-white placeholder-slate-600 ring-1 ring-white/[0.08]'
+                  : 'bg-white/50 text-slate-900 placeholder-slate-300 ring-1 ring-white/60'}`} />
           </div>
 
           {/* Filter toggle */}
@@ -281,10 +286,10 @@ const ScanResults = ({ report, onNewScan }) => {
           {/* Sort */}
           <div className="relative">
             <select value={sortBy} onChange={e => setSortBy(e.target.value)}
-              className={`appearance-none pl-3 pr-8 py-2 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/50 ring-1 ring-inset
+              className={`appearance-none pl-3 pr-8 py-2 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/40 ring-1 ring-inset backdrop-blur-md
                 ${isDark
-                  ? 'bg-[#1e2235] ring-white/[0.06] text-white'
-                  : 'bg-white ring-slate-200 text-slate-700'}`}>
+                  ? 'bg-white/[0.04] ring-white/[0.08] text-white'
+                  : 'bg-white/60 ring-white/60 text-slate-700'}`}>
               {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
             <ChevronDown size={13} className={`absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none
@@ -318,8 +323,8 @@ const ScanResults = ({ report, onNewScan }) => {
       {/* ── Vulnerability list ─────────────────────────────────────────── */}
       <div className="space-y-3 stagger-children">
         {filtered.length === 0 ? (
-          <div className={`rounded-2xl border border-dashed py-16 text-center
-            ${isDark ? 'bg-[#161929] border-white/10' : 'bg-white border-slate-200'}`}>
+          <div className={`rounded-2xl border border-dashed py-16 text-center backdrop-blur-xl
+            ${isDark ? 'bg-white/[0.02] border-white/[0.08]' : 'bg-white/50 border-slate-200/60'}`}>
             <Search size={32} className={`mx-auto mb-3 ${isDark ? 'text-slate-600' : 'text-slate-200'}`} />
             <p className={`text-sm font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>No findings match your filters</p>
             <button onClick={() => { setSearch(''); setFilterSev('ALL'); setFilterSrc('ALL'); }}
@@ -332,16 +337,18 @@ const ScanResults = ({ report, onNewScan }) => {
 
       {/* ── Configuration Analysis ─────────────────────────────────────── */}
       {report.configuration_analysis && Object.keys(report.configuration_analysis).length > 0 && (
-        <div className={`rounded-2xl p-6
-          ${isDark ? 'bg-[#161929] border border-white/[0.06]' : 'bg-white border border-slate-100 shadow-sm'}`}>
+        <div className={`rounded-2xl p-6 border backdrop-blur-xl
+          ${isDark
+            ? 'bg-white/[0.03] border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.3)]'
+            : 'bg-white/70 border-white/60 shadow-[0_8px_32px_rgba(99,102,241,0.08)]'}`}>
           <h3 className={`text-sm font-bold flex items-center gap-2 mb-4
             ${isDark ? 'text-white' : 'text-slate-800'}`}>
             <ShieldAlert size={16} className="text-teal-500" /> Configuration Analysis
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {Object.entries(report.configuration_analysis).map(([key, val]) => (
-              <div key={key} className={`rounded-xl p-4
-                ${isDark ? 'bg-white/[0.02] border border-white/[0.04]' : 'bg-slate-50 border border-slate-100'}`}>
+                <div key={key} className={`rounded-xl p-4 border backdrop-blur-md
+                  ${isDark ? 'bg-white/[0.03] border-white/[0.06]' : 'bg-white/50 border-white/60'}`}>
                 <p className={`text-[10px] font-bold uppercase tracking-[0.1em] mb-1.5 capitalize
                   ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>{key.replace(/_/g, ' ')}</p>
                 {typeof val === 'object' ? (

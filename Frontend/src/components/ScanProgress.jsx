@@ -114,8 +114,10 @@ const ScanProgress = ({ jobId, repoName, onComplete, onError }) => {
   return (
     <div className="w-full max-w-2xl mx-auto animate-fade-in-up">
       {/* ── Card ──────────────────────────────────────────────────────── */}
-      <div className={`rounded-2xl p-8 relative overflow-hidden
-        ${isDark ? 'bg-[#161929] border border-white/[0.06]' : 'bg-white border border-slate-100 shadow-lg shadow-slate-200/50'}`}>
+      <div className={`rounded-2xl p-8 relative overflow-hidden border backdrop-blur-xl
+        ${isDark
+          ? 'bg-white/[0.03] border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.3)]'
+          : 'bg-white/70 border-white/60 shadow-[0_8px_32px_rgba(99,102,241,0.08)]'}`}>
 
         {/* Decorative gradient orb behind icon */}
         {!isFailed && !isDone && (
@@ -153,8 +155,8 @@ const ScanProgress = ({ jobId, repoName, onComplete, onError }) => {
           </div>
 
           {/* Elapsed chip */}
-          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl flex-shrink-0
-            ${isDark ? 'bg-white/[0.04]' : 'bg-slate-50'}`}>
+          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl flex-shrink-0 border backdrop-blur-md
+            ${isDark ? 'bg-white/[0.04] border-white/[0.06]' : 'bg-white/60 border-white/50'}`}>
             <Clock size={13} className={isDark ? 'text-slate-500' : 'text-slate-400'} />
             <span className={`text-sm font-mono font-medium ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
               {fmtTime(elapsed)}
@@ -174,7 +176,7 @@ const ScanProgress = ({ jobId, repoName, onComplete, onError }) => {
 
         {/* ── Progress bar ────────────────────────────── */}
         <div className={`w-full rounded-full h-2.5 overflow-hidden mb-6
-          ${isDark ? 'bg-white/[0.06]' : 'bg-slate-100'}`}>
+          ${isDark ? 'bg-white/[0.06]' : 'bg-slate-100/80'}`}>
           <div className={`h-2.5 rounded-full transition-all duration-700 ease-out relative ${barCls}`}
                style={{ width: `${progress}%` }}>
             {!isFailed && !isDone && <div className="absolute inset-0 rounded-full progress-shimmer" />}
@@ -215,7 +217,7 @@ const ScanProgress = ({ jobId, repoName, onComplete, onError }) => {
 
         {/* ── Scanner badges ──────────────────────────── */}
         <div className={`flex gap-2 flex-wrap pt-5 border-t
-          ${isDark ? 'border-white/[0.04]' : 'border-slate-50'}`}>
+          ${isDark ? 'border-white/[0.06]' : 'border-slate-100/50'}`}>
           <span className={`text-[10px] font-bold uppercase tracking-[0.12em] self-center mr-1
             ${isDark ? 'text-slate-600' : 'text-slate-300'}`}>Engines</span>
           {SCANNERS.map(({ name, light, dark }) => {

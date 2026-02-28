@@ -145,8 +145,10 @@ const RepositoryUpload = ({ onScanStarted }) => {
 
   return (
     <>
-      <div className={`rounded-lg shadow-md p-6
-        ${isDark ? 'bg-[#161929] border border-white/5' : 'bg-white'}`}>
+      <div className={`rounded-2xl p-6 border backdrop-blur-xl transition-all
+        ${isDark
+          ? 'bg-white/[0.03] border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.3)]'
+          : 'bg-white/70 border-white/60 shadow-[0_8px_32px_rgba(99,102,241,0.08)]'}`}>
         <div className="flex items-center justify-between mb-6">
           <h2 className={`text-2xl font-semibold ${isDark ? 'text-white' : 'text-gray-800'}`}>Repository Upload</h2>
           {selectedRepository && (
@@ -169,14 +171,15 @@ const RepositoryUpload = ({ onScanStarted }) => {
             {/* GitHub Option */}
             <button
               onClick={() => handleMethodSelect('github')}
-              className={`w-full p-6 border-2 rounded-lg transition-all text-left group
+              className={`w-full p-6 border-2 rounded-xl backdrop-blur-md transition-all text-left group
                 ${isDark
-                  ? 'border-white/10 hover:border-blue-500/50 hover:bg-blue-500/5'
-                  : 'border-gray-300 hover:border-blue-500 hover:bg-blue-50'}`}
+                  ? 'border-white/[0.08] bg-white/[0.02] hover:border-blue-500/40 hover:bg-blue-500/[0.06]'
+                  : 'border-white/60 bg-white/50 hover:border-blue-400 hover:bg-blue-50/80'}`}
             >
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-gray-800 rounded-lg flex items-center justify-center group-hover:bg-blue-600 transition-colors">
-                  <Github className="text-white" size={24} />
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center group-hover:bg-blue-600 transition-colors
+                  ${isDark ? 'bg-white/[0.06]' : 'bg-slate-100'}`}>
+                  <Github className={isDark ? 'text-white' : 'text-slate-700'} size={24} />
                 </div>
                 <div>
                   <h3 className={`font-semibold mb-1 ${isDark ? 'text-white' : 'text-gray-800'}`}>Connect GitHub</h3>
@@ -190,15 +193,15 @@ const RepositoryUpload = ({ onScanStarted }) => {
             {/* ZIP Option */}
             <button
               onClick={() => handleMethodSelect('zip')}
-              className={`w-full p-6 border-2 rounded-lg transition-all text-left group
+              className={`w-full p-6 border-2 rounded-xl backdrop-blur-md transition-all text-left group
                 ${isDark
-                  ? 'border-white/10 hover:border-blue-500/50 hover:bg-blue-500/5'
-                  : 'border-gray-300 hover:border-blue-500 hover:bg-blue-50'}`}
+                  ? 'border-white/[0.08] bg-white/[0.02] hover:border-violet-500/40 hover:bg-violet-500/[0.06]'
+                  : 'border-white/60 bg-white/50 hover:border-violet-400 hover:bg-violet-50/80'}`}
             >
               <div className="flex items-center gap-4">
-                <div className={`w-12 h-12 rounded-lg flex items-center justify-center group-hover:bg-blue-600 transition-colors
-                  ${isDark ? 'bg-slate-700' : 'bg-gray-600'}`}>
-                  <FileArchive className="text-white" size={24} />
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center group-hover:bg-violet-600 transition-colors
+                  ${isDark ? 'bg-white/[0.06]' : 'bg-slate-100'}`}>
+                  <FileArchive className={isDark ? 'text-white' : 'text-slate-700'} size={24} />
                 </div>
                 <div>
                   <h3 className={`font-semibold mb-1 ${isDark ? 'text-white' : 'text-gray-800'}`}>Upload ZIP File</h3>
@@ -212,8 +215,8 @@ const RepositoryUpload = ({ onScanStarted }) => {
         ) : uploadMethod === 'zip' && !selectedRepository ? (
           /* ZIP Upload Area */
           <>
-            <div className={`border-2 border-dashed rounded-lg p-8 mb-6 text-center
-              ${isDark ? 'border-white/10' : 'border-gray-300'}`}>
+            <div className={`border-2 border-dashed rounded-xl p-8 mb-6 text-center backdrop-blur-md
+              ${isDark ? 'border-white/[0.08] bg-white/[0.02]' : 'border-blue-200 bg-blue-50/30'}`}>
               <div className="flex flex-col items-center justify-center">
                 <Upload className={`w-12 h-12 mb-4 ${isDark ? 'text-slate-500' : 'text-gray-400'}`} />
                 <p className={`mb-2 ${isDark ? 'text-slate-300' : 'text-gray-600'}`}>Upload ZIP File</p>
@@ -229,10 +232,10 @@ const RepositoryUpload = ({ onScanStarted }) => {
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploading}
-                  className={`px-6 py-2 border rounded-lg transition-colors disabled:opacity-50
+                  className={`px-6 py-2.5 border rounded-xl font-medium transition-all disabled:opacity-50
                     ${isDark
-                      ? 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10'
-                      : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+                      ? 'bg-white/[0.06] border-white/[0.1] text-slate-200 hover:bg-white/[0.1] hover:border-white/[0.15]'
+                      : 'bg-white/80 border-white/60 text-slate-700 hover:bg-white shadow-sm'}`}
                 >
                   {uploading ? `Uploading... ${uploadProgress}%` : 'Select ZIP File'}
                 </button>
@@ -248,8 +251,10 @@ const RepositoryUpload = ({ onScanStarted }) => {
         ) : selectedRepository ? (
           /* Selected Repository Display */
           <>
-            <div className={`rounded-lg p-4 mb-6
-              ${isDark ? 'bg-white/[0.02] border border-white/5' : 'bg-gray-50'}`}>
+            <div className={`rounded-xl p-4 mb-6 border backdrop-blur-md
+              ${isDark
+                ? 'bg-white/[0.03] border-white/[0.08]'
+                : 'bg-white/60 border-white/60'}`}>
               <div className="flex items-center justify-between">
                 <div>
                   <p className={`text-sm mb-1 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Selected Repository</p>
@@ -277,11 +282,11 @@ const RepositoryUpload = ({ onScanStarted }) => {
                   <select
                     value={selectedBranch}
                     onChange={(e) => setSelectedBranch(e.target.value)}
-                    className={`w-full px-4 py-2 pr-10 border rounded-lg appearance-none
-                      focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                    className={`w-full px-4 py-2.5 pr-10 border rounded-xl appearance-none backdrop-blur-md
+                      focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-transparent transition-all
                       ${isDark
-                        ? 'border-white/10 bg-[#1e2235] text-white'
-                        : 'border-gray-300 bg-white text-gray-700'}`}
+                        ? 'border-white/[0.08] bg-white/[0.04] text-white'
+                        : 'border-white/60 bg-white/70 text-gray-700'}`}
                   >
                     <option value={selectedRepository.default_branch}>
                       {selectedRepository.default_branch}
@@ -299,7 +304,9 @@ const RepositoryUpload = ({ onScanStarted }) => {
             {/* Start Security Scan Button */}
             <button
               onClick={handleStartScan}
-              className="w-full py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
+              className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-semibold
+                hover:from-blue-500 hover:to-indigo-500 transition-all shadow-lg shadow-blue-500/20 hover:shadow-blue-500/30
+                active:scale-[0.98]"
             >
               Start Security Scan
             </button>
