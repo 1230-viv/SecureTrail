@@ -3,17 +3,21 @@ SecureTrail Master Scan Pipeline
 Orchestrates the complete security analysis workflow:
 
   Extract → Scan → Normalize → Score → Correlate → Config Analysis →
-  Business Impact → AI Explanation → Structured Report
+  Business Impact → Build Report → AI Explanation (background)
 
 Each stage updates job progress so the frontend can poll status in real time.
+AI explanations run as a background task after the report is delivered,
+enabling progressive UI rendering.
 """
 
 from __future__ import annotations
 
+import asyncio
 import datetime
+import time
 import traceback
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from Database.connection import get_session
 from Database.repositories import scan_repo as _scan_repo
@@ -24,7 +28,7 @@ from Engines.business_impact.impact_engine import enrich_business_impact
 from Engines.correlation.correlator import correlate_vulnerabilities
 from Engines.exploitability.scorer import score_vulnerabilities
 from Engines.normalization.normalizer import normalize_all
-from Engines.normalization.schema import ScanReport, Severity
+from Engines.normalization.schema import NormalizedVulnerability, ScanReport, Severity
 from Jobs.job_manager import JobStatus, job_manager
 from Scanners.orchestrator import run_all_scanners
 from Utils.logger import JobLogger
@@ -86,14 +90,8 @@ async def run_scan_pipeline(
         _progress(75, "business_impact")
         vulns = enrich_business_impact(vulns, job_id)
 
-        # ── 7. AI Explanations ───────────────────────────────────────────────
-        _progress(85, "ai_analysis")
-        vulns, executive_summary = await explain_vulnerabilities(
-            vulns, repository_name, job_id
-        )
-
-        # ── 8. Build Final Report ────────────────────────────────────────────
-        _progress(95, "building_report")
+        # ── 7. Build Report (before AI — enables progressive UI) ────────────
+        _progress(90, "building_report")
         report = _build_report(
             job_id=job_id,
             repository_name=repository_name,
@@ -102,25 +100,30 @@ async def run_scan_pipeline(
             scanner_errors=scanner_errors,
             correlation_summary=correlation_summary,
             config_summary=config_summary,
-            executive_summary=executive_summary,
+            executive_summary=None,          # AI hasn't run yet
             scan_errors=scan_errors,
         )
 
-        # ── 9. Finalize ──────────────────────────────────────────────────────
+        # ── 8. Finalize — report is available immediately ─────────────────
         status = JobStatus.PARTIAL if scan_errors else JobStatus.COMPLETED
+        report_dict = report.dict()
+        report_dict["ai_pending"] = True     # signal frontend that AI is coming
+
         job_manager.update_job(
             job_id,
             status=status,
             progress=100,
             stage="completed",
-            result=report.dict(),
+            result=report_dict,
+            ai_status="not_started",
+            ai_total=len(vulns),
         )
         log.info(
             f"Scan complete: {report.total_vulnerabilities} vulns | "
             f"CRITICAL:{report.critical_count} HIGH:{report.high_count}"
         )
 
-        # Persist final result to database
+        # Persist initial result to database
         try:
             async with get_session() as db:
                 await _scan_repo.update_scan_job(
@@ -134,12 +137,16 @@ async def run_scan_pipeline(
                     medium_count=report.medium_count,
                     low_count=report.low_count,
                     info_count=report.info_count,
-                    result_json=report.dict(),
+                    result_json=report_dict,
                     completed_at=datetime.datetime.now(datetime.timezone.utc),
                 )
-                # No need to call commit() - get_session() auto-commits
         except Exception as _db_exc:
             log.warning(f"Failed to persist scan result to DB: {_db_exc}")
+
+        # ── 9. Launch AI in background (non-blocking) ────────────────────
+        asyncio.create_task(
+            _run_ai_background(job_id, vulns, repository_name)
+        )
 
         # ── 10. Archive ZIP to S3 (7-day auto-deletion) ─────────────────────
         # Move the ZIP file to archive/ folder for automatic lifecycle deletion
@@ -198,6 +205,64 @@ async def run_scan_pipeline(
     finally:
         if cleanup_after:
             cleanup_job_directory(job_id)
+
+
+# ── Background AI Task ───────────────────────────────────────────────────────
+
+async def _run_ai_background(
+    job_id: str,
+    vulns: List[NormalizedVulnerability],
+    repository_name: str,
+) -> None:
+    """
+    Run AI explanations as a background task after the report is already
+    delivered to the frontend.  Updates the job result in-place so the
+    frontend can poll for progressive AI enrichment.
+    """
+    log = JobLogger(job_id, "pipeline_ai")
+    try:
+        log.info(f"Background AI analysis started for {len(vulns)} vulns")
+        job_manager.update_job(job_id, ai_status="in_progress")
+
+        vulns, executive_summary = await explain_vulnerabilities(
+            vulns, repository_name, job_id
+        )
+
+        # Update the job result with AI-enriched vulnerabilities
+        job = job_manager.get_job(job_id)
+        if job and job.result:
+            job.result["vulnerabilities"] = [v.dict() for v in vulns]
+            if executive_summary:
+                job.result.setdefault("risk_summary", {})["executive_summary"] = executive_summary
+            job.result["ai_pending"] = False
+            job.updated_at = time.time()
+
+        job_manager.update_job(
+            job_id,
+            ai_status="complete",
+            ai_done=len(vulns),
+        )
+
+        # Persist AI-enriched result to database
+        try:
+            async with get_session() as db:
+                await _scan_repo.update_scan_job(
+                    db, job_id,
+                    result_json=job.result if job else None,
+                )
+        except Exception as db_exc:
+            log.warning(f"Failed to persist AI results to DB: {db_exc}")
+
+        log.info("Background AI analysis completed")
+
+    except Exception as e:
+        log.warning(f"Background AI analysis failed: {e}")
+        # Mark AI as done (failed) so frontend stops waiting
+        job = job_manager.get_job(job_id)
+        if job and job.result:
+            job.result["ai_pending"] = False
+            job.updated_at = time.time()
+        job_manager.update_job(job_id, ai_status="complete")
 
 
 def _build_report(
