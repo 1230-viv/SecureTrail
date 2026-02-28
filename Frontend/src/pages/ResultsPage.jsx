@@ -5,8 +5,9 @@ import { toast } from 'react-toastify';
 import ScanResults from '../components/ScanResults';
 import { useScan } from '../context/ScanContext';
 import { scanAPI } from '../services/api';
+import { useTheme } from '../context/ThemeContext';
 
-const AI_POLL_INTERVAL = 3000; // ms
+const AI_POLL_INTERVAL = 3000;
 
 const ResultsPage = () => {
   const { jobId }      = useParams();
@@ -14,8 +15,8 @@ const ResultsPage = () => {
   const { currentReport, setCurrentReport, clearScan } = useScan();
   const [loading, setLoading] = useState(false);
   const aiPollRef = useRef(null);
+  const { isDark } = useTheme();
 
-  // Hydrate from API if context is empty (e.g. direct URL access / page refresh)
   useEffect(() => {
     if (!currentReport && jobId) {
       setLoading(true);
@@ -23,7 +24,6 @@ const ResultsPage = () => {
         .then(({ data }) => setCurrentReport(data))
         .catch((err) => {
           const msg = err.response?.data?.detail || err.message;
-          // Job may still be running — redirect to scanning view
           if (err.response?.status === 409) {
             toast.info('Scan still in progress, redirecting…');
             navigate(`/scanning/${jobId}`, { replace: true });
@@ -36,30 +36,24 @@ const ResultsPage = () => {
     }
   }, [jobId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Poll for AI explanation updates when ai_pending is true
   useEffect(() => {
     if (!currentReport?.ai_pending || !jobId) return;
-
     aiPollRef.current = setInterval(async () => {
       try {
         const { data } = await scanAPI.getResult(jobId);
         setCurrentReport(data);
-        if (!data.ai_pending) {
-          clearInterval(aiPollRef.current);
-        }
-      } catch {
-        // ignore polling errors — will retry next interval
-      }
+        if (!data.ai_pending) clearInterval(aiPollRef.current);
+      } catch { /* retry next interval */ }
     }, AI_POLL_INTERVAL);
-
     return () => clearInterval(aiPollRef.current);
   }, [currentReport?.ai_pending, jobId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh] gap-3 text-gray-500">
-        <Loader2 size={24} className="animate-spin" />
-        <span>Loading report…</span>
+      <div className={`flex items-center justify-center min-h-[60vh] gap-3
+        ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+        <Loader2 size={22} className="animate-spin" />
+        <span className="text-sm">Loading report…</span>
       </div>
     );
   }
@@ -67,10 +61,11 @@ const ResultsPage = () => {
   if (!currentReport) return null;
 
   return (
-    <ScanResults
-      report={currentReport}
-      onNewScan={clearScan}
-    />
+    <div className={`min-h-screen ${isDark ? 'bg-[#0d0f17]' : 'bg-[#f8f9fb]'}`}>
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+        <ScanResults report={currentReport} onNewScan={clearScan} />
+      </div>
+    </div>
   );
 };
 

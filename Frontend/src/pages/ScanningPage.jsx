@@ -4,20 +4,20 @@ import { toast } from 'react-toastify';
 import ScanProgress from '../components/ScanProgress';
 import { useScan } from '../context/ScanContext';
 import { scanAPI } from '../services/api';
+import { useTheme } from '../context/ThemeContext';
 
 const ScanningPage = () => {
   const { jobId }      = useParams();
   const navigate       = useNavigate();
   const { activeJob, setActiveJob, setCurrentReport } = useScan();
+  const { isDark }     = useTheme();
 
-  // If the user navigates directly to /scanning/:jobId (e.g. after a refresh),
-  // we may not have activeJob in context; hydrate it from the status endpoint.
+  // Hydrate from API if user navigated directly (refresh / bookmark)
   useEffect(() => {
     if (!activeJob && jobId) {
       scanAPI.getStatus(jobId)
         .then(({ data }) => {
           setActiveJob({ job_id: jobId, repo_name: data.repository_name });
-          // If already done, go straight to results
           if (data.status === 'completed' || data.status === 'partial') {
             scanAPI.getResult(jobId).then(({ data: report }) => {
               setCurrentReport(report);
@@ -52,13 +52,23 @@ const ScanningPage = () => {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh]">
-      <ScanProgress
-        jobId={jobId}
-        repoName={activeJob?.repo_name || '…'}
-        onComplete={handleComplete}
-        onError={handleError}
-      />
+    <div className={`min-h-[80vh] flex flex-col items-center justify-center px-4 relative overflow-hidden
+      ${isDark ? 'bg-[#0d0f17]' : 'bg-[#f8f9fb]'}`}>
+      {/* Subtle radial gradient backdrop */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
+          w-[600px] h-[600px] rounded-full blur-[120px] opacity-30
+          ${isDark ? 'bg-blue-900/40' : 'bg-blue-200/60'}`} />
+      </div>
+
+      <div className="relative z-10 w-full">
+        <ScanProgress
+          jobId={jobId}
+          repoName={activeJob?.repo_name || '…'}
+          onComplete={handleComplete}
+          onError={handleError}
+        />
+      </div>
     </div>
   );
 };
