@@ -81,6 +81,12 @@ export const scanAPI = {
    * Returns [{ job_id, status, progress, stage, repository_name, created_at, updated_at }, ...]
    */
   getJobs: () => api.get('/api/scan/jobs'),
+
+  /**
+   * Generate and download the executive-level Markdown security report.
+   * Returns the raw Markdown text as a string.
+   */
+  getReport: (jobId) => api.get(`/api/scan/report/${jobId}`, { responseType: 'text' }),
 };
 
 export default api;

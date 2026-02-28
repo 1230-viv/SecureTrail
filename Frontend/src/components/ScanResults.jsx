@@ -1,11 +1,12 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef } from 'react';
 import {
   ShieldAlert, Search,
   ChevronDown, Download, RotateCcw, CheckCircle2, XCircle, AlertTriangle,
-  Brain, Loader2, BarChart3, TrendingUp,
+  Brain, Loader2, BarChart3, TrendingUp, FileText, Printer,
 } from 'lucide-react';
 import VulnerabilityCard from './VulnerabilityCard';
 import { useTheme } from '../context/ThemeContext';
+import { scanAPI } from '../services/api';
 
 /* ── Severity config ───────────────────────────────────────────────────────── */
 const SEV_ORDER = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO', 'UNKNOWN'];
@@ -92,6 +93,7 @@ const ScanResults = ({ report, onNewScan }) => {
   const [filterSev,   setFilterSev]   = useState('ALL');
   const [filterSrc,   setFilterSrc]   = useState('ALL');
   const [sortBy,      setSortBy]      = useState('severity');
+  const [showExportMenu, setShowExportMenu] = useState(false);
   const { isDark }                    = useTheme();
 
   const vulns = report?.vulnerabilities || [];
@@ -143,6 +145,89 @@ const ScanResults = ({ report, onNewScan }) => {
     a.click();
     URL.revokeObjectURL(url);
   };
+
+  const handleDownloadMarkdown = async () => {
+    try {
+      const { data } = await scanAPI.getReport(report.job_id);
+      const blob = new Blob([data], { type: 'text/markdown' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href = url;
+      a.download = `securetrail-${report.repository_name}-${report.job_id.slice(0, 8)}.md`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Report download failed', err);
+    }
+  };
+
+  const handlePrintPDF = async () => {
+    try {
+      const { data: md } = await scanAPI.getReport(report.job_id);
+      const html = mdToHtml(md);
+      const win  = window.open('', '_blank', 'width=900,height=700');
+      win.document.write(`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Security Report — ${report.repository_name}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; line-height: 1.7;
+         color: #1e293b; background: #fff; padding: 48px 56px; max-width: 840px; margin: 0 auto; }
+  h1 { font-size: 22px; font-weight: 800; color: #0f172a; border-bottom: 3px solid #6366f1;
+       padding-bottom: 10px; margin-bottom: 20px; }
+  h2 { font-size: 16px; font-weight: 700; color: #0f172a; margin: 28px 0 10px;
+       padding-bottom: 4px; border-bottom: 1px solid #e2e8f0; }
+  h3 { font-size: 13px; font-weight: 700; color: #334155; margin: 18px 0 6px; }
+  p  { margin-bottom: 10px; }
+  ul { margin: 6px 0 12px 20px; } li { margin-bottom: 4px; }
+  strong { font-weight: 700; }
+  code { font-family: 'Consolas', monospace; font-size: 11.5px;
+          background: #f1f5f9; padding: 1px 5px; border-radius: 4px; color: #475569; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 16px; font-size: 12px; }
+  th { background: #f8fafc; color: #0f172a; font-weight: 700; text-align: left;
+        padding: 7px 10px; border: 1px solid #e2e8f0; }
+  td { padding: 6px 10px; border: 1px solid #e2e8f0; vertical-align: top; }
+  tr:nth-child(even) td { background: #f8fafc; }
+  hr { border: none; border-top: 1px solid #e2e8f0; margin: 22px 0; }
+  em { color: #64748b; font-style: italic; }
+  .meta { font-size: 11px; color: #64748b; margin-bottom: 24px; }
+  @media print {
+    body { padding: 20px 32px; }
+    h2 { page-break-before: auto; }
+  }
+</style>
+</head>
+<body>${html}</body>
+</html>`);
+      win.document.close();
+      win.focus();
+      setTimeout(() => win.print(), 600);
+    } catch (err) {
+      console.error('PDF generation failed', err);
+    }
+  };
+
+  /** Minimal Markdown → HTML converter for print output. */
+  const mdToHtml = (md) => md
+    .replace(/^# (.+)$/gm,       '<h1>$1</h1>')
+    .replace(/^## (.+)$/gm,      '<h2>$1</h2>')
+    .replace(/^### (.+)$/gm,     '<h3>$3</h3>'.replace('$3', '$1'))
+    .replace(/^---$/gm,          '<hr />')
+    .replace(/\*\*(.+?)\*\*/g,   '<strong>$1</strong>')
+    .replace(/`([^`]+)`/g,       '<code>$1</code>')
+    .replace(/^- (.+)$/gm,       '<li>$1</li>')
+    .replace(/(<li>.*<\/li>\n?)+/g, m => `<ul>${m}</ul>`)
+    .replace(/^\|(.+)\|$/gm,     (row) => {
+      const cells = row.split('|').slice(1, -1);
+      const isHeader = cells.some(c => /^[-:\s]+$/.test(c.trim()));
+      if (isHeader) return '';
+      return '<tr>' + cells.map(c => `<td>${c.trim()}</td>`).join('') + '</tr>';
+    })
+    .replace(/(<tr>.*<\/tr>\n?)+/g, m => `<table>${m}</table>`)
+    .replace(/\n{2,}/g, '</p><p>')
+    .replace(/^(?!<[htupco]|$)(.+)$/gm, '<p>$1</p>');
 
   if (!report) return null;
   const aiPending = !!report.ai_pending;
@@ -201,14 +286,53 @@ const ScanResults = ({ report, onNewScan }) => {
               </p>
             </div>
 
-            <div className="flex gap-2">
-              <button onClick={handleExport}
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-medium transition-all backdrop-blur-md
-                  ${isDark
-                    ? 'bg-white/[0.04] text-slate-300 hover:bg-white/[0.07] ring-1 ring-white/[0.08]'
-                    : 'bg-white/60 text-slate-600 hover:bg-white/80 ring-1 ring-white/60'}`}>
-                <Download size={14} /> Export
-              </button>
+            <div className="flex gap-2 items-center">
+              {/* ── Export dropdown ───────────────────────────────── */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowExportMenu(m => !m)}
+                  className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-medium transition-all backdrop-blur-md
+                    ${isDark
+                      ? 'bg-white/[0.04] text-slate-300 hover:bg-white/[0.07] ring-1 ring-white/[0.08]'
+                      : 'bg-white/60 text-slate-600 hover:bg-white/80 ring-1 ring-white/60'}`}>
+                  <Download size={14} /> Export <ChevronDown size={12} className={`transition-transform ${showExportMenu ? 'rotate-180' : ''}`} />
+                </button>
+
+                {showExportMenu && (
+                  <>
+                    {/* Click-outside overlay */}
+                    <div className="fixed inset-0 z-10" onClick={() => setShowExportMenu(false)} />
+                    <div className={`absolute right-0 top-full mt-1.5 z-20 w-52 rounded-xl overflow-hidden shadow-xl border
+                      ${isDark
+                        ? 'bg-slate-900 border-white/[0.08] shadow-black/50'
+                        : 'bg-white border-slate-200 shadow-slate-200/80'}`}>
+                      <button
+                        onClick={() => { handleExport(); setShowExportMenu(false); }}
+                        className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-medium text-left transition-colors
+                          ${isDark ? 'text-slate-300 hover:bg-white/[0.05]' : 'text-slate-700 hover:bg-slate-50'}`}>
+                        <Download size={13} className={isDark ? 'text-slate-500' : 'text-slate-400'} />
+                        Export JSON
+                      </button>
+                      <div className={`h-px mx-3 ${isDark ? 'bg-white/[0.06]' : 'bg-slate-100'}`} />
+                      <button
+                        onClick={() => { handleDownloadMarkdown(); setShowExportMenu(false); }}
+                        className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-medium text-left transition-colors
+                          ${isDark ? 'text-slate-300 hover:bg-white/[0.05]' : 'text-slate-700 hover:bg-slate-50'}`}>
+                        <FileText size={13} className={isDark ? 'text-indigo-400' : 'text-indigo-500'} />
+                        Download Markdown Report
+                      </button>
+                      <div className={`h-px mx-3 ${isDark ? 'bg-white/[0.06]' : 'bg-slate-100'}`} />
+                      <button
+                        onClick={() => { handlePrintPDF(); setShowExportMenu(false); }}
+                        className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-medium text-left transition-colors
+                          ${isDark ? 'text-slate-300 hover:bg-white/[0.05]' : 'text-slate-700 hover:bg-slate-50'}`}>
+                        <Printer size={13} className={isDark ? 'text-emerald-400' : 'text-emerald-600'} />
+                        Print / Save as PDF
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
               <button onClick={onNewScan}
                 className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl text-xs font-semibold
                   hover:from-blue-500 hover:to-indigo-500 transition-all shadow-lg shadow-blue-500/20">

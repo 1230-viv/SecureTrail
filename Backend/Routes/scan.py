@@ -6,12 +6,25 @@ Exposes job status polling, result retrieval, and manual cleanup.
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, Header
+from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
+
+import asyncio
+import json
+import os
 
 from Jobs.job_manager import job_manager
 from Database.connection import get_db_session
 from Database.repositories import scan_repo
+from Engines.ai.prompt_builder import (
+    build_markdown_report,
+    build_ai_report_prompt,
+    build_hybrid_markdown_report,
+    REPORT_SYSTEM_PROMPT,
+)
+
+AI_ENABLED = os.getenv("AI_ENABLED", "false").lower() == "true"
 
 router = APIRouter()
 
@@ -129,6 +142,92 @@ async def list_jobs(db: AsyncSession = Depends(get_db_session)):
         key=lambda j: j.get("created_at") or "",
         reverse=True,
     )}
+
+
+@router.get("/report/{job_id}", response_class=PlainTextResponse)
+async def generate_markdown_report(job_id: str, db: AsyncSession = Depends(get_db_session)):
+    """
+    Generate a professional executive-level security report in Markdown.
+    Returns plain text (Markdown) suitable for download or PDF conversion.
+    """
+    # Resolve the result dict — same lookup chain as /result/{job_id}
+    result: dict | None = None
+
+    job = job_manager.get_job(job_id)
+    if job:
+        if job.status not in ("completed", "partial"):
+            raise HTTPException(
+                status_code=409,
+                detail=f"Job is not yet complete. Current status: {job.status}",
+            )
+        result = job.result
+    else:
+        db_job = await scan_repo.get_scan_job(db, job_id)
+        if not db_job:
+            raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found")
+        if db_job.status not in ("completed", "partial"):
+            raise HTTPException(
+                status_code=409,
+                detail=f"Job is not yet complete. Current status: {db_job.status}",
+            )
+        result = db_job.result_json
+
+    if not result:
+        raise HTTPException(status_code=500, detail="Scan result is unavailable.")
+
+    markdown: str | None = None
+    used_ai = False
+
+    # ── Try Bedrock for AI-enhanced narrative sections ────────────────
+    if AI_ENABLED:
+        try:
+            from Engines.ai.bedrock_client import invoke_claude, BedrockPermanentError
+
+            user_prompt = build_ai_report_prompt(result)
+
+            # invoke_claude is synchronous — run in a thread pool
+            raw = await asyncio.to_thread(
+                invoke_claude,
+                REPORT_SYSTEM_PROMPT,
+                user_prompt,
+                0.25,   # slightly higher creativity than per-vuln analysis
+                2000,   # enough for 3 narrative sections
+            )
+
+            # Strip markdown fences if model wraps output
+            clean = raw.strip()
+            if clean.startswith("```"):
+                clean = clean.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+
+            ai_narratives = json.loads(clean)
+
+            # Validate all three required keys are present and non-empty
+            required = ("executive_summary", "key_findings_analysis", "business_impact")
+            if all(ai_narratives.get(k, "").strip() for k in required):
+                markdown = build_hybrid_markdown_report(result, ai_narratives)
+                used_ai = True
+
+        except Exception as exc:
+            # Any Bedrock/JSON failure — silently fall back to template
+            import logging
+            logging.getLogger("scan_route").warning(
+                f"AI report generation failed, falling back to template: {exc}"
+            )
+
+    # ── Fallback: deterministic template ──────────────────────────────
+    if not markdown:
+        markdown = build_markdown_report(result)
+
+    repo_slug = (result.get("repository_name") or "report").replace(" ", "-").lower()
+    filename  = f"securetrail-{repo_slug}-{job_id[:8]}.md"
+
+    return PlainTextResponse(
+        content=markdown,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-Report-AI-Enhanced": str(used_ai).lower(),
+        },
+    )
 
 
 @router.delete("/cleanup/{job_id}")
