@@ -3,6 +3,7 @@ import { Upload, ChevronDown, Github, FileArchive, X } from 'lucide-react';
 import { toast } from 'react-toastify';
 import RepositorySelector from './RepositorySelector';
 import { uploadAPI, repositoryAPI, authAPI } from '../services/api';
+import { useTheme } from '../context/ThemeContext';
 
 /**
  * RepositoryUpload
@@ -18,6 +19,7 @@ const RepositoryUpload = ({ onScanStarted }) => {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef(null);
+  const { isDark } = useTheme();
 
   const handleMethodSelect = async (method) => {
     if (method === 'github') {
@@ -143,13 +145,15 @@ const RepositoryUpload = ({ onScanStarted }) => {
 
   return (
     <>
-      <div className="bg-white rounded-lg shadow-md p-6">
+      <div className={`rounded-lg shadow-md p-6
+        ${isDark ? 'bg-[#161929] border border-white/5' : 'bg-white'}`}>
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-semibold text-gray-800">Repository Upload</h2>
+          <h2 className={`text-2xl font-semibold ${isDark ? 'text-white' : 'text-gray-800'}`}>Repository Upload</h2>
           {selectedRepository && (
             <button
               onClick={handleReset}
-              className="text-sm text-gray-600 hover:text-gray-800 flex items-center gap-1"
+              className={`text-sm flex items-center gap-1
+                ${isDark ? 'text-slate-400 hover:text-white' : 'text-gray-600 hover:text-gray-800'}`}
             >
               <X size={16} />
               Reset
@@ -160,20 +164,23 @@ const RepositoryUpload = ({ onScanStarted }) => {
         {!uploadMethod ? (
           /* Method Selection */
           <div className="space-y-4">
-            <p className="text-gray-600 mb-4">Choose upload method:</p>
+            <p className={`mb-4 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Choose upload method:</p>
             
             {/* GitHub Option */}
             <button
               onClick={() => handleMethodSelect('github')}
-              className="w-full p-6 border-2 border-gray-300 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all text-left group"
+              className={`w-full p-6 border-2 rounded-lg transition-all text-left group
+                ${isDark
+                  ? 'border-white/10 hover:border-blue-500/50 hover:bg-blue-500/5'
+                  : 'border-gray-300 hover:border-blue-500 hover:bg-blue-50'}`}
             >
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 bg-gray-800 rounded-lg flex items-center justify-center group-hover:bg-blue-600 transition-colors">
                   <Github className="text-white" size={24} />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-gray-800 mb-1">Connect GitHub</h3>
-                  <p className="text-sm text-gray-600">
+                  <h3 className={`font-semibold mb-1 ${isDark ? 'text-white' : 'text-gray-800'}`}>Connect GitHub</h3>
+                  <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
                     Login and select repository from your GitHub account
                   </p>
                 </div>
@@ -183,15 +190,19 @@ const RepositoryUpload = ({ onScanStarted }) => {
             {/* ZIP Option */}
             <button
               onClick={() => handleMethodSelect('zip')}
-              className="w-full p-6 border-2 border-gray-300 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all text-left group"
+              className={`w-full p-6 border-2 rounded-lg transition-all text-left group
+                ${isDark
+                  ? 'border-white/10 hover:border-blue-500/50 hover:bg-blue-500/5'
+                  : 'border-gray-300 hover:border-blue-500 hover:bg-blue-50'}`}
             >
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-gray-600 rounded-lg flex items-center justify-center group-hover:bg-blue-600 transition-colors">
+                <div className={`w-12 h-12 rounded-lg flex items-center justify-center group-hover:bg-blue-600 transition-colors
+                  ${isDark ? 'bg-slate-700' : 'bg-gray-600'}`}>
                   <FileArchive className="text-white" size={24} />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-gray-800 mb-1">Upload ZIP File</h3>
-                  <p className="text-sm text-gray-600">
+                  <h3 className={`font-semibold mb-1 ${isDark ? 'text-white' : 'text-gray-800'}`}>Upload ZIP File</h3>
+                  <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
                     Upload a ZIP file containing your project code
                   </p>
                 </div>
@@ -201,11 +212,12 @@ const RepositoryUpload = ({ onScanStarted }) => {
         ) : uploadMethod === 'zip' && !selectedRepository ? (
           /* ZIP Upload Area */
           <>
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 mb-6 text-center">
+            <div className={`border-2 border-dashed rounded-lg p-8 mb-6 text-center
+              ${isDark ? 'border-white/10' : 'border-gray-300'}`}>
               <div className="flex flex-col items-center justify-center">
-                <Upload className="w-12 h-12 text-gray-400 mb-4" />
-                <p className="text-gray-600 mb-2">Upload ZIP File</p>
-                <p className="text-sm text-gray-500 mb-4">Maximum file size: 100MB</p>
+                <Upload className={`w-12 h-12 mb-4 ${isDark ? 'text-slate-500' : 'text-gray-400'}`} />
+                <p className={`mb-2 ${isDark ? 'text-slate-300' : 'text-gray-600'}`}>Upload ZIP File</p>
+                <p className={`text-sm mb-4 ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>Maximum file size: 100MB</p>
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -217,7 +229,10 @@ const RepositoryUpload = ({ onScanStarted }) => {
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploading}
-                  className="px-6 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                  className={`px-6 py-2 border rounded-lg transition-colors disabled:opacity-50
+                    ${isDark
+                      ? 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10'
+                      : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'}`}
                 >
                   {uploading ? `Uploading... ${uploadProgress}%` : 'Select ZIP File'}
                 </button>
@@ -225,7 +240,7 @@ const RepositoryUpload = ({ onScanStarted }) => {
             </div>
             <button
               onClick={() => setUploadMethod(null)}
-              className="w-full py-2 text-gray-600 hover:text-gray-800"
+              className={`w-full py-2 ${isDark ? 'text-slate-400 hover:text-white' : 'text-gray-600 hover:text-gray-800'}`}
             >
               ← Back to method selection
             </button>
@@ -233,19 +248,20 @@ const RepositoryUpload = ({ onScanStarted }) => {
         ) : selectedRepository ? (
           /* Selected Repository Display */
           <>
-            <div className="bg-gray-50 rounded-lg p-4 mb-6">
+            <div className={`rounded-lg p-4 mb-6
+              ${isDark ? 'bg-white/[0.02] border border-white/5' : 'bg-gray-50'}`}>
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600 mb-1">Selected Repository</p>
-                  <h3 className="font-semibold text-gray-800">{selectedRepository.name}</h3>
+                  <p className={`text-sm mb-1 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Selected Repository</p>
+                  <h3 className={`font-semibold ${isDark ? 'text-white' : 'text-gray-800'}`}>{selectedRepository.name}</h3>
                   {selectedRepository.files_count && (
-                    <p className="text-sm text-gray-600 mt-1">
+                    <p className={`text-sm mt-1 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
                       {selectedRepository.files_count} files extracted
                     </p>
                   )}
                 </div>
                 {selectedRepository.type !== 'zip' && (
-                  <Github className="text-gray-600" size={32} />
+                  <Github className={isDark ? 'text-slate-500' : 'text-gray-600'} size={32} />
                 )}
               </div>
             </div>
@@ -253,14 +269,19 @@ const RepositoryUpload = ({ onScanStarted }) => {
             {/* Branch Selection (only for GitHub repos) */}
             {selectedRepository.type !== 'zip' && (
               <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className={`block text-sm font-medium mb-2
+                  ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
                   Branch Selection
                 </label>
                 <div className="relative">
                   <select
                     value={selectedBranch}
                     onChange={(e) => setSelectedBranch(e.target.value)}
-                    className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg appearance-none bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className={`w-full px-4 py-2 pr-10 border rounded-lg appearance-none
+                      focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                      ${isDark
+                        ? 'border-white/10 bg-[#1e2235] text-white'
+                        : 'border-gray-300 bg-white text-gray-700'}`}
                   >
                     <option value={selectedRepository.default_branch}>
                       {selectedRepository.default_branch}
@@ -269,7 +290,8 @@ const RepositoryUpload = ({ onScanStarted }) => {
                     <option value="feature">feature</option>
                     <option value="staging">staging</option>
                   </select>
-                  <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+                  <ChevronDown className={`absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 pointer-events-none
+                    ${isDark ? 'text-slate-500' : 'text-gray-400'}`} />
                 </div>
               </div>
             )}
@@ -277,7 +299,7 @@ const RepositoryUpload = ({ onScanStarted }) => {
             {/* Start Security Scan Button */}
             <button
               onClick={handleStartScan}
-              className="w-full py-3 bg-[#2D3748] text-white rounded-lg font-medium hover:bg-[#1A202C] transition-colors"
+              className="w-full py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
             >
               Start Security Scan
             </button>

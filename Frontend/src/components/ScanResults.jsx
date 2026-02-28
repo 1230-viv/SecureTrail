@@ -4,6 +4,7 @@ import {
   ChevronDown, Download, RotateCcw, CheckCircle2, XCircle, AlertTriangle,
 } from 'lucide-react';
 import VulnerabilityCard from './VulnerabilityCard';
+import { useTheme } from '../context/ThemeContext';
 
 // ── Severity config ───────────────────────────────────────────────────────────
 const SEV_ORDER = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO', 'UNKNOWN'];
@@ -36,16 +37,20 @@ const SORT_OPTIONS = [
 ];
 
 // ── Sub-components ────────────────────────────────────────────────────────────
-const SeverityPill = ({ label, count, active, onClick }) => {
+const SeverityPill = ({ label, count, active, onClick, isDark }) => {
   const s = SEV_STYLE[label] || SEV_STYLE.UNKNOWN;
   return (
     <button
       onClick={onClick}
       className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-all
-        ${active ? `${s.light} ${s.text} border-2` : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
+        ${active
+          ? `${s.light} ${s.text} border-2`
+          : isDark
+            ? 'bg-white/5 border-white/10 text-slate-400 hover:border-white/20'
+            : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
     >
       <span className={`w-2.5 h-2.5 rounded-full ${s.bg}`} />
-      {label} <span className={`font-bold ${active ? s.text : 'text-gray-700'}`}>{count}</span>
+      {label} <span className={`font-bold ${active ? s.text : isDark ? 'text-white' : 'text-gray-700'}`}>{count}</span>
     </button>
   );
 };
@@ -77,6 +82,7 @@ const ScanResults = ({ report, onNewScan }) => {
   const [filterSrc,   setFilterSrc]   = useState('ALL');
   const [sortBy,      setSortBy]      = useState('severity');
   const [showFilters, setShowFilters] = useState(false);
+  const { isDark }                    = useTheme();
 
   const vulns = report?.vulnerabilities || [];
 
@@ -151,31 +157,38 @@ const ScanResults = ({ report, onNewScan }) => {
   return (
     <div className="space-y-6">
       {/* ── Header ─────────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-xl shadow-sm p-6">
+      <div className={`rounded-xl shadow-sm p-6
+        ${isDark ? 'bg-[#161929] border border-white/5' : 'bg-white'}`}>
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+            <h2 className={`text-2xl font-bold flex items-center gap-2
+              ${isDark ? 'text-white' : 'text-gray-800'}`}>
               <Bug size={22} className="text-blue-600" />
               {report.repository_name}
               <span className={`ml-2 text-sm px-2.5 py-0.5 rounded-full font-medium
-                ${report.status === 'completed' ? 'bg-green-100 text-green-700'
-                : report.status === 'partial'   ? 'bg-amber-100 text-amber-700'
-                :                                  'bg-red-100   text-red-700'}`}>
+                ${report.status === 'completed'
+                  ? isDark ? 'bg-green-500/10 text-green-400' : 'bg-green-100 text-green-700'
+                  : report.status === 'partial'
+                    ? isDark ? 'bg-amber-500/10 text-amber-400' : 'bg-amber-100 text-amber-700'
+                    : isDark ? 'bg-red-500/10 text-red-400' : 'bg-red-100 text-red-700'}`}>
                 {report.status}
               </span>
             </h2>
-            <p className="text-sm text-gray-500 mt-1">
+            <p className={`text-sm mt-1 ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
               Scanned {new Date(report.scan_timestamp).toLocaleString()} ·
               Job <span className="font-mono">{report.job_id.slice(0, 8)}</span>
             </p>
           </div>
           <div className="flex gap-2">
             <button onClick={handleExport}
-              className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors">
+              className={`flex items-center gap-2 px-4 py-2 border rounded-lg text-sm transition-colors
+                ${isDark
+                  ? 'border-white/10 text-slate-300 hover:bg-white/5'
+                  : 'border-gray-300 text-gray-600 hover:bg-gray-50'}`}>
               <Download size={16} /> Export JSON
             </button>
             <button onClick={onNewScan}
-              className="flex items-center gap-2 px-4 py-2 bg-[#2D3748] text-white rounded-lg text-sm hover:bg-[#1A202C] transition-colors">
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors">
               <RotateCcw size={16} /> New Scan
             </button>
           </div>
@@ -186,7 +199,9 @@ const ScanResults = ({ report, onNewScan }) => {
           <button
             onClick={() => setFilterSev('ALL')}
             className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-all
-              ${filterSev === 'ALL' ? 'bg-gray-800 text-white border-gray-800' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'}`}
+              ${filterSev === 'ALL'
+                ? isDark ? 'bg-white text-gray-900 border-white' : 'bg-gray-800 text-white border-gray-800'
+                : isDark ? 'bg-white/5 border-white/10 text-slate-400 hover:border-white/20' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'}`}
           >
             All&nbsp;<span className="font-bold">{report.total_vulnerabilities}</span>
           </button>
@@ -198,7 +213,7 @@ const ScanResults = ({ report, onNewScan }) => {
             { key: 'INFO',     count: report.info_count     },
           ].filter(x => x.count > 0).map(({ key, count }) => (
             <SeverityPill key={key} label={key} count={count}
-              active={filterSev === key}
+              active={filterSev === key} isDark={isDark}
               onClick={() => setFilterSev(filterSev === key ? 'ALL' : key)} />
           ))}
         </div>
@@ -212,11 +227,12 @@ const ScanResults = ({ report, onNewScan }) => {
 
         {/* Scan errors (if any) */}
         {report.scan_errors?.length > 0 && (
-          <div className="mt-4 bg-amber-50 border border-amber-200 rounded-lg p-3">
-            <p className="text-xs font-semibold text-amber-700 mb-1 flex items-center gap-1">
+          <div className={`mt-4 border rounded-lg p-3
+            ${isDark ? 'bg-amber-500/10 border-amber-500/20' : 'bg-amber-50 border-amber-200'}`}>
+            <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-1 flex items-center gap-1">
               <AlertTriangle size={13} /> Scanner Warnings
             </p>
-            <ul className="text-xs text-amber-700 space-y-0.5 list-disc list-inside">
+            <ul className="text-xs text-amber-700 dark:text-amber-400 space-y-0.5 list-disc list-inside">
               {report.scan_errors.map((e, i) => <li key={i}>{e}</li>)}
             </ul>
           </div>
@@ -224,17 +240,22 @@ const ScanResults = ({ report, onNewScan }) => {
       </div>
 
       {/* ── Filters & sort bar ──────────────────────────────────────────── */}
-      <div className="bg-white rounded-xl shadow-sm p-4">
+      <div className={`rounded-xl shadow-sm p-4
+        ${isDark ? 'bg-[#161929] border border-white/5' : 'bg-white'}`}>
         <div className="flex gap-3 items-center flex-wrap">
           {/* Search */}
           <div className="relative flex-1 min-w-48">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <Search size={16} className={`absolute left-3 top-1/2 -translate-y-1/2
+              ${isDark ? 'text-slate-500' : 'text-gray-400'}`} />
             <input
               type="text"
               placeholder="Search findings…"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={`w-full pl-9 pr-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500
+                ${isDark
+                  ? 'border-white/10 bg-white/5 text-white placeholder-slate-500'
+                  : 'border-gray-300 bg-white text-gray-900'}`}
             />
           </div>
 
@@ -242,7 +263,11 @@ const ScanResults = ({ report, onNewScan }) => {
           <button
             onClick={() => setShowFilters(!showFilters)}
             className={`flex items-center gap-1.5 px-3 py-2 border rounded-lg text-sm transition-colors
-              ${showFilters ? 'bg-blue-50 border-blue-300 text-blue-700' : 'border-gray-300 text-gray-600 hover:bg-gray-50'}`}
+              ${showFilters
+                ? 'bg-blue-50 border-blue-300 text-blue-700 dark:bg-blue-500/10 dark:border-blue-500/30 dark:text-blue-400'
+                : isDark
+                  ? 'border-white/10 text-slate-400 hover:bg-white/5'
+                  : 'border-gray-300 text-gray-600 hover:bg-gray-50'}`}
           >
             <SlidersHorizontal size={15} /> Filters
             {(filterSev !== 'ALL' || filterSrc !== 'ALL') && (
@@ -255,29 +280,37 @@ const ScanResults = ({ report, onNewScan }) => {
             <select
               value={sortBy}
               onChange={e => setSortBy(e.target.value)}
-              className="appearance-none pl-3 pr-8 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              className={`appearance-none pl-3 pr-8 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500
+                ${isDark
+                  ? 'border-white/10 bg-[#1e2235] text-white'
+                  : 'border-gray-300 bg-white text-gray-900'}`}
             >
               {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
-            <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            <ChevronDown size={14} className={`absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none
+              ${isDark ? 'text-slate-500' : 'text-gray-400'}`} />
           </div>
 
-          <span className="text-sm text-gray-500 ml-auto">
+          <span className={`text-sm ml-auto ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
             {filtered.length} of {vulns.length} findings
           </span>
         </div>
 
         {/* Extended filter row */}
         {showFilters && (
-          <div className="mt-3 pt-3 border-t border-gray-100 flex gap-3 flex-wrap items-center">
-            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Scanner</span>
+          <div className={`mt-3 pt-3 border-t flex gap-3 flex-wrap items-center
+            ${isDark ? 'border-white/5' : 'border-gray-100'}`}>
+            <span className={`text-xs font-semibold uppercase tracking-wide
+              ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>Scanner</span>
             {sources.map(src => (
               <button key={src}
                 onClick={() => setFilterSrc(src)}
                 className={`px-3 py-1 rounded-full text-xs border transition-colors capitalize
                   ${filterSrc === src
                     ? 'bg-blue-600 text-white border-blue-600'
-                    : 'border-gray-300 text-gray-600 hover:border-gray-400'}`}
+                    : isDark
+                      ? 'border-white/10 text-slate-400 hover:border-white/20'
+                      : 'border-gray-300 text-gray-600 hover:border-gray-400'}`}
               >
                 {src === 'ALL' ? 'All Scanners' : src.replace('_', ' ')}
               </button>
@@ -289,9 +322,10 @@ const ScanResults = ({ report, onNewScan }) => {
       {/* ── Vulnerability list ─────────────────────────────────────────── */}
       <div className="space-y-3">
         {filtered.length === 0 ? (
-          <div className="bg-white rounded-xl border border-dashed border-gray-300 py-16 text-center">
-            <Search size={32} className="mx-auto text-gray-300 mb-3" />
-            <p className="text-gray-500 font-medium">No findings match your filters</p>
+          <div className={`rounded-xl border border-dashed py-16 text-center
+            ${isDark ? 'bg-[#161929] border-white/10' : 'bg-white border-gray-300'}`}>
+            <Search size={32} className={`mx-auto mb-3 ${isDark ? 'text-slate-600' : 'text-gray-300'}`} />
+            <p className={`font-medium ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>No findings match your filters</p>
             <button
               onClick={() => { setSearch(''); setFilterSev('ALL'); setFilterSrc('ALL'); }}
               className="mt-3 text-sm text-blue-600 hover:underline"
@@ -308,23 +342,28 @@ const ScanResults = ({ report, onNewScan }) => {
 
       {/* Configuration analysis */}
       {report.configuration_analysis && Object.keys(report.configuration_analysis).length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm p-6">
-          <h3 className="text-base font-semibold text-gray-800 mb-4 flex items-center gap-2">
+        <div className={`rounded-xl shadow-sm p-6
+          ${isDark ? 'bg-[#161929] border border-white/5' : 'bg-white'}`}>
+          <h3 className={`text-base font-semibold mb-4 flex items-center gap-2
+            ${isDark ? 'text-white' : 'text-gray-800'}`}>
             <ShieldAlert size={18} className="text-teal-600" />
             Configuration Analysis
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {Object.entries(report.configuration_analysis).map(([key, val]) => (
-              <div key={key} className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1 capitalize">
+              <div key={key} className={`border rounded-lg p-4
+                ${isDark ? 'bg-white/[0.02] border-white/5' : 'bg-gray-50 border-gray-200'}`}>
+                <p className={`text-xs font-semibold uppercase tracking-wide mb-1 capitalize
+                  ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
                   {key.replace(/_/g, ' ')}
                 </p>
                 {typeof val === 'object' ? (
-                  <pre className="text-xs text-gray-700 overflow-x-auto whitespace-pre-wrap">
+                  <pre className={`text-xs overflow-x-auto whitespace-pre-wrap
+                    ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
                     {JSON.stringify(val, null, 2)}
                   </pre>
                 ) : (
-                  <p className="text-sm text-gray-700">{String(val)}</p>
+                  <p className={`text-sm ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>{String(val)}</p>
                 )}
               </div>
             ))}

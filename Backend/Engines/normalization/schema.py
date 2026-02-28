@@ -91,8 +91,35 @@ class BusinessImpact(BaseModel):
 
 
 class AIExplanation(BaseModel):
+    # ── Layer 1 fields (Technical Root Cause) ──────────────────────────────
+    code_behavior_summary: str = ""
+    confidence_level: str = ""
+    validated_root_cause: str = ""
+    evidence_from_code: str = ""
+
+    # ── Layer 2 fields (Exploit & Risk Model) ─────────────────────────────
+    severity_justification: str = ""
+    attacker_realistic_path: List[str] = Field(default_factory=list)
+    technical_impact: str = ""
+    project_specific_risk: str = ""
+
+    # ── Layer 3 fields (Student Mentor) ───────────────────────────────────
+    clear_student_explanation: str = ""
+    step_by_step_attack_simulation: List[str] = Field(default_factory=list)
+    secure_fix_steps: List[str] = Field(default_factory=list)
+    secure_code_example: str = ""
+    defense_in_depth: List[str] = Field(default_factory=list)
+    core_security_principle: str = ""
+    common_student_mistake: str = ""
+    learning_takeaways: List[str] = Field(default_factory=list)
+
+    # ── Professional Mode fields (cross-mapped for Pro toggle) ────────────
     root_cause: str = ""
     exploit_scenario: str = ""
+    step_by_step_exploit: List[str] = Field(default_factory=list)
+    secure_fix: str = ""
+    code_patch_example: str = ""
+    best_practice: str = ""
     minimal_patch: str = ""
     secure_practice: str = ""
     references: List[str] = Field(default_factory=list)
