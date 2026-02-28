@@ -60,23 +60,55 @@ def _get_client() -> Any:
     return boto3.client("bedrock-runtime", config=config)
 
 
+def _is_claude(model_id: str) -> bool:
+    return model_id.startswith("anthropic.")
+
+
+def _build_body(system_prompt: str, user_message: str) -> Dict[str, Any]:
+    """Build the request body based on the model provider."""
+    if _is_claude(BEDROCK_MODEL_ID):
+        return {
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": MAX_TOKENS,
+            "temperature": TEMPERATURE,
+            "system": system_prompt,
+            "messages": [{"role": "user", "content": user_message}],
+        }
+    else:
+        # Llama / other models — use prompt format
+        prompt = (
+            f"<|begin_of_text|>"
+            f"<|start_header_id|>system<|end_header_id|>\n\n{system_prompt}<|eot_id|>"
+            f"<|start_header_id|>user<|end_header_id|>\n\n{user_message}<|eot_id|>"
+            f"<|start_header_id|>assistant<|end_header_id|>\n\n"
+        )
+        return {
+            "prompt": prompt,
+            "max_gen_len": MAX_TOKENS,
+            "temperature": TEMPERATURE,
+        }
+
+
+def _parse_response(result: Dict[str, Any]) -> str:
+    """Parse the response based on the model provider."""
+    if _is_claude(BEDROCK_MODEL_ID):
+        content = result.get("content", [])
+        if content and isinstance(content, list):
+            return content[0].get("text", "")
+        return ""
+    else:
+        # Llama response
+        return result.get("generation", "")
+
+
 def invoke_claude(system_prompt: str, user_message: str) -> str:
     """
-    Invoke Claude via AWS Bedrock Messages API.
+    Invoke a model via AWS Bedrock (supports Claude and Llama).
     Returns the response text content.
     Raises RuntimeError on API failure.
     """
     client = _get_client()
-
-    body = {
-        "anthropic_version": "bedrock-2023-05-31",
-        "max_tokens": MAX_TOKENS,
-        "temperature": TEMPERATURE,
-        "system": system_prompt,
-        "messages": [
-            {"role": "user", "content": user_message}
-        ],
-    }
+    body = _build_body(system_prompt, user_message)
 
     try:
         response = client.invoke_model(
@@ -86,10 +118,7 @@ def invoke_claude(system_prompt: str, user_message: str) -> str:
             body=json.dumps(body),
         )
         result = json.loads(response["body"].read())
-        content = result.get("content", [])
-        if content and isinstance(content, list):
-            return content[0].get("text", "")
-        return ""
+        return _parse_response(result)
 
     except ClientError as e:
         error_code = e.response["Error"]["Code"]
