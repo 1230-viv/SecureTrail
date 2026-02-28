@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, History, BookOpen, Settings, LogOut, ShieldCheck, ScanLine, Sun, Moon } from 'lucide-react';
+import { LayoutDashboard, History, BookOpen, Settings, LogOut, ShieldCheck, ScanLine, Sun, Moon, GraduationCap, Briefcase } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 
@@ -19,7 +19,7 @@ const Sidebar = () => {
   const navigate     = useNavigate();
   const { pathname } = useLocation();
   const { user, logout } = useAuth();
-  const { isDark, toggle } = useTheme();
+  const { isDark, toggle, isStudentMode, toggleMode } = useTheme();
 
   const isActive = (item) => {
     if (!item.path) return false;
@@ -136,6 +136,25 @@ const Sidebar = () => {
               ${isDark ? 'translate-x-4' : 'translate-x-0'}`} />
           </span>
         </button>
+
+        {/* Student / Professional mode toggle */}
+        <button
+          onClick={toggleMode}
+          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm
+                     transition-colors mb-1
+                     ${isDark
+                       ? 'text-slate-400 hover:bg-white/5 hover:text-white'
+                       : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}
+        >
+          {isStudentMode ? <GraduationCap size={18} /> : <Briefcase size={18} />}
+          <span>{isStudentMode ? 'Student Mode' : 'Pro Mode'}</span>
+          <span className={`ml-auto w-9 h-5 rounded-full flex items-center px-0.5 transition-colors
+            ${isStudentMode ? 'bg-emerald-600' : 'bg-slate-200'}`}>
+            <span className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform
+              ${isStudentMode ? 'translate-x-4' : 'translate-x-0'}`} />
+          </span>
+        </button>
+
         <button
           onClick={handleLogout}
           className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm

@@ -1,6 +1,6 @@
 """
 AWS Bedrock Client — SecureTrail
-Wraps boto3 bedrock-runtime for Claude invocations.
+Wraps boto3 bedrock-runtime for model invocations (Llama 3 / Claude).
 All configuration comes from environment variables.
 """
 
@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from typing import Any, Dict
 
 import boto3
@@ -42,40 +43,56 @@ _PERMANENT_ERROR_CODES = {
 # Configuration — no hardcoded values
 # ──────────────────────────────────────────────────────────────────────────────
 AWS_REGION        = os.getenv("AWS_REGION", "us-east-1")
-BEDROCK_MODEL_ID  = os.getenv("BEDROCK_MODEL_ID", "anthropic.claude-3-sonnet-20240229-v1:0")
-MAX_TOKENS        = int(os.getenv("BEDROCK_MAX_TOKENS", "2048"))
-TEMPERATURE       = float(os.getenv("BEDROCK_TEMPERATURE", "0.1"))   # low = deterministic
+BEDROCK_MODEL_ID  = os.getenv("BEDROCK_MODEL_ID", "meta.llama3-70b-instruct-v1:0")
+MAX_TOKENS        = int(os.getenv("BEDROCK_MAX_TOKENS", "1400"))
+TEMPERATURE       = float(os.getenv("BEDROCK_TEMPERATURE", "0.15"))  # low temp = less hallucination
+TOP_P             = float(os.getenv("BEDROCK_TOP_P", "0.85"))
 CONNECT_TIMEOUT   = int(os.getenv("BEDROCK_CONNECT_TIMEOUT", "10"))
 READ_TIMEOUT      = int(os.getenv("BEDROCK_READ_TIMEOUT", "60"))
 
+# Reusable client singleton (avoid creating a new client per call)
+_client_instance = None
+
 
 def _get_client() -> Any:
-    """Create a boto3 bedrock-runtime client with tuned timeouts."""
-    config = Config(
-        region_name=AWS_REGION,
-        connect_timeout=CONNECT_TIMEOUT,
-        read_timeout=READ_TIMEOUT,
-        retries={"max_attempts": 2, "mode": "standard"},
-    )
-    return boto3.client("bedrock-runtime", config=config)
+    """Get or create a boto3 bedrock-runtime client with tuned timeouts."""
+    global _client_instance
+    if _client_instance is None:
+        config = Config(
+            region_name=AWS_REGION,
+            connect_timeout=CONNECT_TIMEOUT,
+            read_timeout=READ_TIMEOUT,
+            retries={"max_attempts": 2, "mode": "standard"},
+        )
+        _client_instance = boto3.client("bedrock-runtime", config=config)
+    return _client_instance
 
 
 def _is_claude(model_id: str) -> bool:
     return model_id.startswith("anthropic.")
 
 
-def _build_body(system_prompt: str, user_message: str) -> Dict[str, Any]:
-    """Build the request body based on the model provider."""
+def _build_body(
+    system_prompt: str,
+    user_message: str,
+    temperature: float | None = None,
+    max_tokens: int | None = None,
+) -> Dict[str, Any]:
+    """Build the request body based on the model provider.
+    Per-call overrides fall back to the global env defaults."""
+    _temp = temperature if temperature is not None else TEMPERATURE
+    _max = max_tokens if max_tokens is not None else MAX_TOKENS
+
     if _is_claude(BEDROCK_MODEL_ID):
         return {
             "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": MAX_TOKENS,
-            "temperature": TEMPERATURE,
+            "max_tokens": _max,
+            "temperature": _temp,
             "system": system_prompt,
             "messages": [{"role": "user", "content": user_message}],
         }
     else:
-        # Llama / other models — use prompt format
+        # Llama 3 Instruct format
         prompt = (
             f"<|begin_of_text|>"
             f"<|start_header_id|>system<|end_header_id|>\n\n{system_prompt}<|eot_id|>"
@@ -84,8 +101,9 @@ def _build_body(system_prompt: str, user_message: str) -> Dict[str, Any]:
         )
         return {
             "prompt": prompt,
-            "max_gen_len": MAX_TOKENS,
-            "temperature": TEMPERATURE,
+            "max_gen_len": _max,
+            "temperature": _temp,
+            "top_p": TOP_P,
         }
 
 
@@ -101,15 +119,24 @@ def _parse_response(result: Dict[str, Any]) -> str:
         return result.get("generation", "")
 
 
-def invoke_claude(system_prompt: str, user_message: str) -> str:
+def invoke_claude(
+    system_prompt: str,
+    user_message: str,
+    temperature: float | None = None,
+    max_tokens: int | None = None,
+) -> str:
     """
     Invoke a model via AWS Bedrock (supports Claude and Llama).
+    Optional temperature / max_tokens override the global defaults
+    to allow per-layer tuning in the 4-layer chain.
     Returns the response text content.
-    Raises RuntimeError on API failure.
+    Raises BedrockPermanentError on non-retryable failures.
+    Raises RuntimeError on transient API failures.
     """
     client = _get_client()
-    body = _build_body(system_prompt, user_message)
+    body = _build_body(system_prompt, user_message, temperature, max_tokens)
 
+    t0 = time.monotonic()
     try:
         response = client.invoke_model(
             modelId=BEDROCK_MODEL_ID,
@@ -118,16 +145,26 @@ def invoke_claude(system_prompt: str, user_message: str) -> str:
             body=json.dumps(body),
         )
         result = json.loads(response["body"].read())
-        return _parse_response(result)
+        text = _parse_response(result)
+        elapsed = (time.monotonic() - t0) * 1000
+        logger.info(
+            f"Bedrock OK — model={BEDROCK_MODEL_ID}, "
+            f"latency={elapsed:.0f}ms, response_len={len(text)}"
+        )
+        return text
 
     except ClientError as e:
+        elapsed = (time.monotonic() - t0) * 1000
         error_code = e.response["Error"]["Code"]
-        logger.error(f"Bedrock ClientError [{error_code}]: {e}")
+        logger.error(
+            f"Bedrock ClientError [{error_code}] after {elapsed:.0f}ms: {e}"
+        )
         if error_code in _PERMANENT_ERROR_CODES:
             raise BedrockPermanentError(
                 f"Bedrock permanent error [{error_code}]: {e}"
             ) from e
         raise RuntimeError(f"Bedrock API error: {error_code}") from e
     except Exception as e:
-        logger.error(f"Unexpected Bedrock error: {e}")
+        elapsed = (time.monotonic() - t0) * 1000
+        logger.error(f"Unexpected Bedrock error after {elapsed:.0f}ms: {e}")
         raise RuntimeError(f"AI service unavailable: {e}") from e
