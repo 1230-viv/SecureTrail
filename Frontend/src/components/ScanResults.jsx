@@ -1,8 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import {
-  ShieldAlert, Bug, Search, SlidersHorizontal,
+  ShieldAlert, Search,
   ChevronDown, Download, RotateCcw, CheckCircle2, XCircle, AlertTriangle,
-  Brain, Loader2, BarChart3,
+  Brain, Loader2, BarChart3, TrendingUp,
 } from 'lucide-react';
 import VulnerabilityCard from './VulnerabilityCard';
 import { useTheme } from '../context/ThemeContext';
@@ -69,13 +69,19 @@ const SeverityPill = ({ label, count, active, onClick, isDark }) => {
 /* ── Scanner Badge ─────────────────────────────────────────────────────────── */
 const ScannerBadge = ({ name, findings, status, isDark }) => {
   const styles = isDark ? SCANNER_STYLE_D : SCANNER_STYLE_L;
-  const cls = styles[name] || (isDark ? 'bg-white/5 text-slate-400 border-white/10' : 'bg-gray-50 text-gray-600 border-gray-200');
+  const isEmpty = findings === 0;
+  const cls = isEmpty
+    ? isDark ? 'bg-white/[0.03] text-slate-600 border-white/[0.06]' : 'bg-slate-50 text-slate-300 border-slate-100'
+    : styles[name] || (isDark ? 'bg-white/5 text-slate-400 border-white/10' : 'bg-gray-50 text-gray-600 border-gray-200');
   return (
-    <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium ${cls}`}>
-      {status === 'ok' ? <CheckCircle2 size={13} /> : status === 'error' ? <XCircle size={13} /> :
+    <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${cls}`}>
+      {isEmpty ? <XCircle size={13} className="opacity-40" /> :
+       status === 'ok' ? <CheckCircle2 size={13} /> : status === 'error' ? <XCircle size={13} /> :
        status === 'warning' ? <AlertTriangle size={13} /> : <ShieldAlert size={13} />}
       <span className="capitalize">{name.replace('_', ' ')}</span>
-      {findings != null && <span className="font-bold ml-0.5">{findings}</span>}
+      {findings != null && (
+        <span className={`font-bold ml-0.5 ${isEmpty ? 'opacity-40' : ''}`}>{findings}</span>
+      )}
     </div>
   );
 };
@@ -86,7 +92,6 @@ const ScanResults = ({ report, onNewScan }) => {
   const [filterSev,   setFilterSev]   = useState('ALL');
   const [filterSrc,   setFilterSrc]   = useState('ALL');
   const [sortBy,      setSortBy]      = useState('severity');
-  const [showFilters, setShowFilters] = useState(false);
   const { isDark }                    = useTheme();
 
   const vulns = report?.vulnerabilities || [];
@@ -234,9 +239,61 @@ const ScanResults = ({ report, onNewScan }) => {
             ))}
           </div>
 
+          {/* Risk distribution bar */}
+          {report.total_vulnerabilities > 0 && (() => {
+            const total = report.total_vulnerabilities;
+            const segments = [
+              { key: 'CRITICAL', count: report.critical_count || 0, color: '#ef4444' },
+              { key: 'HIGH',     count: report.high_count     || 0, color: '#f97316' },
+              { key: 'MEDIUM',   count: report.medium_count   || 0, color: '#eab308' },
+              { key: 'LOW',      count: report.low_count      || 0, color: '#3b82f6' },
+              { key: 'INFO',     count: report.info_count     || 0, color: '#94a3b8' },
+            ].filter(s => s.count > 0);
+            return (
+              <div className="mt-4">
+                <div className={`flex items-center justify-between mb-1.5`}>
+                  <span className={`text-[10px] font-bold uppercase tracking-[0.12em] flex items-center gap-1
+                    ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>
+                    <TrendingUp size={10} /> Risk Distribution
+                  </span>
+                </div>
+                <div className="flex w-full h-2 rounded-full overflow-hidden gap-px">
+                  {segments.map(seg => (
+                    <div
+                      key={seg.key}
+                      className="h-full transition-all duration-700 first:rounded-l-full last:rounded-r-full"
+                      style={{
+                        width: `${(seg.count / total) * 100}%`,
+                        background: seg.color,
+                        boxShadow: `0 0 6px ${seg.color}80`,
+                      }}
+                      title={`${seg.key}: ${seg.count}`}
+                    />
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Scanner badges */}
-          <div className="mt-4 flex flex-wrap gap-2">
-            {scannerMeta.map(m => <ScannerBadge key={m.name} {...m} isDark={isDark} />)}
+          <div className="mt-4 flex flex-wrap gap-2 items-center">
+            <span className={`text-[10px] font-bold uppercase tracking-[0.12em] mr-1
+              ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>Source</span>
+            {scannerMeta.map(m => (
+              <button key={m.name} onClick={() => setFilterSrc(filterSrc === m.name ? 'ALL' : m.name)}
+                className={`transition-all duration-150 rounded-lg ${
+                  filterSrc === m.name ? 'ring-2 ring-offset-1 ring-blue-500 scale-[1.03]' : ''
+                } ${filterSrc === m.name ? (isDark ? 'ring-offset-[#161929]' : 'ring-offset-white') : ''}`}>
+                <ScannerBadge {...m} isDark={isDark} />
+              </button>
+            ))}
+            {filterSrc !== 'ALL' && (
+              <button onClick={() => setFilterSrc('ALL')}
+                className={`text-[10px] font-medium px-2 py-1 rounded-lg transition-colors
+                  ${isDark ? 'text-slate-500 hover:text-slate-300' : 'text-slate-400 hover:text-slate-600'}`}>
+                × clear
+              </button>
+            )}
           </div>
 
           {/* Scan errors */}
@@ -265,23 +322,13 @@ const ScanResults = ({ report, onNewScan }) => {
           <div className="relative flex-1 min-w-[200px]">
             <Search size={15} className={`absolute left-3 top-1/2 -translate-y-1/2
               ${isDark ? 'text-slate-600' : 'text-slate-300'}`} />
-            <input type="text" placeholder="Search findings…" value={search}
+            <input type="text" placeholder="Search title, file, CVE…" value={search}
               onChange={e => setSearch(e.target.value)}
               className={`w-full pl-9 pr-4 py-2 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-all backdrop-blur-md
                 ${isDark
                   ? 'bg-white/[0.04] text-white placeholder-slate-600 ring-1 ring-white/[0.08]'
                   : 'bg-white/50 text-slate-900 placeholder-slate-300 ring-1 ring-white/60'}`} />
           </div>
-
-          {/* Filter toggle */}
-          <button onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-medium transition-colors ring-1 ring-inset
-              ${showFilters
-                ? isDark ? 'bg-blue-500/10 ring-blue-500/20 text-blue-400' : 'bg-blue-50 ring-blue-200 text-blue-700'
-                : isDark ? 'bg-white/[0.03] ring-white/[0.06] text-slate-400 hover:bg-white/[0.05]' : 'bg-white ring-slate-200 text-slate-500 hover:ring-slate-300'}`}>
-            <SlidersHorizontal size={14} /> Filters
-            {(filterSev !== 'ALL' || filterSrc !== 'ALL') && <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
-          </button>
 
           {/* Sort */}
           <div className="relative">
@@ -296,28 +343,23 @@ const ScanResults = ({ report, onNewScan }) => {
               ${isDark ? 'text-slate-600' : 'text-slate-300'}`} />
           </div>
 
-          <span className={`text-xs ml-auto tabular-nums ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>
-            {filtered.length}/{vulns.length}
-          </span>
-        </div>
-
-        {/* Extended filters */}
-        {showFilters && (
-          <div className={`mt-3 pt-3 border-t flex gap-2 flex-wrap items-center animate-slide-down
-            ${isDark ? 'border-white/[0.04]' : 'border-slate-50'}`}>
-            <span className={`text-[10px] font-bold uppercase tracking-[0.12em] mr-1
-              ${isDark ? 'text-slate-600' : 'text-slate-300'}`}>Scanner</span>
-            {sources.map(src => (
-              <button key={src} onClick={() => setFilterSrc(src)}
-                className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ring-1 ring-inset capitalize
-                  ${filterSrc === src
-                    ? 'bg-blue-600 text-white ring-blue-600'
-                    : isDark ? 'ring-white/[0.06] text-slate-400 hover:bg-white/[0.04]' : 'ring-slate-200 text-slate-500 hover:ring-slate-300'}`}>
-                {src === 'ALL' ? 'All' : src.replace('_', ' ')}
-              </button>
-            ))}
+          {/* Result count pill */}
+          <div className={`flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-semibold ring-1 ring-inset
+            ${isDark ? 'bg-white/[0.03] ring-white/[0.06] text-slate-400' : 'bg-white/50 ring-slate-100 text-slate-500'}`}>
+            <span className={`font-bold ${isDark ? 'text-white' : 'text-slate-700'}`}>{filtered.length}</span>
+            <span className={isDark ? 'text-slate-600' : 'text-slate-300'}>/ {vulns.length}</span>
           </div>
-        )}
+
+          {/* Clear button when filters active */}
+          {(filterSev !== 'ALL' || filterSrc !== 'ALL' || search) && (
+            <button
+              onClick={() => { setSearch(''); setFilterSev('ALL'); setFilterSrc('ALL'); }}
+              className={`text-xs font-medium px-2.5 py-2 rounded-xl ring-1 ring-inset transition-colors
+                ${isDark ? 'ring-white/[0.06] text-slate-400 hover:text-white hover:bg-white/[0.05]' : 'ring-slate-200 text-slate-400 hover:text-slate-700'}`}>
+              Clear
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ── Vulnerability list ─────────────────────────────────────────── */}

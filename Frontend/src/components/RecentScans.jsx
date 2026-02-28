@@ -6,11 +6,11 @@ const POLL_INTERVAL = 10_000; // ms
 
 // Status → display config
 const STATUS_CONF = {
-  completed: { icon: CheckCircle2, cls: 'text-green-600', bg: 'bg-green-100', label: 'Completed' },
-  partial:   { icon: AlertTriangle, cls: 'text-amber-600', bg: 'bg-amber-100', label: 'Partial'   },
-  failed:    { icon: XCircle,      cls: 'text-red-600',   bg: 'bg-red-100',   label: 'Failed'    },
-  running:   { icon: Loader2,      cls: 'text-blue-600',  bg: 'bg-blue-100',  label: 'Running',  spin: true },
-  queued:    { icon: Clock,        cls: 'text-gray-500',  bg: 'bg-gray-100',  label: 'Queued'    },
+  completed: { icon: CheckCircle2,  cls: 'text-green-600', bg: 'bg-green-100', leftBorder: 'bg-emerald-500', label: 'Completed' },
+  partial:   { icon: AlertTriangle, cls: 'text-amber-600', bg: 'bg-amber-100', leftBorder: 'bg-amber-500',   label: 'Partial'   },
+  failed:    { icon: XCircle,       cls: 'text-red-600',   bg: 'bg-red-100',   leftBorder: 'bg-red-500',     label: 'Failed'    },
+  running:   { icon: Loader2,       cls: 'text-blue-600',  bg: 'bg-blue-100',  leftBorder: 'bg-blue-500',    label: 'Running',  spin: true },
+  queued:    { icon: Clock,         cls: 'text-gray-500',  bg: 'bg-gray-100',  leftBorder: 'bg-slate-400',   label: 'Queued'    },
 };
 
 // The severity with the highest count drives the badge colour.
@@ -125,13 +125,19 @@ const RecentScans = ({ onViewReport, activeJobId, fullPage = false }) => {
               <div
                 key={job.job_id}
                 onClick={() => isViewable && onViewReport?.(job.job_id)}
-                className={`group px-4 py-3 rounded-lg border transition-all
+                className={`group flex items-stretch overflow-hidden rounded-lg border transition-all
                   ${isActive
                     ? 'border-blue-300 bg-blue-50'
                     : isViewable
                       ? 'border-gray-200 hover:border-blue-300 hover:bg-blue-50 cursor-pointer'
                       : 'border-gray-200 bg-gray-50'}`}
               >
+                {/* Left status accent — mirrors VulnerabilityCard */}
+                <div className={`w-1 flex-shrink-0 ${conf.leftBorder}
+                  ${isViewable ? 'opacity-80 group-hover:opacity-100' : 'opacity-40'} transition-opacity`} />
+
+                {/* Card content */}
+                <div className="flex-1 px-4 py-3">
                 <div className="flex items-center gap-3">
                   {/* Status icon */}
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${bg}`}>
@@ -183,6 +189,7 @@ const RecentScans = ({ onViewReport, activeJobId, fullPage = false }) => {
                     />
                   </div>
                 )}
+                </div>{/* end card content */}
               </div>
             );
           })}

@@ -452,61 +452,91 @@ const HealthGauge = ({ score, previousScore, scoreHistory, topAction, isDark, is
    METRIC TILE — animated counter + accent stripe
    ═══════════════════════════════════════════════════════════ */
 const MetricTile = ({ label, value, sub, icon: Icon, accent, trend, isDark, isStudentMode, tipKey, urgent }) => {
-  const animVal = useAnimatedValue(value);
-  const isUp    = trend > 0;
+  const animVal  = useAnimatedValue(value);
+  const isUp     = trend > 0;
   const isUrgent = urgent && value > 0;
+
+  // Build per-tile glassmorphism colours from the accent
+  const tileBgDark  = isUrgent
+    ? 'linear-gradient(135deg, rgba(20,5,5,0.92) 0%, rgba(40,8,8,0.82) 100%)'
+    : `linear-gradient(135deg, rgba(15,17,32,0.90) 0%, rgba(22,24,40,0.82) 60%, ${accent}14 100%)`;
+  const tileBgLight = isUrgent
+    ? `linear-gradient(135deg, rgba(255,245,245,0.97) 0%, rgba(255,235,235,0.90) 100%)`
+    : `linear-gradient(135deg, rgba(255,255,255,0.97) 0%, rgba(248,250,255,0.92) 60%, ${accent}0c 100%)`;
+  const tileBorder  = isUrgent
+    ? isDark ? 'rgba(239,68,68,0.40)' : 'rgba(239,68,68,0.30)'
+    : isDark ? 'rgba(255,255,255,0.09)' : `${accent}28`;
+  const tileRing    = isUrgent
+    ? isDark ? '0 0 0 2px rgba(239,68,68,0.22)' : '0 0 0 2px rgba(239,68,68,0.18)'
+    : 'none';
 
   return (
     <div
-      className={`rounded-2xl border p-6 relative overflow-hidden group transition-all duration-200
-        ${isUrgent
-          ? isDark
-            ? 'bg-red-500/[0.06] border-red-500/30 ring-2 ring-red-500/20 shadow-dark-hero'
-            : 'bg-gradient-to-br from-red-50 to-red-100/50 border-red-300/60 ring-2 ring-red-400/20 shadow-alert'
-          : isDark
-            ? 'bg-surface-darkCard/80 backdrop-blur-xl border-white/[0.06] hover:border-white/[0.12] shadow-dark-card hover:shadow-dark-hero'
-            : 'bg-white/95 backdrop-blur-xl border-slate-200/60 hover:shadow-card-hover shadow-card'}`}
+      className="rounded-2xl relative overflow-hidden group transition-all duration-200
+                 hover:-translate-y-0.5"
+      style={{
+        background:    isDark ? tileBgDark : tileBgLight,
+        backdropFilter: 'blur(18px)',
+        border:        `1px solid ${tileBorder}`,
+        boxShadow:     `${isDark
+          ? '0 6px 28px rgba(0,0,0,0.40), inset 0 1px 0 rgba(255,255,255,0.07)'
+          : '0 4px 20px rgba(0,0,0,0.07), inset 0 1px 0 rgba(255,255,255,0.9)'}, ${tileRing}`,
+      }}
     >
-      <div className="absolute top-0 left-0 right-0 h-1 rounded-b-lg"
-        style={{ background: accent }} aria-hidden="true" />
+      {/* Accent gradient top line */}
+      <div className="absolute top-0 left-0 right-0 h-px z-10"
+        style={{ background: `linear-gradient(90deg, transparent, ${accent}80, ${accent}cc, ${accent}80, transparent)` }}
+        aria-hidden="true" />
+      {/* Noise overlay */}
+      <div className="absolute inset-0 opacity-[0.02] pointer-events-none"
+        style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 256 256\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.9\' numOctaves=\'4\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\' opacity=\'1\'/%3E%3C/svg%3E")', backgroundSize: '128px 128px' }} />
 
-      <div className="flex items-start justify-between mb-4">
-        <div
-          className="w-14 h-14 rounded-xl flex items-center justify-center
-                     transition-transform duration-300 group-hover:scale-110"
-          style={{ background: `${accent}15` }}
-        >
-          <Icon size={24} style={{ color: accent }} strokeWidth={2.5} />
-        </div>
-        {trend !== undefined && trend !== 0 && (
+      <div className="relative z-10 p-5">
+        <div className="flex items-start justify-between mb-4">
+          {/* Glow icon container */}
           <div
-            className={`flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-lg
-              ${isUp
-                ? accent === '#DC2626' || accent === '#EA580C'
-                  ? isDark ? 'bg-red-500/10 text-red-400' : 'bg-red-50 text-red-600'
-                  : isDark ? 'bg-emerald-500/10 text-emerald-400' : 'bg-emerald-50 text-emerald-600'
-                : isDark ? 'bg-emerald-500/10 text-emerald-400' : 'bg-emerald-50 text-emerald-600'}`}
+            className="w-12 h-12 rounded-xl flex items-center justify-center
+                       transition-transform duration-300 group-hover:scale-110 flex-shrink-0"
+            style={{
+              background:  `${accent}14`,
+              border:      `1px solid ${accent}30`,
+              boxShadow:   `0 0 18px ${accent}28`,
+            }}
           >
-            {isUp ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-            {isUp ? '+' : ''}{trend}
+            <Icon size={22} style={{ color: accent }} strokeWidth={2.5} />
           </div>
+
+          {trend !== undefined && trend !== 0 && (
+            <div
+              className="flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-lg"
+              style={{
+                color:      isUp ? (accent === '#DC2626' || accent === '#EA580C' ? '#f87171' : '#4ade80') : '#4ade80',
+                background: isUp ? (accent === '#DC2626' || accent === '#EA580C' ? 'rgba(239,68,68,0.12)' : 'rgba(34,197,94,0.12)') : 'rgba(34,197,94,0.12)',
+                boxShadow:  `inset 0 0 0 1px ${isUp ? (accent === '#DC2626' || accent === '#EA580C' ? 'rgba(239,68,68,0.28)' : 'rgba(34,197,94,0.28)') : 'rgba(34,197,94,0.28)'}`,
+              }}
+            >
+              {isUp ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
+              {isUp ? '+' : ''}{trend}
+            </div>
+          )}
+        </div>
+
+        <p
+          className="text-[38px] font-black tabular-nums leading-none mb-1.5"
+          style={{ letterSpacing: '-0.02em', color: isDark ? '#f1f5f9' : '#0f172a' }}
+          aria-live="polite"
+        >
+          {animVal}
+        </p>
+        <p className={`text-[13px] font-semibold mb-0.5
+          ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>{label}</p>
+        {sub && (
+          <p className={`text-[11px] ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>{sub}</p>
+        )}
+        {isStudentMode && tipKey && LEARNING_TIPS[tipKey] && (
+          <LearningTip text={LEARNING_TIPS[tipKey]} isDark={isDark} />
         )}
       </div>
-
-      <p className={`text-[40px] font-black tabular-nums leading-none mb-2
-        ${isDark ? 'text-white' : 'text-slate-900'}`}
-        style={{ letterSpacing: '-0.02em' }}
-        aria-live="polite">
-        {animVal}
-      </p>
-      <p className={`text-sm font-semibold mb-1
-        ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>{label}</p>
-      {sub && (
-        <p className={`text-xs ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>{sub}</p>
-      )}
-      {isStudentMode && tipKey && LEARNING_TIPS[tipKey] && (
-        <LearningTip text={LEARNING_TIPS[tipKey]} isDark={isDark} />
-      )}
     </div>
   );
 };
@@ -516,74 +546,138 @@ const MetricTile = ({ label, value, sub, icon: Icon, accent, trend, isDark, isSt
    ═══════════════════════════════════════════════════════════ */
 const ActionCard = ({ actions, isDark, isStudentMode, onNavigate }) => {
   const SEV_COLORS = { critical: '#ef4444', high: '#f97316', medium: '#eab308' };
+  const SEV_BG     = { critical: 'rgba(239,68,68,0.12)', high: 'rgba(249,115,22,0.12)', medium: 'rgba(234,179,8,0.12)' };
+  const SEV_RING   = { critical: 'rgba(239,68,68,0.28)', high: 'rgba(249,115,22,0.28)', medium: 'rgba(234,179,8,0.28)' };
   return (
     <div
       role="region"
       aria-label="Recommended actions"
-      className={`rounded-2xl border p-5 flex flex-col transition-all duration-200 backdrop-blur-xl
-        ${isDark
-          ? 'bg-surface-darkCard/80 border-white/[0.06] shadow-dark-card hover:shadow-dark-hero'
-          : 'bg-white/95 border-slate-200/60 shadow-card hover:shadow-card-hover'}`}
+      className="rounded-2xl relative overflow-hidden flex flex-col transition-all duration-200 h-full"
+      style={{
+        background: isDark
+          ? 'linear-gradient(135deg, rgba(15,17,32,0.92) 0%, rgba(18,22,42,0.84) 50%, rgba(8,18,28,0.76) 100%)'
+          : 'linear-gradient(135deg, rgba(255,255,255,0.97) 0%, rgba(240,249,255,0.92) 50%, rgba(236,254,255,0.88) 100%)',
+        backdropFilter: 'blur(20px)',
+        border: isDark ? '1px solid rgba(255,255,255,0.09)' : '1px solid rgba(103,232,249,0.22)',
+        boxShadow: isDark
+          ? '0 8px 32px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.07)'
+          : '0 4px 24px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.9)',
+      }}
     >
-      <div className="absolute top-0 left-5 right-5 h-[2px] rounded-b-full opacity-50 bg-cyan-400" aria-hidden="true" />
+      {/* Cyan top accent line */}
+      <div className="absolute top-0 left-0 right-0 h-px z-10"
+        style={{ background: 'linear-gradient(90deg, transparent, rgba(34,211,238,0.5), rgba(6,182,212,0.9), rgba(34,211,238,0.5), transparent)' }}
+        aria-hidden="true" />
+      {/* Noise texture overlay */}
+      <div className="absolute inset-0 opacity-[0.018] pointer-events-none"
+        style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 256 256\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.9\' numOctaves=\'4\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\' opacity=\'1\'/%3E%3C/svg%3E")', backgroundSize: '128px 128px' }} />
 
-      <div className="flex items-center gap-2.5 mb-3">
-        <div className={`w-9 h-9 rounded-xl flex items-center justify-center
-          ${isDark ? 'bg-cyan-500/10' : 'bg-cyan-50'}`}>
-          <Target size={16} className="text-cyan-400" />
+      <div className="relative z-10 p-5 flex flex-col flex-1">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2.5">
+            <div
+              className="w-9 h-9 rounded-xl flex items-center justify-center"
+              style={{
+                background: 'rgba(6,182,212,0.10)',
+                border:     '1px solid rgba(6,182,212,0.22)',
+                boxShadow:  '0 0 14px rgba(6,182,212,0.16)',
+              }}
+            >
+              <Target size={15} className="text-cyan-400" />
+            </div>
+            <div>
+              <p className={`text-[13px] font-bold ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>Next Steps</p>
+              <p className={`text-[10px] ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>
+                {actions.length > 0 ? `${actions.length} action${actions.length > 1 ? 's' : ''} pending` : 'All clear'}
+              </p>
+            </div>
+          </div>
+          {actions.length > 0 && (
+            <span
+              className="text-[10px] font-black px-2 py-1 rounded-lg"
+              style={{ color: '#f87171', background: 'rgba(239,68,68,0.12)', boxShadow: 'inset 0 0 0 1px rgba(239,68,68,0.28)' }}
+            >
+              {actions.filter(a => a.severity === 'critical').length > 0 ? '⚠ Critical' : '! High'}
+            </span>
+          )}
         </div>
-        <p className={`text-xs font-bold ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-          Next Steps
-        </p>
+
+        {actions.length === 0 ? (
+          <div className="flex-1 flex flex-col items-center justify-center gap-3 py-4">
+            <div
+              className="w-12 h-12 rounded-2xl flex items-center justify-center"
+              style={{ background: 'rgba(34,197,94,0.10)', border: '1px solid rgba(34,197,94,0.22)' }}
+            >
+              <CheckCircle2 size={22} className="text-emerald-400" />
+            </div>
+            <div className="text-center">
+              <p className={`text-xs font-bold ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>All clear!</p>
+              <p className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>No urgent actions right now.</p>
+            </div>
+          </div>
+        ) : (
+          <ul role="list" className="space-y-2 flex-1">
+            {actions.slice(0, 4).map((a, i) => {
+              const sColor = SEV_COLORS[a.severity] || '#8b5cf6';
+              const sBg    = SEV_BG[a.severity]    || 'rgba(139,92,246,0.12)';
+              const sRing  = SEV_RING[a.severity]  || 'rgba(139,92,246,0.28)';
+              return (
+                <li key={i} role="listitem">
+                  <button
+                    onClick={() => onNavigate(`/results/${a.jobId}`)}
+                    className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-left
+                               transition-all duration-200 group/action"
+                    style={{
+                      background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.65)',
+                      border:     isDark ? '1px solid rgba(255,255,255,0.07)' : `1px solid ${sRing}`,
+                      boxShadow:  isDark ? 'none' : '0 1px 4px rgba(0,0,0,0.04)',
+                    }}
+                    aria-label={`View ${a.count} ${a.severity} findings in ${a.repo}`}
+                  >
+                    {/* Priority number */}
+                    <span
+                      className="w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-black flex-shrink-0"
+                      style={{ color: sColor, background: sBg, boxShadow: `inset 0 0 0 1px ${sRing}` }}
+                    >
+                      {i + 1}
+                    </span>
+
+                    {/* Glow dot */}
+                    <div className="relative flex-shrink-0">
+                      <div className="absolute inset-0 rounded-full blur-[3px]" style={{ background: sColor, opacity: 0.35 }} />
+                      <div className="w-2 h-2 rounded-full relative" style={{ background: sColor }} />
+                    </div>
+
+                    <span className={`flex-1 text-[11px] font-medium truncate min-w-0
+                      ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                      {a.severity === 'medium' ? 'Review' : 'Fix'}{' '}
+                      <span className="font-bold" style={{ color: sColor }}>{a.count} {a.severity}</span>
+                      {' '}in <span className={`font-semibold ${isDark ? 'text-slate-200' : 'text-slate-900'}`}>{a.repo}</span>
+                    </span>
+
+                    <ArrowUpRight size={13}
+                      className={`flex-shrink-0 transition-transform group-hover/action:translate-x-0.5 group-hover/action:-translate-y-0.5
+                        ${isDark ? 'text-slate-600 group-hover/action:text-cyan-400' : 'text-slate-400 group-hover/action:text-cyan-600'}`} />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+
+        {actions.length > 4 && (
+          <button
+            onClick={() => onNavigate('/history')}
+            className={`text-[11px] font-bold mt-3 flex items-center gap-1
+              ${isDark ? 'text-cyan-400 hover:text-cyan-300' : 'text-cyan-600 hover:text-cyan-500'}`}
+          >
+            View all {actions.length} actions <ChevronRight size={11} />
+          </button>
+        )}
+
+        {isStudentMode && <LearningTip text={LEARNING_TIPS.actions} isDark={isDark} />}
       </div>
-
-      {actions.length === 0 ? (
-        <div className="flex-1 flex items-center gap-2 py-2">
-          <CheckCircle2 size={16} className="text-emerald-400 flex-shrink-0" />
-          <p className={`text-xs font-semibold ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>
-            All clear — no urgent actions right now.
-          </p>
-        </div>
-      ) : (
-        <ul role="list" className="space-y-1.5 flex-1">
-          {actions.slice(0, 4).map((a, i) => (
-            <li key={i} role="listitem">
-              <button
-                onClick={() => onNavigate(`/results/${a.jobId}`)}
-                className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-left
-                           transition-all duration-200 text-sm font-medium group/action
-                           border
-                  ${isDark 
-                    ? 'bg-gradient-to-r from-slate-800/40 to-slate-800/20 border-white/[0.06] hover:border-white/[0.12] hover:bg-slate-800/60' 
-                    : 'bg-gradient-to-r from-slate-50 to-white border-slate-200 hover:border-indigo-300 hover:shadow-md'}`}
-                aria-label={`View ${a.count} ${a.severity} findings in ${a.repo}`}
-              >
-                <div className="w-3 h-3 rounded-full flex-shrink-0"
-                  style={{ background: SEV_COLORS[a.severity] || '#8b5cf6' }} />
-                <span className={isDark ? 'text-slate-300' : 'text-slate-700'}>
-                  {a.severity === 'medium' ? 'Review' : 'Fix'}{' '}
-                  <span className="font-bold" style={{ color: SEV_COLORS[a.severity] }}>{a.count} {a.severity}</span> in {a.repo}
-                </span>
-                <ArrowUpRight size={14}
-                  className={`ml-auto flex-shrink-0 transition-transform group-hover/action:translate-x-0.5 group-hover/action:-translate-y-0.5
-                    ${isDark ? 'text-slate-500 group-hover/action:text-indigo-400' : 'text-slate-400 group-hover/action:text-indigo-600'}`} />
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {actions.length > 4 && (
-        <button
-          onClick={() => onNavigate('/history')}
-          className={`text-[11px] font-bold mt-1 self-start
-            ${isDark ? 'text-indigo-400 hover:text-indigo-300' : 'text-indigo-600 hover:text-indigo-500'}`}
-        >
-          View all actions →
-        </button>
-      )}
-
-      {isStudentMode && <LearningTip text={LEARNING_TIPS.actions} isDark={isDark} />}
     </div>
   );
 };
@@ -613,16 +707,17 @@ const FeedGroup = ({ group, onView, isDark, isLast }) => {
   const isViewable = normStatus(latest.status) === 'completed' || normStatus(latest.status) === 'partial';
   const SrcIcon    = latest.source_type === 'github' ? Github : FileArchive;
 
-  // Worst severity badge
   const crit  = group.items.reduce((s, j) => s + (j.critical_count || 0), 0);
   const high  = group.items.reduce((s, j) => s + (j.high_count || 0), 0);
   const total = group.items.reduce((s, j) => s + (j.total_vulnerabilities || 0), 0);
 
   let badge = null;
-  if (crit > 0)         badge = { label: `${crit} Critical`, color: '#ef4444' };
-  else if (high > 0)    badge = { label: `${high} High`,     color: '#f97316' };
-  else if (total > 0)   badge = { label: `${total} issues`,  color: '#8b5cf6' };
-  else if (isViewable)  badge = { label: 'Clean',             color: '#22c55e' };
+  if (crit > 0)         badge = { label: `${crit} Critical`, color: '#ef4444', bg: 'rgba(239,68,68,0.12)',  ring: 'rgba(239,68,68,0.30)' };
+  else if (high > 0)    badge = { label: `${high} High`,     color: '#f97316', bg: 'rgba(249,115,22,0.12)', ring: 'rgba(249,115,22,0.30)' };
+  else if (total > 0)   badge = { label: `${total} issues`,  color: '#8b5cf6', bg: 'rgba(139,92,246,0.12)', ring: 'rgba(139,92,246,0.30)' };
+  else if (isViewable)  badge = { label: 'Clean',             color: '#22c55e', bg: 'rgba(34,197,94,0.12)',  ring: 'rgba(34,197,94,0.30)' };
+
+  const isInteractive = isViewable || count > 1;
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -633,10 +728,18 @@ const FeedGroup = ({ group, onView, isDark, isLast }) => {
   };
 
   return (
-    <div>
+    <div className="relative">
+      {/* Timeline connector line */}
+      {!isLast && (
+        <div className="absolute left-[25px] top-10 bottom-0 w-px pointer-events-none"
+          style={{ background: isDark
+            ? 'linear-gradient(to bottom, rgba(255,255,255,0.07), transparent)'
+            : 'linear-gradient(to bottom, rgba(100,116,139,0.15), transparent)' }} />
+      )}
+
       <div
         role="button"
-        tabIndex={0}
+        tabIndex={isInteractive ? 0 : -1}
         aria-expanded={count > 1 ? expanded : undefined}
         aria-label={`${group.name}, ${count} scan${count > 1 ? 's' : ''}, ${badge?.label || 'in progress'}`}
         onClick={() => {
@@ -644,49 +747,63 @@ const FeedGroup = ({ group, onView, isDark, isLast }) => {
           else if (isViewable) onView(latest.job_id);
         }}
         onKeyDown={handleKeyDown}
-        className={`flex items-start gap-4 px-5 py-4 transition-all duration-150 select-none relative
-                    focus-visible:ring-2 focus-visible:ring-indigo-500/50 focus-visible:outline-none rounded-xl
-          ${isViewable || count > 1
-            ? isDark ? 'hover:bg-white/[0.03] cursor-pointer' : 'hover:bg-slate-50 cursor-pointer'
+        className={`relative flex items-start gap-3 px-4 py-3 mx-2 rounded-xl transition-all duration-200 select-none
+                    focus-visible:ring-2 focus-visible:ring-indigo-500/50 focus-visible:outline-none
+          ${isInteractive
+            ? isDark ? 'hover:bg-white/[0.05] cursor-pointer' : 'hover:bg-slate-50/80 cursor-pointer'
             : ''}`}
       >
-        {/* Timeline dot */}
-        <div className="flex flex-col items-center flex-shrink-0 pt-1.5">
-          <div
-            className="w-3 h-3 rounded-full border-3 flex-shrink-0"
-            style={{
-              borderColor: badge?.color || (isDark ? '#334155' : '#cbd5e1'),
-              background:  badge ? `${badge.color}30` : 'transparent',
-            }}
-          />
-          {!isLast && (
-            <div className={`w-0.5 flex-1 mt-2 min-h-[16px]
-              ${isDark ? 'bg-white/[0.06]' : 'bg-slate-200'}`} />
-          )}
+        {/* Timeline glow dot */}
+        <div className="flex-shrink-0 pt-1.5">
+          <div className="relative w-6 h-6 flex items-center justify-center">
+            {badge && (
+              <div className="absolute inset-0 rounded-full blur-[5px] opacity-25"
+                style={{ background: badge.color }} />
+            )}
+            <div
+              className="w-2.5 h-2.5 rounded-full border-2 relative z-10 transition-all duration-200"
+              style={{
+                borderColor: badge?.color || (isDark ? '#334155' : '#cbd5e1'),
+                background:  badge ? `${badge.color}20` : (isDark ? '#1e293b' : '#f1f5f9'),
+                boxShadow:   badge ? `0 0 0 3px ${badge.ring}` : 'none',
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Source icon glass pill */}
+        <div className={`flex-shrink-0 w-6 h-6 rounded-lg flex items-center justify-center mt-0.5
+          ${isDark ? 'bg-white/[0.06] ring-1 ring-white/[0.07]' : 'bg-slate-100 ring-1 ring-slate-200/60'}`}>
+          <SrcIcon size={11} className={isDark ? 'text-slate-400' : 'text-slate-500'} />
         </div>
 
         {/* Content */}
-        <div className="flex-1 min-w-0 pb-1">
-          <div className="flex items-center gap-2 mb-0.5">
-            <SrcIcon size={11} className={isDark ? 'text-slate-500' : 'text-slate-400'} />
-            <p className={`text-xs font-semibold truncate
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+            <p className={`text-[11px] font-bold truncate
               ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
               {group.name}
             </p>
             {count > 1 && (
-              <span className={`text-[9px] font-bold px-1.5 py-px rounded
-                ${isDark ? 'bg-slate-700/50 text-slate-400' : 'bg-slate-100 text-slate-500'}`}>
+              <span className={`text-[9px] font-black px-1.5 py-px rounded-md flex-shrink-0
+                ${isDark ? 'bg-white/[0.07] text-slate-400 ring-1 ring-white/[0.07]' : 'bg-slate-100 text-slate-500'}`}>
                 ×{count}
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className={`text-[10px] ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>
               {relativeTime(latest.created_at)}
             </span>
             {badge && (
-              <span className="text-[10px] font-bold px-1.5 py-px rounded"
-                style={{ color: badge.color, background: `${badge.color}12` }}>
+              <span
+                className="text-[10px] font-bold px-2 py-px rounded-full ring-1 flex-shrink-0"
+                style={{
+                  color:            badge.color,
+                  background:       badge.bg,
+                  '--tw-ring-color': badge.ring,
+                  boxShadow:        `inset 0 0 0 1px ${badge.ring}`,
+                }}>
                 {badge.label}
               </span>
             )}
@@ -699,45 +816,65 @@ const FeedGroup = ({ group, onView, isDark, isLast }) => {
               ${isDark ? 'text-slate-600' : 'text-slate-400'}
               ${expanded ? 'rotate-180' : ''}`} />
         )}
+        {count === 1 && isViewable && (
+          <ChevronRight size={12} className={`flex-shrink-0 mt-2 opacity-40 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
+        )}
       </div>
 
       {/* Expanded sub-items */}
       {expanded && count > 1 && (
-        <div className="animate-slide-down pl-10" role="list">
-          {group.items.map((job) => {
-            const jobViewable = normStatus(job.status) === 'completed' || normStatus(job.status) === 'partial';
-            const jTotal = job.total_vulnerabilities || 0;
-            const jCrit  = job.critical_count || 0;
-            return (
-              <div
-                key={job.job_id}
-                role="listitem"
-                tabIndex={jobViewable ? 0 : -1}
-                onClick={() => jobViewable && onView(job.job_id)}
-                onKeyDown={(e) => {
-                  if ((e.key === 'Enter' || e.key === ' ') && jobViewable) {
-                    e.preventDefault();
-                    onView(job.job_id);
-                  }
-                }}
-                className={`flex items-center gap-2 px-3 py-1.5 text-[10px] rounded-lg
-                           transition-colors
-                  ${jobViewable
-                    ? isDark ? 'hover:bg-white/[0.02] cursor-pointer' : 'hover:bg-slate-50/50 cursor-pointer'
-                    : ''}`}
-              >
-                <span className={isDark ? 'text-slate-600' : 'text-slate-400'}>
-                  {relativeTime(job.created_at)}
-                </span>
-                <span className={`font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                  {jTotal} finding{jTotal !== 1 ? 's' : ''}
-                </span>
-                {jCrit > 0 && (
-                  <span className="font-bold text-red-400">{jCrit}C</span>
-                )}
-              </div>
-            );
-          })}
+        <div className="animate-slide-down pl-11 pr-4 pb-2 mx-2" role="list">
+          <div className={`rounded-xl overflow-hidden
+            ${isDark ? 'bg-white/[0.03] ring-1 ring-white/[0.05]' : 'bg-white/70 ring-1 ring-slate-200/60'}`}>
+            {group.items.map((job, idx) => {
+              const jobViewable = normStatus(job.status) === 'completed' || normStatus(job.status) === 'partial';
+              const jTotal = job.total_vulnerabilities || 0;
+              const jCrit  = job.critical_count || 0;
+              const jHigh  = job.high_count || 0;
+              const isLastSub = idx === group.items.length - 1;
+              return (
+                <div
+                  key={job.job_id}
+                  role="listitem"
+                  tabIndex={jobViewable ? 0 : -1}
+                  onClick={() => jobViewable && onView(job.job_id)}
+                  onKeyDown={(e) => {
+                    if ((e.key === 'Enter' || e.key === ' ') && jobViewable) {
+                      e.preventDefault();
+                      onView(job.job_id);
+                    }
+                  }}
+                  className={`flex items-center gap-2 px-3 py-2 text-[10px] transition-colors
+                    ${!isLastSub ? (isDark ? 'border-b border-white/[0.04]' : 'border-b border-slate-100') : ''}
+                    ${jobViewable
+                      ? isDark ? 'hover:bg-white/[0.04] cursor-pointer' : 'hover:bg-slate-50 cursor-pointer'
+                      : ''}`}
+                >
+                  <span className={isDark ? 'text-slate-600' : 'text-slate-400'}>
+                    {relativeTime(job.created_at)}
+                  </span>
+                  <span className={`font-semibold ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                    {jTotal} finding{jTotal !== 1 ? 's' : ''}
+                  </span>
+                  {jCrit > 0 && (
+                    <span className="font-bold px-1.5 py-px rounded-full text-[9px]"
+                      style={{ color: '#ef4444', background: 'rgba(239,68,68,0.12)' }}>
+                      {jCrit}C
+                    </span>
+                  )}
+                  {jHigh > 0 && (
+                    <span className="font-bold px-1.5 py-px rounded-full text-[9px]"
+                      style={{ color: '#f97316', background: 'rgba(249,115,22,0.12)' }}>
+                      {jHigh}H
+                    </span>
+                  )}
+                  {jobViewable && (
+                    <ChevronRight size={10} className={`ml-auto opacity-30 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>
@@ -748,18 +885,33 @@ const FeedGroup = ({ group, onView, isDark, isLast }) => {
    SEVERITY PROGRESS BAR
    ═══════════════════════════════════════════════════════════ */
 const SeverityBar = ({ label, value, total, color, isDark }) => {
-  const pct = total > 0 ? (value / total) * 100 : 0;
+  const pct = total > 0 ? Math.round((value / total) * 100) : 0;
   return (
-    <div className="flex items-center gap-3">
-      <span className={`text-[10px] font-semibold w-14 text-right
-        ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{label}</span>
-      <div className={`flex-1 h-[7px] rounded-full overflow-hidden
-        ${isDark ? 'bg-white/[0.04]' : 'bg-slate-100'}`}>
-        <div className="h-full rounded-full transition-all duration-1000 ease-out"
-          style={{ width: `${pct}%`, background: color }} />
+    <div className="group flex items-center gap-2.5">
+      {/* Colour swatch */}
+      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} />
+      {/* Label */}
+      <span className={`text-[11px] font-semibold w-[88px] shrink-0 leading-tight
+        ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{label}</span>
+      {/* Glass track */}
+      <div className={`relative flex-1 h-[6px] rounded-full overflow-hidden
+        ${isDark ? 'bg-white/[0.06]' : 'bg-slate-100'}`}>
+        <div
+          className="h-full rounded-full transition-all duration-1000 ease-out"
+          style={{
+            width: `${pct}%`,
+            background: `linear-gradient(90deg, ${color}bb, ${color})`,
+            boxShadow: `0 0 4px ${color}55`,
+          }}
+        />
       </div>
-      <span className={`text-[11px] font-bold tabular-nums w-8
-        ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{value}</span>
+      {/* Count + pct */}
+      <div className="flex items-center gap-1.5 shrink-0 w-[52px] justify-end">
+        <span className={`text-[11px] font-bold tabular-nums
+          ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>{value.toLocaleString()}</span>
+        <span className={`text-[9px] font-semibold tabular-nums
+          ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>{pct}%</span>
+      </div>
     </div>
   );
 };
@@ -1035,12 +1187,20 @@ const DashboardPage = () => {
            ════════════════════════════════════════════════════ */}
         <div className="flex items-end justify-between mb-8 animate-fade-in-up">
           <div>
-            <div className="flex items-center gap-2 mb-2">
-              <Eye size={14} className={isDark ? 'text-indigo-400' : 'text-indigo-500'} />
-              <p className={`text-[11px] font-bold uppercase tracking-[0.15em]
-                ${isDark ? 'text-indigo-400/70' : 'text-indigo-500/70'}`}>
-                {greeting()}{user?.name ? `, ${user.name.split(' ')[0]}` : ''}
-              </p>
+            <div className="flex items-center gap-2 mb-2.5">
+              <div
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full"
+                style={{
+                  background: isDark ? 'rgba(99,102,241,0.12)' : 'rgba(99,102,241,0.08)',
+                  border:     isDark ? '1px solid rgba(99,102,241,0.25)' : '1px solid rgba(99,102,241,0.18)',
+                }}
+              >
+                <Eye size={11} className={isDark ? 'text-indigo-400' : 'text-indigo-500'} />
+                <p className={`text-[10px] font-bold uppercase tracking-[0.14em]
+                  ${isDark ? 'text-indigo-400' : 'text-indigo-500'}`}>
+                  {greeting()}{user?.name ? `, ${user.name.split(' ')[0]}` : ''}
+                </p>
+              </div>
             </div>
             <h1 className={`text-[32px] font-extrabold tracking-tight leading-none ${tk.heading}`}
               style={{ letterSpacing: '-0.015em' }}>
@@ -1152,17 +1312,36 @@ const DashboardPage = () => {
           <div
             role="region"
             aria-label="Vulnerability trend chart"
-            className={`col-span-12 lg:col-span-7 rounded-2xl border p-6 animate-fade-in-up backdrop-blur-xl
+            className={`col-span-12 lg:col-span-7 rounded-2xl border animate-fade-in-up
+              backdrop-blur-2xl relative overflow-hidden
               ${isDark
-                ? 'bg-surface-darkCard/80 border-white/[0.06] shadow-dark-card'
-                : 'bg-white/95 border-slate-200/60 shadow-card'}`}
+                ? 'bg-gradient-to-br from-slate-900/70 via-slate-800/50 to-indigo-950/40 border-white/[0.09] shadow-[0_8px_32px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.07)]'
+                : 'bg-gradient-to-br from-white/90 via-white/80 to-indigo-50/60 border-white/70 shadow-[0_8px_32px_rgba(99,102,241,0.08),inset_0_1px_0_rgba(255,255,255,0.9)]'}`}
             style={{ animationDelay: '0.15s' }}
           >
+            {/* Glass noise overlay */}
+            <div className="absolute inset-0 pointer-events-none rounded-2xl"
+              style={{
+                backgroundImage: isDark
+                  ? 'radial-gradient(ellipse 120% 60% at 10% 0%, rgba(99,102,241,0.12) 0%, transparent 60%), radial-gradient(ellipse 80% 80% at 90% 100%, rgba(139,92,246,0.06) 0%, transparent 60%)'
+                  : 'radial-gradient(ellipse 120% 60% at 10% 0%, rgba(99,102,241,0.07) 0%, transparent 55%), radial-gradient(ellipse 80% 80% at 90% 100%, rgba(139,92,246,0.04) 0%, transparent 60%)'
+              }}
+            />
+            {/* Top accent line */}
+            <div className="absolute top-0 left-6 right-6 h-px"
+              style={{ background: isDark
+                ? 'linear-gradient(90deg, transparent, rgba(99,102,241,0.6), transparent)'
+                : 'linear-gradient(90deg, transparent, rgba(99,102,241,0.3), transparent)' }} />
+
+            <div className="relative z-10 p-6">
             <div className="flex items-start justify-between mb-5">
               <div className="flex items-center gap-3">
-                <div className={`w-9 h-9 rounded-xl flex items-center justify-center
-                  ${isDark ? 'bg-indigo-500/10' : 'bg-indigo-50'}`}>
-                  <Radar size={16} className="text-indigo-400" />
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center
+                  backdrop-blur-sm ring-1
+                  ${isDark
+                    ? 'bg-indigo-500/15 ring-indigo-500/25 shadow-[0_0_12px_rgba(99,102,241,0.2)]'
+                    : 'bg-indigo-50/80 ring-indigo-200/60'}`}>
+                  <Radar size={17} className="text-indigo-400" />
                 </div>
                 <div>
                   <p className={`text-sm font-bold ${tk.heading}`}>Threat Landscape</p>
@@ -1181,18 +1360,26 @@ const DashboardPage = () => {
                 return (
                   <div className="flex items-center gap-2">
                     {areaData.length >= 2 && delta !== 0 && (
-                      <span className={`flex items-center gap-0.5 text-[10px] font-bold px-2 py-1 rounded-lg
+                      <span className={`flex items-center gap-0.5 text-[10px] font-bold px-2.5 py-1 rounded-lg
+                        backdrop-blur-sm ring-1
                         ${improving
-                          ? (isDark ? 'bg-emerald-500/10 text-emerald-400' : 'bg-emerald-50 text-emerald-600')
-                          : (isDark ? 'bg-red-500/10 text-red-400' : 'bg-red-50 text-red-600')
+                          ? isDark
+                            ? 'bg-emerald-500/10 text-emerald-400 ring-emerald-500/20'
+                            : 'bg-emerald-50/80 text-emerald-600 ring-emerald-200/60'
+                          : isDark
+                            ? 'bg-red-500/10 text-red-400 ring-red-500/20'
+                            : 'bg-red-50/80 text-red-600 ring-red-200/60'
                         }`}>
                         {improving ? <TrendingDown size={11} /> : <TrendingUp size={11} />}
                         {improving ? '' : '+'}{delta}%
                       </span>
                     )}
-                    <div className={`text-right px-3 py-1.5 rounded-lg
-                      ${isDark ? 'bg-white/[0.03]' : 'bg-slate-50'}`}>
-                      <p className="text-lg font-black text-indigo-400 tabular-nums">{latest}</p>
+                    {/* Glass badge for latest count */}
+                    <div className={`text-right px-3 py-1.5 rounded-xl backdrop-blur-sm ring-1
+                      ${isDark
+                        ? 'bg-white/[0.05] ring-white/[0.08]'
+                        : 'bg-white/60 ring-slate-200/60 shadow-sm'}`}>
+                      <p className="text-lg font-black text-indigo-400 tabular-nums leading-tight">{latest}</p>
                       <p className={`text-[9px] font-semibold uppercase tracking-wider ${tk.label}`}>latest</p>
                     </div>
                   </div>
@@ -1216,122 +1403,244 @@ const DashboardPage = () => {
                 <AreaChart data={areaData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
                   <defs>
                     <linearGradient id="gAreaTotal" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#6366f1" stopOpacity={isDark ? 0.3 : 0.18} />
-                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                      <stop offset="0%"  stopColor="#6366f1" stopOpacity={isDark ? 0.4 : 0.22} />
+                      <stop offset="60%" stopColor="#6366f1" stopOpacity={isDark ? 0.1 : 0.06} />
+                      <stop offset="100%" stopColor="#6366f1" stopOpacity={0} />
                     </linearGradient>
                     <linearGradient id="gAreaCrit" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#ef4444" stopOpacity={isDark ? 0.25 : 0.12} />
-                      <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+                      <stop offset="0%"  stopColor="#ef4444" stopOpacity={isDark ? 0.35 : 0.16} />
+                      <stop offset="100%" stopColor="#ef4444" stopOpacity={0} />
                     </linearGradient>
                     <linearGradient id="gAreaHigh" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#f97316" stopOpacity={isDark ? 0.2 : 0.1} />
-                      <stop offset="95%" stopColor="#f97316" stopOpacity={0} />
+                      <stop offset="0%"  stopColor="#f97316" stopOpacity={isDark ? 0.28 : 0.13} />
+                      <stop offset="100%" stopColor="#f97316" stopOpacity={0} />
                     </linearGradient>
+                    {/* Glow filter for active dots */}
+                    <filter id="dotGlow" x="-50%" y="-50%" width="200%" height="200%">
+                      <feGaussianBlur stdDeviation="2" result="blur" />
+                      <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+                    </filter>
                   </defs>
-                  <CartesianGrid stroke={tk.grid} strokeDasharray="3 3" vertical={false} />
+                  <CartesianGrid stroke={tk.grid} strokeDasharray="4 4" vertical={false} strokeOpacity={0.6} />
                   <XAxis dataKey="name"
                     tick={{ fill: tk.axisText, fontSize: 10, fontWeight: 600 }}
                     axisLine={false} tickLine={false} />
                   <YAxis tick={{ fill: tk.axisText, fontSize: 10 }} axisLine={false} tickLine={false} />
-                  <Tooltip content={<ChartTooltip isDark={isDark} />} />
-                  <Legend iconType="circle" iconSize={6}
-                    wrapperStyle={{ fontSize: '10px', paddingTop: '10px', color: tk.axisText }} />
+                  <Tooltip
+                    content={<ChartTooltip isDark={isDark} />}
+                    cursor={{ stroke: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)', strokeWidth: 1, strokeDasharray: '3 3' }}
+                  />
+                  <Legend iconType="circle" iconSize={7}
+                    wrapperStyle={{ fontSize: '10px', paddingTop: '12px', color: tk.axisText }} />
                   {avgTotal > 0 && (
-                    <ReferenceLine y={avgTotal} stroke={isDark ? '#6366f180' : '#6366f160'}
-                      strokeDasharray="6 4" strokeWidth={1}
+                    <ReferenceLine y={avgTotal}
+                      stroke={isDark ? '#6366f1aa' : '#6366f188'}
+                      strokeDasharray="6 4" strokeWidth={1.5}
                       label={{ value: `avg ${avgTotal}`, position: 'insideTopRight',
-                        fill: isDark ? '#a5b4fc' : '#6366f1', fontSize: 9, fontWeight: 600 }} />
+                        fill: isDark ? '#a5b4fc' : '#6366f1', fontSize: 9, fontWeight: 700 }} />
                   )}
-                  <Area type="monotone" dataKey="Total" stroke="#6366f1" strokeWidth={2}
+                  <Area type="monotone" dataKey="Total" stroke="#6366f1" strokeWidth={2.5}
                     fill="url(#gAreaTotal)" dot={false}
-                    activeDot={{ r: 4, fill: '#6366f1', stroke: '#6366f120', strokeWidth: 8 }} />
+                    activeDot={{ r: 5, fill: '#6366f1', stroke: 'rgba(99,102,241,0.25)', strokeWidth: 6 }} />
                   <Area type="monotone" dataKey="Critical" stroke="#ef4444" strokeWidth={2}
                     fill="url(#gAreaCrit)" dot={false}
-                    activeDot={{ r: 4, fill: '#ef4444' }} />
+                    activeDot={{ r: 4, fill: '#ef4444', stroke: 'rgba(239,68,68,0.2)', strokeWidth: 5 }} />
                   <Area type="monotone" dataKey="High" stroke="#f97316" strokeWidth={2}
                     fill="url(#gAreaHigh)" dot={false}
-                    activeDot={{ r: 4, fill: '#f97316' }} />
+                    activeDot={{ r: 4, fill: '#f97316', stroke: 'rgba(249,115,22,0.2)', strokeWidth: 5 }} />
                 </AreaChart>
               </ResponsiveContainer>
             )}
             {isStudentMode && <LearningTip text={LEARNING_TIPS.trend} isDark={isDark} />}
+            </div>{/* end relative z-10 */}
           </div>
 
           {/* ── Severity matrix ── */}
-          <div
-            role="region"
-            aria-label="Severity distribution"
-            className={`col-span-12 lg:col-span-5 rounded-2xl border p-6 flex flex-col
-                        animate-fade-in-up backdrop-blur-xl
-                        ${isDark
-                          ? 'bg-surface-darkCard/80 border-white/[0.06] shadow-dark-card'
-                          : 'bg-white/95 border-slate-200/60 shadow-card'}`}
-            style={{ animationDelay: '0.2s' }}
-          >
-            <div className="flex items-center gap-3 mb-5">
-              <div className={`w-9 h-9 rounded-xl flex items-center justify-center
-                ${isDark ? 'bg-violet-500/10' : 'bg-violet-50'}`}>
-                <Gauge size={16} className="text-violet-400" />
-              </div>
-              <div>
-                <p className={`text-sm font-bold ${tk.heading}`}>Severity Matrix</p>
-                <p className={`text-[11px] ${tk.label}`}>Distribution across all scans</p>
-              </div>
-            </div>
+          {(() => {
+            // Track hovered pie segment via state (avoids Recharts tooltip overlap)
+            const [hovered, setHovered] = React.useState(null);
+            const topSev = SEV_META.find(s => done.reduce((a,j)=>a+(j[s.key]||0),0) > 0);
+            const topCount = topSev ? done.reduce((a,j)=>a+(j[topSev.key]||0),0) : 0;
 
-            {pieData.length === 0 ? (
-              <div className={`flex-1 flex flex-col items-center justify-center rounded-xl
-                              border-2 border-dashed
-                ${isDark ? 'border-white/5 text-slate-600' : 'border-slate-200 text-slate-300'}`}>
-                <Gauge size={32} className="mb-2 opacity-40" />
-                <p className="text-xs font-medium">No findings recorded</p>
-                <button onClick={() => navigate('/scan')}
-                  className="mt-2 text-xs font-bold text-indigo-400 hover:underline">
-                  Run your first scan →
-                </button>
-              </div>
-            ) : (
-              <div className="flex-1 flex flex-col">
-                <div className="flex justify-center mb-3">
-                  <div className="relative" style={{ width: 200, height: 200, color: isDark ? '#fff' : '#0f172a' }}>
-                    <ResponsiveContainer width={200} height={200}>
-                      <PieChart>
-                        <Pie data={pieData} cx="50%" cy="50%"
-                          innerRadius={60} outerRadius={90}
-                          dataKey="value" strokeWidth={0} label={false}>
-                          {pieData.map((entry, idx) => (
-                            <Cell key={idx} fill={entry.color} />
-                          ))}
-                        </Pie>
-                        <Tooltip content={<ChartTooltip isDark={isDark} />} />
-                      </PieChart>
-                    </ResponsiveContainer>
-                    {/* Center label */}
-                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                      <span className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                        {grandTotal}
-                      </span>
-                      <span className={`text-[10px] font-medium tracking-wide uppercase ${isDark ? 'text-white/50' : 'text-slate-400'}`}>
-                        {grandTotal === 1 ? 'finding' : 'findings'}
-                      </span>
+            return (
+            <div
+              role="region"
+              aria-label="Severity distribution"
+              className={`col-span-12 lg:col-span-5 rounded-2xl border flex flex-col
+                          animate-fade-in-up backdrop-blur-2xl relative overflow-hidden
+                          ${isDark
+                            ? 'bg-gradient-to-br from-slate-900/70 via-slate-800/50 to-violet-950/30 border-white/[0.09] shadow-[0_8px_32px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.07)]'
+                            : 'bg-gradient-to-br from-white/90 via-white/80 to-violet-50/50 border-white/70 shadow-[0_8px_32px_rgba(139,92,246,0.08),inset_0_1px_0_rgba(255,255,255,0.9)]'}`}
+              style={{ animationDelay: '0.2s' }}
+            >
+              {/* Glass noise overlay */}
+              <div className="absolute inset-0 pointer-events-none rounded-2xl"
+                style={{
+                  backgroundImage: isDark
+                    ? 'radial-gradient(ellipse 100% 60% at 80% 0%, rgba(139,92,246,0.12) 0%, transparent 60%)'
+                    : 'radial-gradient(ellipse 100% 60% at 80% 0%, rgba(139,92,246,0.07) 0%, transparent 60%)'
+                }}
+              />
+              {/* Top accent line */}
+              <div className="absolute top-0 left-6 right-6 h-px"
+                style={{ background: isDark
+                  ? 'linear-gradient(90deg, transparent, rgba(139,92,246,0.6), transparent)'
+                  : 'linear-gradient(90deg, transparent, rgba(139,92,246,0.35), transparent)' }} />
+
+              <div className="relative z-10 p-6 flex flex-col flex-1">
+
+                {/* ── Header ── */}
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center
+                      backdrop-blur-sm ring-1
+                      ${isDark
+                        ? 'bg-violet-500/15 ring-violet-500/25 shadow-[0_0_12px_rgba(139,92,246,0.2)]'
+                        : 'bg-violet-50/80 ring-violet-200/60'}`}>
+                      <Gauge size={17} className="text-violet-400" />
+                    </div>
+                    <div>
+                      <p className={`text-sm font-bold ${tk.heading}`}>Severity Matrix</p>
+                      <p className={`text-[11px] ${tk.label}`}>Distribution across all scans</p>
                     </div>
                   </div>
+                  {/* Top severity callout badge */}
+                  {topSev && topCount > 0 && (
+                    <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl ring-1 text-[10px] font-bold backdrop-blur-sm
+                      ${isDark ? 'bg-white/[0.04] ring-white/[0.08]' : 'bg-white/60 ring-slate-200/50 shadow-sm'}`}>
+                      <span className="w-2 h-2 rounded-full" style={{ background: topSev.color }} />
+                      <span style={{ color: topSev.color }}>{topCount.toLocaleString()}</span>
+                      <span className={isDark ? 'text-slate-500' : 'text-slate-400'}>
+                        {isStudentMode ? topSev.studentLabel : topSev.label}
+                      </span>
+                    </div>
+                  )}
                 </div>
-                <div className="space-y-2.5 mt-auto">
-                  {SEV_META.map((s) => {
-                    const val = done.reduce((a, j) => a + (j[s.key] || 0), 0);
-                    if (val === 0 && grandTotal > 0) return null;
-                    return (
-                      <SeverityBar key={s.key}
-                        label={isStudentMode ? s.studentLabel : s.label}
-                        value={val} total={grandTotal} color={s.color} isDark={isDark} />
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-            {isStudentMode && <LearningTip text={LEARNING_TIPS.severity} isDark={isDark} />}
-          </div>
+
+                {pieData.length === 0 ? (
+                  <div className={`flex-1 flex flex-col items-center justify-center rounded-xl
+                                  border-2 border-dashed
+                    ${isDark ? 'border-white/5 text-slate-600' : 'border-slate-200 text-slate-300'}`}>
+                    <Gauge size={32} className="mb-2 opacity-40" />
+                    <p className="text-xs font-medium">No findings recorded</p>
+                    <button onClick={() => navigate('/scan')}
+                      className="mt-2 text-xs font-bold text-indigo-400 hover:underline">
+                      Run your first scan →
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex-1 flex flex-col gap-4">
+
+                    {/* ── Horizontal split: donut + bars ── */}
+                    <div className="flex items-center gap-4">
+
+                      {/* Donut — compact, no tooltip (uses hover state instead) */}
+                      <div className="relative flex-shrink-0" style={{ width: 150, height: 150 }}>
+                        <ResponsiveContainer width={150} height={150}>
+                          <PieChart>
+                            <Pie
+                              data={pieData}
+                              cx="50%" cy="50%"
+                              innerRadius={46} outerRadius={68}
+                              dataKey="value"
+                              strokeWidth={2}
+                              stroke={isDark ? 'rgba(15,17,32,0.8)' : 'rgba(255,255,255,0.9)'}
+                              paddingAngle={2}
+                              label={false}
+                              onMouseEnter={(_, idx) => setHovered(idx)}
+                              onMouseLeave={() => setHovered(null)}
+                            >
+                              {pieData.map((entry, idx) => (
+                                <Cell
+                                  key={idx}
+                                  fill={entry.color}
+                                  opacity={hovered === null || hovered === idx ? 1 : 0.35}
+                                  style={{ cursor: 'pointer', transition: 'opacity 0.2s' }}
+                                />
+                              ))}
+                            </Pie>
+                          </PieChart>
+                        </ResponsiveContainer>
+
+                        {/* Center — shows hovered segment or total */}
+                        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                          {hovered !== null && pieData[hovered] ? (
+                            <>
+                              <span className="text-[18px] font-extrabold leading-none tabular-nums"
+                                style={{ color: pieData[hovered].color }}>
+                                {pieData[hovered].value.toLocaleString()}
+                              </span>
+                              <span className={`text-[9px] font-bold tracking-wide uppercase mt-0.5 max-w-[60px] text-center leading-tight
+                                ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                                {pieData[hovered].name}
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <span className={`text-[22px] font-extrabold leading-none tabular-nums
+                                ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                                {grandTotal.toLocaleString()}
+                              </span>
+                              <span className={`text-[9px] font-bold tracking-widest uppercase mt-0.5
+                                ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                                total
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Severity bars — right of donut */}
+                      <div className="flex-1 space-y-2.5">
+                        {SEV_META.map((s) => {
+                          const val = done.reduce((a, j) => a + (j[s.key] || 0), 0);
+                          if (val === 0 && grandTotal > 0) return null;
+                          return (
+                            <SeverityBar key={s.key}
+                              label={isStudentMode ? s.studentLabel : s.label}
+                              value={val} total={grandTotal} color={s.color} isDark={isDark} />
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* ── Bottom stat strip ── */}
+                    <div className={`flex items-center justify-between px-3 py-2 rounded-xl
+                      ${isDark ? 'bg-white/[0.03] ring-1 ring-white/[0.06]' : 'bg-slate-50/80 ring-1 ring-slate-200/40'}`}>
+                      {SEV_META.slice(0, 3).map((s) => {
+                        const val = done.reduce((a, j) => a + (j[s.key] || 0), 0);
+                        return (
+                          <div key={s.key} className="flex flex-col items-center gap-0.5">
+                            <span className="text-[13px] font-extrabold tabular-nums" style={{ color: s.color }}>
+                              {val.toLocaleString()}
+                            </span>
+                            <span className={`text-[9px] font-semibold uppercase tracking-wide
+                              ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>
+                              {s.label}
+                            </span>
+                          </div>
+                        );
+                      })}
+                      <div className={`w-px h-8 ${isDark ? 'bg-white/[0.07]' : 'bg-slate-200'}`} />
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span className={`text-[13px] font-extrabold tabular-nums ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                          {grandTotal.toLocaleString()}
+                        </span>
+                        <span className={`text-[9px] font-semibold uppercase tracking-wide
+                          ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>
+                          Total
+                        </span>
+                      </div>
+                    </div>
+
+                  </div>
+                )}
+
+                {isStudentMode && <LearningTip text={LEARNING_TIPS.severity} isDark={isDark} />}
+              </div>{/* end relative z-10 */}
+            </div>
+            );
+          })()}
         </div>
 
         {/* ════════════════════════════════════════════════════
@@ -1343,68 +1652,117 @@ const DashboardPage = () => {
           <div
             role="region"
             aria-label="Scan analytics chart"
-            className={`col-span-12 lg:col-span-7 rounded-2xl border p-6 animate-fade-in-up backdrop-blur-xl
-              ${isDark
-                ? 'bg-surface-darkCard/80 border-white/[0.06] shadow-dark-card'
-                : 'bg-white/95 border-slate-200/60 shadow-card'}`}
-            style={{ animationDelay: '0.25s' }}
+            className="col-span-12 lg:col-span-7 rounded-2xl overflow-hidden animate-fade-in-up relative"
+            style={{
+              animationDelay: '0.25s',
+              background: isDark
+                ? 'linear-gradient(135deg, rgba(15,17,32,0.92) 0%, rgba(20,22,42,0.82) 50%, rgba(28,18,8,0.72) 100%)'
+                : 'linear-gradient(135deg, rgba(255,255,255,0.97) 0%, rgba(252,252,255,0.92) 50%, rgba(255,251,230,0.88) 100%)',
+              backdropFilter: 'blur(20px)',
+              border: isDark ? '1px solid rgba(255,255,255,0.09)' : '1px solid rgba(217,187,80,0.22)',
+              boxShadow: isDark
+                ? '0 8px 32px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.07)'
+                : '0 4px 24px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.9)',
+            }}
           >
-            <div className="flex items-start justify-between mb-5">
-              <div className="flex items-center gap-3">
-                <div className={`w-9 h-9 rounded-xl flex items-center justify-center
-                  ${isDark ? 'bg-amber-500/10' : 'bg-amber-50'}`}>
-                  <BarChart3 size={16} className="text-amber-400" />
-                </div>
-                <div>
-                  <p className={`text-sm font-bold ${tk.heading}`}>Scan Analytics</p>
-                  <p className={`text-[11px] ${tk.label}`}>
-                    {barData.length > 0
-                      ? `Findings across ${barData.length} scans`
-                      : 'No scan data available'}
-                  </p>
-                </div>
-              </div>
-              <button onClick={() => navigate('/history')}
-                className={`flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-lg
-                           transition-colors
-                  ${isDark ? 'text-indigo-400 hover:bg-indigo-500/10'
-                           : 'text-indigo-600 hover:bg-indigo-50'}`}>
-                History <ChevronRight size={12} />
-              </button>
-            </div>
+            {/* Amber top accent line */}
+            <div className="absolute top-0 left-0 right-0 h-px z-10"
+              style={{ background: 'linear-gradient(90deg, transparent, rgba(251,191,36,0.55), rgba(245,158,11,0.85), rgba(251,191,36,0.55), transparent)' }} />
+            {/* Noise texture overlay */}
+            <div className="absolute inset-0 opacity-[0.018] pointer-events-none rounded-2xl"
+              style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 256 256\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.9\' numOctaves=\'4\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\' opacity=\'1\'/%3E%3C/svg%3E")', backgroundSize: '128px 128px' }} />
 
-            {barData.length === 0 ? (
-              <div className={`flex flex-col items-center justify-center h-[240px]
-                              rounded-xl border-2 border-dashed
-                ${isDark ? 'border-white/5 text-slate-600' : 'border-slate-200 text-slate-300'}`}>
-                <BarChart3 size={32} className="mb-3 opacity-40" />
-                <p className="text-sm font-medium">No analysis available</p>
-                <button onClick={() => navigate('/scan')}
-                  className="mt-3 text-xs font-bold text-indigo-400 hover:underline">
-                  Run your first scan →
+            <div className="relative z-10 p-6">
+              {/* Header */}
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="relative w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                    style={{
+                      background: 'rgba(251,191,36,0.1)',
+                      boxShadow: '0 0 18px rgba(251,191,36,0.18)',
+                      border: '1px solid rgba(251,191,36,0.22)',
+                    }}>
+                    <BarChart3 size={17} className="text-amber-400" />
+                  </div>
+                  <div>
+                    <p className={`text-sm font-bold ${tk.heading}`}>Scan Analytics</p>
+                    <p className={`text-[11px] ${tk.label}`}>
+                      {barData.length > 0
+                        ? `Findings across ${barData.length} recent scans`
+                        : 'No scan data available'}
+                    </p>
+                  </div>
+                </div>
+                <button onClick={() => navigate('/history')}
+                  className={`flex items-center gap-1 text-[11px] font-bold px-2.5 py-1.5 rounded-lg
+                             ring-1 backdrop-blur-sm transition-colors
+                    ${isDark
+                      ? 'text-amber-400 ring-amber-500/20 hover:bg-amber-500/10'
+                      : 'text-amber-600 ring-amber-300/40 hover:bg-amber-50'}`}>
+                  History <ChevronRight size={12} />
                 </button>
               </div>
-            ) : (
-              <ResponsiveContainer width="100%" height={240}>
-                <BarChart data={barData}
-                  margin={{ top: 4, right: 4, left: -20, bottom: 0 }}
-                  barSize={16} barCategoryGap="25%">
-                  <CartesianGrid stroke={tk.grid} strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="name"
-                    tick={{ fill: tk.axisText, fontSize: 10, fontWeight: 600 }}
-                    axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fill: tk.axisText, fontSize: 10 }} axisLine={false} tickLine={false} />
-                  <Tooltip content={<ChartTooltip isDark={isDark} />}
-                    cursor={{ fill: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)', radius: 4 }} />
-                  <Legend iconType="circle" iconSize={6}
-                    wrapperStyle={{ fontSize: '10px', paddingTop: '10px', color: tk.axisText }} />
-                  <Bar dataKey="Critical" fill="#ef4444" radius={[6, 6, 0, 0]} />
-                  <Bar dataKey="High"     fill="#f97316" radius={[6, 6, 0, 0]} />
-                  <Bar dataKey="Medium"   fill="#eab308" radius={[6, 6, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-            {isStudentMode && <LearningTip text={LEARNING_TIPS.analytics} isDark={isDark} />}
+
+              {/* KPI quick-stats strip */}
+              {barData.length > 0 && (() => {
+                const totalC   = barData.reduce((s, d) => s + (d.Critical || 0), 0);
+                const totalH   = barData.reduce((s, d) => s + (d.High     || 0), 0);
+                const totalM   = barData.reduce((s, d) => s + (d.Medium   || 0), 0);
+                const totalAll = totalC + totalH + totalM;
+                return (
+                  <div className={`grid grid-cols-4 gap-2 mb-4 px-4 py-3 rounded-xl
+                    ${isDark ? 'bg-white/[0.03] ring-1 ring-white/[0.05]' : 'bg-white/60 ring-1 ring-amber-200/40'}`}>
+                    {[
+                      { label: 'Scans',    value: barData.length, color: isDark ? '#94a3b8' : '#64748b' },
+                      { label: 'Critical', value: totalC,         color: '#ef4444' },
+                      { label: 'High',     value: totalH,         color: '#f97316' },
+                      { label: 'Total',    value: totalAll,       color: isDark ? '#e2e8f0' : '#1e293b' },
+                    ].map(({ label, value, color }) => (
+                      <div key={label} className="text-center">
+                        <p className="text-lg font-black leading-none tabular-nums" style={{ color }}>{value}</p>
+                        <p className={`text-[9px] font-semibold mt-0.5 uppercase tracking-wider
+                          ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>{label}</p>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+
+              {barData.length === 0 ? (
+                <div className={`flex flex-col items-center justify-center h-[200px] rounded-xl
+                  ${isDark ? 'border border-dashed border-white/[0.06]' : 'border border-dashed border-amber-200/60'}`}>
+                  <BarChart3 size={32} className="mb-3 opacity-25" />
+                  <p className={`text-sm font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>No analysis available</p>
+                  <button onClick={() => navigate('/scan')}
+                    className="mt-3 text-xs font-bold text-amber-400 hover:underline flex items-center gap-1">
+                    Run your first scan <ChevronRight size={11} />
+                  </button>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart data={barData}
+                    margin={{ top: 4, right: 4, left: -20, bottom: 0 }}
+                    barSize={13} barCategoryGap="28%">
+                    <CartesianGrid stroke={tk.grid} strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="name"
+                      tick={{ fill: tk.axisText, fontSize: 10, fontWeight: 600 }}
+                      axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fill: tk.axisText, fontSize: 10 }} axisLine={false} tickLine={false} />
+                    <Tooltip content={<ChartTooltip isDark={isDark} />}
+                      cursor={{ fill: isDark ? 'rgba(255,255,255,0.025)' : 'rgba(0,0,0,0.025)', radius: [4, 4, 0, 0] }} />
+                    <Legend iconType="circle" iconSize={6}
+                      wrapperStyle={{ fontSize: '10px', paddingTop: '8px', color: tk.axisText }} />
+                    <Bar dataKey="Critical" fill="#ef4444" radius={[5, 5, 0, 0]}
+                      background={{ radius: [5, 5, 0, 0], fill: isDark ? 'rgba(239,68,68,0.04)' : 'rgba(239,68,68,0.03)' }} />
+                    <Bar dataKey="High"     fill="#f97316" radius={[5, 5, 0, 0]}
+                      background={{ radius: [5, 5, 0, 0], fill: isDark ? 'rgba(249,115,22,0.04)' : 'rgba(249,115,22,0.03)' }} />
+                    <Bar dataKey="Medium"   fill="#eab308" radius={[5, 5, 0, 0]}
+                      background={{ radius: [5, 5, 0, 0], fill: isDark ? 'rgba(234,179,8,0.04)' : 'rgba(234,179,8,0.03)' }} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+              {isStudentMode && <LearningTip text={LEARNING_TIPS.analytics} isDark={isDark} />}
+            </div>
           </div>
 
           {/* ── P2: Smart feed (grouped + accessible) ── */}
@@ -1412,18 +1770,37 @@ const DashboardPage = () => {
             role="feed"
             aria-label="Recent scan activity"
             aria-live="polite"
-            className={`col-span-12 lg:col-span-5 rounded-2xl border overflow-hidden
-                        flex flex-col animate-fade-in-up backdrop-blur-xl
-                        ${isDark
-                          ? 'bg-surface-darkCard/80 border-white/[0.06] shadow-dark-card'
-                          : 'bg-white/95 border-slate-200/60 shadow-card'}`}
-            style={{ animationDelay: '0.3s' }}
+            className="col-span-12 lg:col-span-5 rounded-2xl overflow-hidden flex flex-col animate-fade-in-up relative"
+            style={{
+              animationDelay: '0.3s',
+              background: isDark
+                ? 'linear-gradient(135deg, rgba(15,17,32,0.92) 0%, rgba(18,25,40,0.82) 50%, rgba(8,20,30,0.72) 100%)'
+                : 'linear-gradient(135deg, rgba(255,255,255,0.97) 0%, rgba(240,253,254,0.92) 50%, rgba(236,254,255,0.88) 100%)',
+              backdropFilter: 'blur(20px)',
+              border: isDark ? '1px solid rgba(255,255,255,0.09)' : '1px solid rgba(103,232,249,0.22)',
+              boxShadow: isDark
+                ? '0 8px 32px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.07)'
+                : '0 4px 24px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.9)',
+            }}
           >
-            <div className={`px-5 py-4 border-b flex items-center justify-between ${tk.border}`}>
+            {/* Cyan top accent line */}
+            <div className="absolute top-0 left-0 right-0 h-px z-10"
+              style={{ background: 'linear-gradient(90deg, transparent, rgba(34,211,238,0.5), rgba(6,182,212,0.85), rgba(34,211,238,0.5), transparent)' }} />
+            {/* Noise texture overlay */}
+            <div className="absolute inset-0 opacity-[0.018] pointer-events-none rounded-2xl"
+              style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 256 256\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.9\' numOctaves=\'4\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\' opacity=\'1\'/%3E%3C/svg%3E")', backgroundSize: '128px 128px' }} />
+
+            {/* Header */}
+            <div className={`relative z-10 px-5 py-4 border-b flex items-center justify-between
+              ${isDark ? 'border-white/[0.07]' : 'border-cyan-100/70'}`}>
               <div className="flex items-center gap-2.5">
-                <div className={`w-7 h-7 rounded-lg flex items-center justify-center
-                  ${isDark ? 'bg-cyan-500/10' : 'bg-cyan-50'}`}>
-                  <Zap size={13} className="text-cyan-400" />
+                <div className="relative w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{
+                    background: 'rgba(6,182,212,0.1)',
+                    boxShadow: '0 0 14px rgba(6,182,212,0.18)',
+                    border: '1px solid rgba(6,182,212,0.22)',
+                  }}>
+                  <Zap size={14} className="text-cyan-400" />
                 </div>
                 <p className={`text-sm font-bold ${tk.heading}`}>Live Feed</p>
                 {hasRunning && (
@@ -1433,8 +1810,8 @@ const DashboardPage = () => {
                   </span>
                 )}
                 {jobs.length > 0 && (
-                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded
-                    ${isDark ? 'bg-white/[0.04] text-slate-500' : 'bg-slate-50 text-slate-400'}`}>
+                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md ring-1
+                    ${isDark ? 'bg-white/[0.04] text-slate-500 ring-white/[0.07]' : 'bg-cyan-50 text-cyan-600 ring-cyan-200/60'}`}>
                     {feedGroups.length} {feedGroups.length === 1 ? 'repo' : 'repos'}
                   </span>
                 )}
@@ -1445,37 +1822,56 @@ const DashboardPage = () => {
                 )}
               </div>
               <button onClick={() => navigate('/history')}
-                className={`text-[10px] font-bold flex items-center gap-0.5 px-2 py-1 rounded-lg
-                           transition-colors
-                  ${isDark ? 'text-indigo-400 hover:bg-indigo-500/10'
-                           : 'text-indigo-600 hover:bg-indigo-50'}`}>
+                className={`text-[10px] font-bold flex items-center gap-0.5 px-2.5 py-1.5 rounded-lg
+                           ring-1 backdrop-blur-sm transition-colors
+                  ${isDark
+                    ? 'text-cyan-400 ring-cyan-500/20 hover:bg-cyan-500/10'
+                    : 'text-cyan-600 ring-cyan-300/40 hover:bg-cyan-50'}`}>
                 View all <ChevronRight size={10} />
               </button>
             </div>
 
             {jobs.length === 0 ? (
-              <div className={`flex-1 flex flex-col items-center justify-center py-12 gap-3 ${tk.label}`}>
-                <Zap size={28} className="opacity-40" />
-                <p className="text-xs font-medium">No scan activity yet.</p>
+              <div className="relative z-10 flex-1 flex flex-col items-center justify-center py-12 gap-3">
+                <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-1"
+                  style={{ background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.15)' }}>
+                  <Zap size={24} className="text-cyan-500/50" />
+                </div>
+                <p className={`text-xs font-semibold ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>No scan activity yet</p>
                 <p className={`text-[10px] max-w-[180px] text-center ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>
-                  Start your first scan to see results here.
+                  Start your first scan to see real-time results here.
                 </p>
                 <button onClick={() => navigate('/scan')}
-                  className="text-xs font-bold text-indigo-400 hover:underline">
-                  Start Scanning →
+                  className="mt-1 text-xs font-bold text-cyan-400 hover:underline flex items-center gap-1">
+                  Start Scanning <ChevronRight size={12} />
                 </button>
               </div>
             ) : (
-              <div className="overflow-y-auto max-h-[340px] flex-1 py-2">
-                {feedGroups.slice(0, 15).map((group, i, arr) => (
-                  <FeedGroup
-                    key={`${group.name}-${i}`}
-                    group={group}
-                    onView={loadReport}
-                    isDark={isDark}
-                    isLast={i === Math.min(arr.length, 15) - 1}
-                  />
-                ))}
+              <div className="relative z-10 flex-1 min-h-0">
+                <div
+                  className="overflow-y-auto max-h-[340px] py-2"
+                  style={{
+                    scrollbarWidth: 'thin',
+                    scrollbarColor: isDark ? 'rgba(255,255,255,0.08) transparent' : 'rgba(0,0,0,0.07) transparent',
+                  }}
+                >
+                  {feedGroups.slice(0, 15).map((group, i, arr) => (
+                    <FeedGroup
+                      key={`${group.name}-${i}`}
+                      group={group}
+                      onView={loadReport}
+                      isDark={isDark}
+                      isLast={i === Math.min(arr.length, 15) - 1}
+                    />
+                  ))}
+                </div>
+                {/* Bottom fade-out */}
+                <div
+                  className="absolute bottom-0 left-0 right-0 h-10 pointer-events-none"
+                  style={{ background: isDark
+                    ? 'linear-gradient(to top, rgba(15,17,32,0.75), transparent)'
+                    : 'linear-gradient(to top, rgba(236,254,255,0.85), transparent)' }}
+                />
               </div>
             )}
           </div>
