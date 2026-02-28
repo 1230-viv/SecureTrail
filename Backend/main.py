@@ -13,6 +13,7 @@ from Routes.auth import router as auth_router
 from Routes.repository import router as repository_router
 from Routes.upload import router as upload_router
 from Routes.scan import router as scan_router
+from Routes.learning import router as learning_router
 from Utils.logger import get_logger
 
 logger = get_logger("main")
@@ -51,6 +52,7 @@ app.include_router(auth_router,       prefix="/api/auth",       tags=["Authentic
 app.include_router(repository_router, prefix="/api/repository", tags=["Repository"])
 app.include_router(upload_router,     prefix="/api/upload",     tags=["Upload"])
 app.include_router(scan_router,       prefix="/api/scan",       tags=["Scan"])
+app.include_router(learning_router,   prefix="/api/learning",   tags=["Learning"])
 
 
 @app.get("/", tags=["Health"])

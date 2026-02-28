@@ -990,9 +990,10 @@ const DashboardPage = () => {
     } catch {}
     return [];
   });
-  const [loading, setLoading] = useState(true);
-  const [lastFetchTs, setLastFetchTs] = useState(null);
-  const [agoLabel, setAgoLabel]       = useState('');
+  const [loading, setLoading]         = useState(true);
+  const [lastFetchTs, setLastFetchTs]   = useState(null);
+  const [agoLabel, setAgoLabel]         = useState('');
+  const [hoveredPie, setHoveredPie]     = useState(null);
 
   const fetchJobs = useCallback(() => {
     setLoading(true);
@@ -1457,8 +1458,6 @@ const DashboardPage = () => {
 
           {/* ── Severity matrix ── */}
           {(() => {
-            // Track hovered pie segment via state (avoids Recharts tooltip overlap)
-            const [hovered, setHovered] = React.useState(null);
             const topSev = SEV_META.find(s => done.reduce((a,j)=>a+(j[s.key]||0),0) > 0);
             const topCount = topSev ? done.reduce((a,j)=>a+(j[topSev.key]||0),0) : 0;
 
@@ -1547,14 +1546,14 @@ const DashboardPage = () => {
                               stroke={isDark ? 'rgba(15,17,32,0.8)' : 'rgba(255,255,255,0.9)'}
                               paddingAngle={2}
                               label={false}
-                              onMouseEnter={(_, idx) => setHovered(idx)}
-                              onMouseLeave={() => setHovered(null)}
+                              onMouseEnter={(_, idx) => setHoveredPie(idx)}
+                              onMouseLeave={() => setHoveredPie(null)}
                             >
                               {pieData.map((entry, idx) => (
                                 <Cell
                                   key={idx}
                                   fill={entry.color}
-                                  opacity={hovered === null || hovered === idx ? 1 : 0.35}
+                                  opacity={hoveredPie === null || hoveredPie === idx ? 1 : 0.35}
                                   style={{ cursor: 'pointer', transition: 'opacity 0.2s' }}
                                 />
                               ))}
@@ -1564,15 +1563,15 @@ const DashboardPage = () => {
 
                         {/* Center — shows hovered segment or total */}
                         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                          {hovered !== null && pieData[hovered] ? (
+                          {hoveredPie !== null && pieData[hoveredPie] ? (
                             <>
                               <span className="text-[18px] font-extrabold leading-none tabular-nums"
-                                style={{ color: pieData[hovered].color }}>
-                                {pieData[hovered].value.toLocaleString()}
+                                style={{ color: pieData[hoveredPie].color }}>
+                                {pieData[hoveredPie].value.toLocaleString()}
                               </span>
                               <span className={`text-[9px] font-bold tracking-wide uppercase mt-0.5 max-w-[60px] text-center leading-tight
                                 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                                {pieData[hovered].name}
+                                {pieData[hoveredPie].name}
                               </span>
                             </>
                           ) : (
