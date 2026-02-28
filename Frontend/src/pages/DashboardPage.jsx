@@ -1,65 +1,163 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 import {
-  ArrowRight, Loader2, Github, FileArchive, ChevronRight,
-  TrendingUp, TrendingDown, Shield, ShieldAlert, ShieldCheck,
-  Activity, AlertTriangle, Minus,
+  ArrowRight, Loader2, Github, FileArchive, ChevronRight, ChevronDown,
+  TrendingUp, TrendingDown, Fingerprint, Crosshair, Flame,
+  Sparkles, Gauge, Radar, BarChart3, Zap, Eye, Target,
+  RefreshCw, Plus, Lightbulb, CheckCircle2, ArrowUpRight,
 } from 'lucide-react';
-import { scanAPI } from '../services/api';
-import { useAuth } from '../context/AuthContext';
-import { useScan } from '../context/ScanContext';
+import { scanAPI }  from '../services/api';
+import { useAuth }  from '../context/AuthContext';
+import { useScan }  from '../context/ScanContext';
 import { useTheme } from '../context/ThemeContext';
 
-/* ─────────────────────────────────────────────────────────────
+/* ═══════════════════════════════════════════════════════════════
    CONSTANTS & HELPERS
-───────────────────────────────────────────────────────────── */
-const PIE_COLORS  = ['#f43f5e', '#f97316', '#f59e0b', '#6366f1', '#94a3b8'];
-const SEV_META    = [
-  { key: 'critical_count', label: 'Critical', color: '#f43f5e', bg: 'bg-rose-500/10',   text: 'text-rose-400'   },
-  { key: 'high_count',     label: 'High',     color: '#f97316', bg: 'bg-orange-500/10',  text: 'text-orange-400' },
-  { key: 'medium_count',   label: 'Medium',   color: '#f59e0b', bg: 'bg-amber-500/10',   text: 'text-amber-400'  },
-  { key: 'low_count',      label: 'Low',      color: '#6366f1', bg: 'bg-indigo-500/10',  text: 'text-indigo-400' },
-  { key: 'info_count',     label: 'Info',     color: '#94a3b8', bg: 'bg-slate-500/10',   text: 'text-slate-400'  },
+   ═══════════════════════════════════════════════════════════ */
+const SEV_META = [
+  { key: 'critical_count', label: 'Critical', studentLabel: 'Urgent Fixes',      color: '#ef4444' },
+  { key: 'high_count',     label: 'High',     studentLabel: 'Important Issues',   color: '#f97316' },
+  { key: 'medium_count',   label: 'Medium',   studentLabel: 'Worth Reviewing',    color: '#eab308' },
+  { key: 'low_count',      label: 'Low',      studentLabel: 'Minor Suggestions',  color: '#8b5cf6' },
+  { key: 'info_count',     label: 'Info',     studentLabel: 'Informational',      color: '#64748b' },
 ];
+
+const LEARNING_TIPS = {
+  gauge:    'Your score is calculated by weighted penalties: Critical costs 20 pts, High costs 8 pts, Medium costs 3 pts, and Low costs 1 pt each. A higher score means fewer vulnerabilities.',
+  critical: 'Critical means an attacker can exploit this right now using publicly available tools. Always fix these first before deploying.',
+  high:     'High-severity issues could be exploited with moderate effort. Address these right after Critical ones.',
+  trend:    'This chart shows how your vulnerability counts change over time. A downward trend means your code is getting more secure!',
+  severity: 'Severity levels help you prioritize. Focus on the red and orange segments first — they represent the most dangerous vulnerabilities.',
+  analytics:'Each bar shows the findings from one scan. Compare scans side-by-side to see if your fixes are working.',
+  actions:  'Start with Critical issues — they are the most dangerous. Then move to High. Medium and Low can wait for a refactoring sprint.',
+};
 
 const relativeTime = (ts) => {
   if (!ts) return '—';
   const ms   = typeof ts === 'number' ? ts * 1000 : new Date(ts).getTime();
   const diff = Math.floor((Date.now() - ms) / 1000);
-  if (diff < 60)      return `${diff}s ago`;
-  if (diff < 3600)    return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400)   return `${Math.floor(diff / 3600)}h ago`;
-  if (diff < 86400*7) return `${Math.floor(diff / 86400)}d ago`;
+  if (diff < 60)       return `${diff}s ago`;
+  if (diff < 3600)     return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400)    return `${Math.floor(diff / 3600)}h ago`;
+  if (diff < 604800)   return `${Math.floor(diff / 86400)}d ago`;
   return new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 
-const calcScore = (jobs) => {
-  const done = jobs.filter(j => j.status === 'completed' || j.status === 'partial');
-  if (!done.length) return null;
-  const p = done.reduce((s, j) =>
-    s + (j.critical_count||0)*20 + (j.high_count||0)*8
-      + (j.medium_count||0)*3   + (j.low_count||0)*1, 0);
-  return Math.max(0, 100 - Math.round(p / done.length));
+/** Normalise status strings — handles "JobStatus.COMPLETED" from live jobs */
+const normStatus = (s) => {
+  if (!s) return '';
+  const str = typeof s === 'string' ? s : String(s);
+  // "JobStatus.COMPLETED" → "completed"
+  const dot = str.lastIndexOf('.');
+  return (dot >= 0 ? str.slice(dot + 1) : str).toLowerCase();
 };
 
-/* ─────────────────────────────────────────────────────────────
-   CUSTOM TOOLTIP
-───────────────────────────────────────────────────────────── */
-const CustomTooltip = ({ active, payload, label, isDark }) => {
+const isDone = (j) => {
+  const s = normStatus(j.status);
+  return s === 'completed' || s === 'partial';
+};
+
+const calcScore = (jobs) => {
+  const done = jobs.filter(isDone);
+  if (!done.length) return null;
+  // Exponential decay — realistic scoring that doesn't collapse to 0
+  const avgPenalty = done.reduce(
+    (s, j) =>
+      s +
+      (j.critical_count || 0) * 20 +
+      (j.high_count || 0) * 8 +
+      (j.medium_count || 0) * 3 +
+      (j.low_count || 0) * 1,
+    0,
+  ) / done.length;
+  return Math.round(100 * Math.exp(-avgPenalty / 300));
+};
+
+/** Check prefers-reduced-motion */
+const prefersReducedMotion = () =>
+  typeof window !== 'undefined' &&
+  window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+/* ═══════════════════════════════════════════════════════════════
+   ANIMATED VALUE HOOK — respects prefers-reduced-motion
+   ═══════════════════════════════════════════════════════════ */
+const useAnimatedValue = (target, duration = 900) => {
+  const [val, setVal] = useState(0);
+  const prev = useRef(0);
+  useEffect(() => {
+    if (target == null) return;
+    const from = prev.current;
+    const to   = typeof target === 'number' ? target : 0;
+    prev.current = to;
+    if (from === to || prefersReducedMotion()) { setVal(to); return; }
+    const t0 = performance.now();
+    const tick = (now) => {
+      const t    = Math.min((now - t0) / duration, 1);
+      const ease = 1 - Math.pow(1 - t, 3);
+      setVal(Math.round(from + (to - from) * ease));
+      if (t < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }, [target, duration]);
+  return val;
+};
+
+/* ═══════════════════════════════════════════════════════════════
+   LEARNING TIP — collapsible insight (P4)
+   ═══════════════════════════════════════════════════════════ */
+const LearningTip = ({ text, isDark }) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-2">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className={`flex items-center gap-1.5 text-[10px] font-bold transition-colors
+          ${isDark ? 'text-amber-400/70 hover:text-amber-400' : 'text-amber-600/70 hover:text-amber-600'}`}
+        aria-expanded={open}
+      >
+        <Lightbulb size={11} />
+        {open ? 'Hide tip' : 'What does this mean?'}
+        <ChevronDown
+          size={10}
+          className={`transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+      {open && (
+        <div className="animate-slide-down">
+          <p className={`text-[11px] leading-relaxed mt-1.5 pl-4 border-l-2
+            ${isDark
+              ? 'text-slate-400 border-amber-500/30'
+              : 'text-slate-500 border-amber-400/40'}`}>
+            {text}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/* ═══════════════════════════════════════════════════════════════
+   CHART TOOLTIP
+   ═══════════════════════════════════════════════════════════ */
+const ChartTooltip = ({ active, payload, label, isDark }) => {
   if (!active || !payload?.length) return null;
   return (
-    <div className={`rounded-xl border px-4 py-3 text-sm shadow-xl backdrop-blur-sm
-      ${isDark ? 'bg-[#1e2235] border-white/10 text-white' : 'bg-white border-slate-200 text-slate-900'}`}>
-      <p className={`text-xs font-bold uppercase tracking-wider mb-2 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-        {label}
-      </p>
+    <div
+      className={`rounded-xl border px-4 py-3 text-sm shadow-2xl backdrop-blur-md
+        ${isDark
+          ? 'bg-[#1a1d2e]/90 border-white/10 text-white'
+          : 'bg-white/95 border-slate-200 text-slate-900'}`}
+    >
+      <p className={`text-[10px] font-bold uppercase tracking-wider mb-2
+        ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{label}</p>
       {payload.map((p, i) => (
         <div key={i} className="flex items-center gap-2 mb-0.5">
-          <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: p.color || p.fill }} />
+          <div className="w-2 h-2 rounded-full flex-shrink-0"
+            style={{ background: p.color || p.fill }} />
           <span className={`text-xs ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{p.name}</span>
           <span className="font-bold ml-auto pl-4 tabular-nums">{p.value}</span>
         </div>
@@ -68,175 +166,539 @@ const CustomTooltip = ({ active, payload, label, isDark }) => {
   );
 };
 
-/* ─────────────────────────────────────────────────────────────
-   KPI CARD
-───────────────────────────────────────────────────────────── */
-const KpiCard = ({ label, value, sub, icon: Icon, accentColor, trend, isDark }) => {
-  const isUp = trend > 0;
-  return (
-    <div className={`rounded-2xl border p-5 flex flex-col gap-4 transition-all duration-200
-      ${isDark
-        ? 'bg-[#161929] border-white/5 hover:border-white/10'
-        : 'bg-white border-slate-100 shadow-sm hover:shadow-md'}`}>
-      <div className="flex items-start justify-between">
-        <div
-          className="w-10 h-10 rounded-xl flex items-center justify-center"
-          style={{ background: accentColor + '20' }}
-        >
-          <Icon size={18} style={{ color: accentColor }} />
-        </div>
-        {trend !== undefined && trend !== 0 && (
-          <div className={`flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-lg
-            ${isUp
-              ? accentColor === '#f43f5e' || accentColor === '#f97316'
-                ? isDark ? 'bg-rose-500/10 text-rose-400' : 'bg-rose-50 text-rose-600'
-                : isDark ? 'bg-emerald-500/10 text-emerald-400' : 'bg-emerald-50 text-emerald-600'
-              : isDark ? 'bg-emerald-500/10 text-emerald-400' : 'bg-emerald-50 text-emerald-600'}`}>
-            {isUp ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
-            <span>{isUp ? '+' : ''}{trend}</span>
-          </div>
-        )}
-      </div>
-      <div>
-        <p className={`text-3xl font-black tabular-nums leading-none mb-1.5
-          ${isDark ? 'text-white' : 'text-slate-900'}`}>
-          {value ?? '—'}
-        </p>
-        <p className={`text-[11px] font-bold uppercase tracking-widest
-          ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{label}</p>
-        {sub && (
-          <p className={`text-xs mt-1 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{sub}</p>
-        )}
-      </div>
-    </div>
-  );
-};
-
-/* ─────────────────────────────────────────────────────────────
-   SCORE RING
-───────────────────────────────────────────────────────────── */
-const ScoreRing = ({ score, isDark }) => {
-  const r     = 54;
-  const circ  = 2 * Math.PI * r;
-  const fill  = score !== null ? (score / 100) * circ : 0;
+/* ═══════════════════════════════════════════════════════════════
+   P1 — HEALTH GAUGE with trend, sparkline, guidance, CTA
+   ═══════════════════════════════════════════════════════════ */
+const HealthGauge = ({ score, previousScore, scoreHistory, topAction, isDark, isStudentMode, onNavigate }) => {
+  const r     = 70;
+  const arc   = Math.PI * r;
+  const fill  = score !== null ? (score / 100) * arc : 0;
   const color = score === null ? '#94a3b8'
     : score >= 75 ? '#22c55e'
-    : score >= 50 ? '#f59e0b'
-    : '#f43f5e';
+    : score >= 50 ? '#eab308'
+    : score >= 25 ? '#f97316'
+    : '#ef4444';
+  const status = score === null ? 'No data'
+    : score >= 75 ? 'Healthy'
+    : score >= 50 ? 'Moderate'
+    : score >= 25 ? 'At Risk'
+    : 'Critical';
 
-  return (
-    <div className={`rounded-2xl border p-6 flex items-center gap-6
-      ${isDark ? 'bg-[#161929] border-white/5' : 'bg-white border-slate-100 shadow-sm'}`}>
-      <div className="relative flex-shrink-0">
-        <svg width="128" height="128" viewBox="0 0 128 128">
-          <circle cx="64" cy="64" r={r} fill="none"
-            stroke={isDark ? '#1e2235' : '#f1f5f9'} strokeWidth="10" />
-          <circle cx="64" cy="64" r={r} fill="none"
-            stroke={color} strokeWidth="10"
-            strokeLinecap="round"
-            strokeDasharray={`${fill} ${circ}`}
-            transform="rotate(-90 64 64)"
-            style={{ transition: 'stroke-dasharray 1.2s cubic-bezier(.4,0,.2,1)' }}
-          />
-          <text x="64" y="60" textAnchor="middle" fontSize="26" fontWeight="900"
-            fill={isDark ? '#fff' : '#0f172a'}>{score ?? '—'}</text>
-          <text x="64" y="76" textAnchor="middle" fontSize="10" fontWeight="600"
-            fill={isDark ? '#64748b' : '#94a3b8'}>/ 100</text>
-        </svg>
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className={`text-[10px] font-bold uppercase tracking-widest mb-1
-          ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Health Score</p>
-        <p className={`text-xl font-black leading-tight mb-3
-          ${isDark ? 'text-white' : 'text-slate-900'}`}
-          style={{ color }}>
-          {score === null ? 'No data yet' : score >= 75 ? 'Good standing' : score >= 50 ? 'Needs attention' : 'Critical risk'}
-        </p>
-        <p className={`text-xs leading-relaxed ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-          Aggregate security posture across all completed scans. Based on weighted vulnerability penalty.
-        </p>
-      </div>
-    </div>
-  );
-};
+  const delta = (score !== null && previousScore !== null)
+    ? score - previousScore
+    : null;
 
-/* ─────────────────────────────────────────────────────────────
-   SIDEBAR ROW
-───────────────────────────────────────────────────────────── */
-const SidebarRow = ({ job, onView, isDark }) => {
-  const isViewable = job.status === 'completed' || job.status === 'partial';
-  const SrcIcon    = job.source_type === 'github' ? Github : FileArchive;
-  const crit       = job.critical_count || 0;
-  const high       = job.high_count     || 0;
-  const total      = job.total_vulnerabilities || 0;
+  const guidance = score === null
+    ? 'Your security journey starts here.'
+    : score >= 75
+      ? 'Your code is in great shape. Keep scanning after each commit.'
+      : score >= 50
+        ? 'Room for improvement — focus on High-severity findings next.'
+        : score >= 25
+          ? 'Significant vulnerabilities found. Prioritize fixes now.'
+          : 'Critical state — address urgent findings immediately.';
 
-  let badge = null;
-  if (crit > 0)        badge = { label: `${crit}C`, color: '#f43f5e', bg: isDark ? 'bg-rose-500/10' : 'bg-rose-50' };
-  else if (high > 0)   badge = { label: `${high}H`, color: '#f97316', bg: isDark ? 'bg-orange-500/10' : 'bg-orange-50' };
-  else if (total > 0)  badge = { label: `${total}`,  color: '#6366f1', bg: isDark ? 'bg-indigo-500/10' : 'bg-indigo-50' };
-  else if (isViewable) badge = { label: 'Clean',      color: '#22c55e', bg: isDark ? 'bg-emerald-500/10' : 'bg-emerald-50' };
+  // Sparkline points (last 5 scores)
+  const sparkPoints = useMemo(() => {
+    if (!scoreHistory || scoreHistory.length < 2) return null;
+    const pts = scoreHistory.slice(-5);
+    const max = 100;
+    const w = 80, h = 20;
+    return pts.map((v, i) => `${(i / (pts.length - 1)) * w},${h - (v / max) * h}`).join(' ');
+  }, [scoreHistory]);
+
+  const ariaLabel = score !== null
+    ? `Security posture score ${score} out of 100, status: ${status}.${delta !== null ? ` Trend: ${delta > 0 ? 'up' : 'down'} ${Math.abs(delta)} points from last scan.` : ''}`
+    : 'Security posture: no data available. Run your first scan.';
 
   return (
     <div
-      onClick={() => isViewable && onView(job.job_id)}
-      className={`flex items-center gap-3 px-4 py-3.5 border-b last:border-0 transition-colors select-none
-        ${isDark ? 'border-white/5' : 'border-slate-50'}
-        ${isViewable ? isDark ? 'hover:bg-white/[0.025] cursor-pointer' : 'hover:bg-slate-50 cursor-pointer' : ''}`}
+      role="region"
+      aria-label="Security Posture"
+      className={`rounded-2xl border p-6 h-full flex flex-col items-center justify-center
+                   relative overflow-hidden backdrop-blur-xl
+        ${isDark
+          ? 'bg-white/[0.03] border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.3)]'
+          : 'bg-white/70 border-white/60 shadow-[0_8px_32px_rgba(99,102,241,0.08)]'}`}
     >
-      <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0
-        ${isViewable ? isDark ? 'bg-indigo-500/10' : 'bg-indigo-50' : isDark ? 'bg-white/5' : 'bg-slate-50'}`}>
-        <SrcIcon size={13} className={isViewable ? 'text-indigo-400' : isDark ? 'text-slate-600' : 'text-slate-300'} />
+      {/* Decorative glow — larger and more prominent */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none" aria-hidden="true">
+        <div className="w-56 h-56 rounded-full opacity-[0.12] blur-xl"
+          style={{ background: `radial-gradient(circle, ${color}, transparent 60%)` }} />
       </div>
-      <div className="flex-1 min-w-0">
-        <p className={`text-xs font-semibold truncate leading-tight
-          ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
-          {job.repository_name || 'Unnamed'}
-        </p>
-        <p className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-          {relativeTime(job.created_at)}
-        </p>
+      {/* Inner ring shimmer */}
+      <div className="absolute inset-0 rounded-2xl opacity-[0.04] pointer-events-none" aria-hidden="true"
+        style={{ background: `conic-gradient(from 180deg, transparent, ${color}40, transparent 60%)` }} />
+
+      <p className={`text-[10px] font-bold uppercase tracking-[0.2em] mb-4 z-10
+        ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+        Security Posture
+      </p>
+
+      {/* Gauge SVG */}
+      <div className="relative z-10">
+        <svg
+          width="200" height="120" viewBox="0 0 200 120"
+          role="img" aria-label={ariaLabel}
+        >
+          <defs>
+            <linearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor={color} />
+              <stop offset="100%" stopColor={score >= 75 ? '#6366f1' : score >= 50 ? '#f97316' : '#f97316'} />
+            </linearGradient>
+            <filter id="gaugeGlow">
+              <feGaussianBlur stdDeviation="3" result="blur" />
+              <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+            </filter>
+          </defs>
+          <path d="M 30 105 A 70 70 0 0 1 170 105" fill="none"
+            stroke={isDark ? '#1e2235' : '#e8ecf4'} strokeWidth="14" strokeLinecap="round" />
+          <path d="M 30 105 A 70 70 0 0 1 170 105" fill="none"
+            stroke={`url(#gaugeGrad)`} strokeWidth="14" strokeLinecap="round"
+            strokeDasharray={`${fill} ${arc}`}
+            filter="url(#gaugeGlow)"
+            className="animate-dash-draw"
+            style={{ transition: 'stroke-dasharray 1.2s cubic-bezier(.4,0,.2,1)' }} />
+          <text x="100" y="88" textAnchor="middle" fontSize="36" fontWeight="900"
+            fill={isDark ? '#fff' : '#0f172a'}
+            style={{ filter: isDark ? `drop-shadow(0 0 6px ${color}40)` : 'none' }}
+          >{score ?? '—'}</text>
+          <text x="100" y="108" textAnchor="middle" fontSize="10" fontWeight="600"
+            fill={isDark ? '#475569' : '#94a3b8'}>/100</text>
+        </svg>
       </div>
-      {badge ? (
-        <span className={`flex-shrink-0 text-xs font-bold px-2 py-0.5 rounded-lg ${badge.bg}`}
-          style={{ color: badge.color }}>
-          {badge.label}
-        </span>
-      ) : job.status === 'running' ? (
-        <span className="text-[10px] text-indigo-400 font-semibold flex-shrink-0">
-          {job.progress || 0}%
-        </span>
+
+      {/* Status + trend delta */}
+      <div className="flex items-center gap-2 mt-1 z-10 flex-wrap justify-center">
+        <div className="w-2 h-2 rounded-full" style={{ background: color }} />
+        <span className="text-sm font-bold" style={{ color }}>{status}</span>
+        {delta !== null && delta !== 0 && (
+          <span
+            className={`inline-flex items-center gap-0.5 text-[11px] font-bold px-2 py-0.5 rounded-lg
+              ${delta > 0
+                ? isDark ? 'bg-emerald-500/10 text-emerald-400' : 'bg-emerald-50 text-emerald-600'
+                : isDark ? 'bg-red-500/10 text-red-400' : 'bg-red-50 text-red-600'}`}
+          >
+            {delta > 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
+            {delta > 0 ? '+' : ''}{delta}
+          </span>
+        )}
+      </div>
+
+      {/* Sparkline */}
+      {sparkPoints && (
+        <svg width="80" height="20" viewBox="0 0 80 20" className="mt-2 z-10" aria-hidden="true">
+          <polyline points={sparkPoints} fill="none" stroke={color} strokeWidth="1.5"
+            strokeLinecap="round" strokeLinejoin="round" opacity="0.6" />
+        </svg>
+      )}
+
+      {/* Guidance */}
+      <p className={`text-[11px] text-center mt-2 leading-relaxed max-w-[240px] z-10
+        ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+        {guidance}
+      </p>
+
+      {/* CTA for zero state or at-risk */}
+      {score === null ? (
+        <button
+          onClick={() => onNavigate('/scan')}
+          className="mt-3 z-10 flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-xl
+                     bg-indigo-600 text-white hover:bg-indigo-500 transition-colors shadow-md shadow-indigo-500/25"
+        >
+          Run First Scan <ArrowRight size={12} />
+        </button>
+      ) : topAction ? (
+        <button
+          onClick={() => onNavigate(`/results/${topAction.jobId}`)}
+          className={`mt-3 z-10 flex items-center gap-1 text-[11px] font-bold transition-colors
+            ${isDark ? 'text-indigo-400 hover:text-indigo-300' : 'text-indigo-600 hover:text-indigo-500'}`}
+        >
+          View {topAction.label} <ArrowUpRight size={11} />
+        </button>
       ) : null}
+
+      {isStudentMode && <LearningTip text={LEARNING_TIPS.gauge} isDark={isDark} />}
     </div>
   );
 };
 
-/* ─────────────────────────────────────────────────────────────
-   DONUT LABEL
-───────────────────────────────────────────────────────────── */
-const renderDonutLabel = ({ cx, cy, total }) => (
-  <>
-    <text x={cx} y={cy - 8} textAnchor="middle" fontSize="28" fontWeight="900"
-      fill="currentColor">{total}</text>
-    <text x={cx} y={cy + 14} textAnchor="middle" fontSize="11" fontWeight="600"
-      fill="#64748b">total</text>
-  </>
-);
+/* ═══════════════════════════════════════════════════════════════
+   METRIC TILE — animated counter + accent stripe
+   ═══════════════════════════════════════════════════════════ */
+const MetricTile = ({ label, value, sub, icon: Icon, accent, trend, isDark, isStudentMode, tipKey }) => {
+  const animVal = useAnimatedValue(value);
+  const isUp    = trend > 0;
 
-/* ─────────────────────────────────────────────────────────────
+  return (
+    <div
+      className={`rounded-2xl border p-5 relative overflow-hidden group card-hover backdrop-blur-xl
+        ${isDark
+          ? 'bg-white/[0.03] border-white/[0.08] hover:border-white/[0.15] shadow-[0_8px_32px_rgba(0,0,0,0.2)]'
+          : 'bg-white/70 border-white/60 hover:shadow-xl shadow-[0_4px_24px_rgba(99,102,241,0.06)]'}`}
+    >
+      <div className="absolute top-0 left-5 right-5 h-[2px] rounded-b-full opacity-60"
+        style={{ background: `linear-gradient(90deg, transparent, ${accent}, transparent)` }} aria-hidden="true" />
+      {/* Glass shine */}
+      <div className="absolute top-0 right-0 w-24 h-24 rounded-full -translate-y-1/2 translate-x-1/2
+                      opacity-[0.04] pointer-events-none" aria-hidden="true"
+        style={{ background: `radial-gradient(circle, ${accent}, transparent 70%)` }} />
+
+      <div className="flex items-start justify-between mb-3">
+        <div
+          className="w-11 h-11 rounded-xl flex items-center justify-center
+                     transition-transform duration-300 group-hover:scale-110"
+          style={{ background: `${accent}15` }}
+        >
+          <Icon size={20} style={{ color: accent }} strokeWidth={2.2} />
+        </div>
+        {trend !== undefined && trend !== 0 && (
+          <div
+            className={`flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-lg
+              ${isUp
+                ? accent === '#ef4444' || accent === '#f97316'
+                  ? isDark ? 'bg-red-500/10 text-red-400' : 'bg-red-50 text-red-600'
+                  : isDark ? 'bg-emerald-500/10 text-emerald-400' : 'bg-emerald-50 text-emerald-600'
+                : isDark ? 'bg-emerald-500/10 text-emerald-400' : 'bg-emerald-50 text-emerald-600'}`}
+          >
+            {isUp ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
+            {isUp ? '+' : ''}{trend}
+          </div>
+        )}
+      </div>
+
+      <p className={`text-[28px] font-black tabular-nums leading-none mb-1
+        ${isDark ? 'text-white' : 'text-slate-900'}`}
+        aria-live="polite">
+        {animVal}
+      </p>
+      <p className={`text-xs font-semibold mb-0.5
+        ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{label}</p>
+      {sub && (
+        <p className={`text-[10px] ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>{sub}</p>
+      )}
+      {isStudentMode && tipKey && LEARNING_TIPS[tipKey] && (
+        <LearningTip text={LEARNING_TIPS[tipKey]} isDark={isDark} />
+      )}
+    </div>
+  );
+};
+
+/* ═══════════════════════════════════════════════════════════════
+   P3 — ACTION CARD — next best actions
+   ═══════════════════════════════════════════════════════════ */
+const ActionCard = ({ actions, isDark, isStudentMode, onNavigate }) => {
+  const SEV_COLORS = { critical: '#ef4444', high: '#f97316', medium: '#eab308' };
+  return (
+    <div
+      role="region"
+      aria-label="Recommended actions"
+      className={`rounded-2xl border p-5 flex flex-col card-hover backdrop-blur-xl
+        ${isDark
+          ? 'bg-white/[0.03] border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.2)]'
+          : 'bg-white/70 border-white/60 shadow-[0_4px_24px_rgba(99,102,241,0.06)]'}`}
+    >
+      <div className="absolute top-0 left-5 right-5 h-[2px] rounded-b-full opacity-50 bg-cyan-400" aria-hidden="true" />
+
+      <div className="flex items-center gap-2.5 mb-3">
+        <div className={`w-9 h-9 rounded-xl flex items-center justify-center
+          ${isDark ? 'bg-cyan-500/10' : 'bg-cyan-50'}`}>
+          <Target size={16} className="text-cyan-400" />
+        </div>
+        <p className={`text-xs font-bold ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+          Next Steps
+        </p>
+      </div>
+
+      {actions.length === 0 ? (
+        <div className="flex-1 flex items-center gap-2 py-2">
+          <CheckCircle2 size={16} className="text-emerald-400 flex-shrink-0" />
+          <p className={`text-xs font-semibold ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>
+            All clear — no urgent actions right now.
+          </p>
+        </div>
+      ) : (
+        <ul role="list" className="space-y-1.5 flex-1">
+          {actions.slice(0, 3).map((a, i) => (
+            <li key={i} role="listitem">
+              <button
+                onClick={() => onNavigate(`/results/${a.jobId}`)}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left
+                           transition-colors text-xs font-medium group/action
+                  ${isDark ? 'hover:bg-white/[0.04]' : 'hover:bg-slate-50'}`}
+                aria-label={`View ${a.count} ${a.severity} findings in ${a.repo}`}
+              >
+                <div className="w-2 h-2 rounded-full flex-shrink-0"
+                  style={{ background: SEV_COLORS[a.severity] || '#8b5cf6' }} />
+                <span className={isDark ? 'text-slate-300' : 'text-slate-600'}>
+                  Fix <span className="font-bold">{a.count} {a.severity}</span> in {a.repo}
+                </span>
+                <ArrowUpRight size={11}
+                  className={`ml-auto opacity-0 group-hover/action:opacity-100 transition-opacity flex-shrink-0
+                    ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {isStudentMode && <LearningTip text={LEARNING_TIPS.actions} isDark={isDark} />}
+    </div>
+  );
+};
+
+/* ═══════════════════════════════════════════════════════════════
+   P2 — GROUPED FEED — dedup + expand/collapse
+   ═══════════════════════════════════════════════════════════ */
+const groupFeedItems = (jobs) => {
+  const groups = [];
+  let current = null;
+  for (const job of jobs) {
+    const name = job.repository_name || 'Unnamed';
+    if (current && current.name === name) {
+      current.items.push(job);
+    } else {
+      current = { name, items: [job] };
+      groups.push(current);
+    }
+  }
+  return groups;
+};
+
+const FeedGroup = ({ group, onView, isDark, isLast }) => {
+  const [expanded, setExpanded] = useState(false);
+  const latest = group.items[0];
+  const count  = group.items.length;
+  const isViewable = normStatus(latest.status) === 'completed' || normStatus(latest.status) === 'partial';
+  const SrcIcon    = latest.source_type === 'github' ? Github : FileArchive;
+
+  // Worst severity badge
+  const crit  = group.items.reduce((s, j) => s + (j.critical_count || 0), 0);
+  const high  = group.items.reduce((s, j) => s + (j.high_count || 0), 0);
+  const total = group.items.reduce((s, j) => s + (j.total_vulnerabilities || 0), 0);
+
+  let badge = null;
+  if (crit > 0)         badge = { label: `${crit} Critical`, color: '#ef4444' };
+  else if (high > 0)    badge = { label: `${high} High`,     color: '#f97316' };
+  else if (total > 0)   badge = { label: `${total} issues`,  color: '#8b5cf6' };
+  else if (isViewable)  badge = { label: 'Clean',             color: '#22c55e' };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      if (count > 1) setExpanded(x => !x);
+      else if (isViewable) onView(latest.job_id);
+    }
+  };
+
+  return (
+    <div>
+      <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={count > 1 ? expanded : undefined}
+        aria-label={`${group.name}, ${count} scan${count > 1 ? 's' : ''}, ${badge?.label || 'in progress'}`}
+        onClick={() => {
+          if (count > 1) setExpanded(x => !x);
+          else if (isViewable) onView(latest.job_id);
+        }}
+        onKeyDown={handleKeyDown}
+        className={`flex items-start gap-3 px-5 py-3 transition-colors select-none relative
+                    focus-visible:ring-2 focus-visible:ring-indigo-500/50 focus-visible:outline-none rounded-lg
+          ${isViewable || count > 1
+            ? isDark ? 'hover:bg-white/[0.02] cursor-pointer' : 'hover:bg-slate-50/50 cursor-pointer'
+            : ''}`}
+      >
+        {/* Timeline dot */}
+        <div className="flex flex-col items-center flex-shrink-0 pt-1.5">
+          <div
+            className="w-2.5 h-2.5 rounded-full border-2 flex-shrink-0"
+            style={{
+              borderColor: badge?.color || (isDark ? '#334155' : '#cbd5e1'),
+              background:  badge ? `${badge.color}25` : 'transparent',
+            }}
+          />
+          {!isLast && (
+            <div className={`w-px flex-1 mt-1 min-h-[16px]
+              ${isDark ? 'bg-white/[0.04]' : 'bg-slate-100'}`} />
+          )}
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 min-w-0 pb-1">
+          <div className="flex items-center gap-2 mb-0.5">
+            <SrcIcon size={11} className={isDark ? 'text-slate-500' : 'text-slate-400'} />
+            <p className={`text-xs font-semibold truncate
+              ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
+              {group.name}
+            </p>
+            {count > 1 && (
+              <span className={`text-[9px] font-bold px-1.5 py-px rounded
+                ${isDark ? 'bg-slate-700/50 text-slate-400' : 'bg-slate-100 text-slate-500'}`}>
+                ×{count}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={`text-[10px] ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>
+              {relativeTime(latest.created_at)}
+            </span>
+            {badge && (
+              <span className="text-[10px] font-bold px-1.5 py-px rounded"
+                style={{ color: badge.color, background: `${badge.color}12` }}>
+                {badge.label}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {count > 1 && (
+          <ChevronDown size={12}
+            className={`flex-shrink-0 mt-2 transition-transform duration-200
+              ${isDark ? 'text-slate-600' : 'text-slate-400'}
+              ${expanded ? 'rotate-180' : ''}`} />
+        )}
+      </div>
+
+      {/* Expanded sub-items */}
+      {expanded && count > 1 && (
+        <div className="animate-slide-down pl-10" role="list">
+          {group.items.map((job) => {
+            const jobViewable = normStatus(job.status) === 'completed' || normStatus(job.status) === 'partial';
+            const jTotal = job.total_vulnerabilities || 0;
+            const jCrit  = job.critical_count || 0;
+            return (
+              <div
+                key={job.job_id}
+                role="listitem"
+                tabIndex={jobViewable ? 0 : -1}
+                onClick={() => jobViewable && onView(job.job_id)}
+                onKeyDown={(e) => {
+                  if ((e.key === 'Enter' || e.key === ' ') && jobViewable) {
+                    e.preventDefault();
+                    onView(job.job_id);
+                  }
+                }}
+                className={`flex items-center gap-2 px-3 py-1.5 text-[10px] rounded-lg
+                           transition-colors
+                  ${jobViewable
+                    ? isDark ? 'hover:bg-white/[0.02] cursor-pointer' : 'hover:bg-slate-50/50 cursor-pointer'
+                    : ''}`}
+              >
+                <span className={isDark ? 'text-slate-600' : 'text-slate-400'}>
+                  {relativeTime(job.created_at)}
+                </span>
+                <span className={`font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  {jTotal} finding{jTotal !== 1 ? 's' : ''}
+                </span>
+                {jCrit > 0 && (
+                  <span className="font-bold text-red-400">{jCrit}C</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+/* ═══════════════════════════════════════════════════════════════
+   SEVERITY PROGRESS BAR
+   ═══════════════════════════════════════════════════════════ */
+const SeverityBar = ({ label, value, total, color, isDark }) => {
+  const pct = total > 0 ? (value / total) * 100 : 0;
+  return (
+    <div className="flex items-center gap-3">
+      <span className={`text-[10px] font-semibold w-14 text-right
+        ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>{label}</span>
+      <div className={`flex-1 h-[7px] rounded-full overflow-hidden
+        ${isDark ? 'bg-white/[0.04]' : 'bg-slate-100'}`}>
+        <div className="h-full rounded-full transition-all duration-1000 ease-out"
+          style={{ width: `${pct}%`, background: color }} />
+      </div>
+      <span className={`text-[11px] font-bold tabular-nums w-8
+        ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{value}</span>
+    </div>
+  );
+};
+
+/* ═══════════════════════════════════════════════════════════════
+   P6 — SKELETON DASHBOARD — layout-matching loading state
+   ═══════════════════════════════════════════════════════════ */
+const SkeletonDashboard = ({ isDark }) => {
+  const bg = isDark ? 'bg-white/[0.04] backdrop-blur-xl' : 'bg-white/40 backdrop-blur-xl';
+  return (
+    <div className={`min-h-screen ${isDark ? 'bg-[#0d0f17]' : 'bg-[#f4f6fb]'} transition-colors duration-300`}>
+      <div className="max-w-[1440px] mx-auto px-6 py-8">
+        {/* Header skeleton */}
+        <div className="flex items-end justify-between mb-8">
+          <div className="space-y-2">
+            <div className={`h-3 w-32 rounded ${bg} animate-pulse`} />
+            <div className={`h-7 w-48 rounded ${bg} animate-pulse`} />
+          </div>
+          <div className="flex gap-2.5">
+            <div className={`h-10 w-24 rounded-xl ${bg} animate-pulse`} />
+            <div className={`h-10 w-28 rounded-xl ${bg} animate-pulse`} />
+          </div>
+        </div>
+
+        {/* Row 1: Gauge + 4 tiles */}
+        <div className="grid grid-cols-12 gap-4 mb-4">
+          <div className={`col-span-12 md:col-span-6 lg:col-span-3 h-[280px] rounded-2xl ${bg} animate-pulse`} />
+          <div className="col-span-12 md:col-span-6 lg:col-span-9 grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {[1,2,3,4].map(i => (
+              <div key={i} className={`h-[130px] rounded-2xl ${bg} animate-pulse`}
+                style={{ animationDelay: `${i * 100}ms` }} />
+            ))}
+          </div>
+        </div>
+
+        {/* Row 2: chart + sidebar */}
+        <div className="grid grid-cols-12 gap-4 mb-4">
+          <div className={`col-span-12 lg:col-span-7 h-[360px] rounded-2xl ${bg} animate-pulse`} />
+          <div className={`col-span-12 lg:col-span-5 h-[360px] rounded-2xl ${bg} animate-pulse`}
+            style={{ animationDelay: '100ms' }} />
+        </div>
+
+        {/* Row 3: chart + feed */}
+        <div className="grid grid-cols-12 gap-4">
+          <div className={`col-span-12 lg:col-span-7 h-[330px] rounded-2xl ${bg} animate-pulse`} />
+          <div className={`col-span-12 lg:col-span-5 h-[330px] rounded-2xl ${bg} animate-pulse`}
+            style={{ animationDelay: '100ms' }} />
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ═══════════════════════════════════════════════════════════════
    DASHBOARD PAGE
-───────────────────────────────────────────────────────────── */
+   ═══════════════════════════════════════════════════════════ */
 const DashboardPage = () => {
   const navigate       = useNavigate();
   const { user }       = useAuth();
   const { loadReport } = useScan();
-  const { isDark }     = useTheme();
-  const [jobs, setJobs]       = useState([]);
+  const { isDark, isStudentMode } = useTheme();
+
+  const [jobs, setJobs]       = useState(() => {
+    // P6: Load cached data from sessionStorage for instant render
+    try {
+      const cached = sessionStorage.getItem('securetrail_jobs');
+      if (cached) return JSON.parse(cached);
+    } catch {}
+    return [];
+  });
   const [loading, setLoading] = useState(true);
 
   const fetchJobs = useCallback(() => {
     setLoading(true);
     scanAPI.getJobs()
-      .then(({ data }) => setJobs(Array.isArray(data) ? data : (data.jobs || [])))
+      .then(({ data }) => {
+        const list = Array.isArray(data) ? data : (data.jobs || []);
+        setJobs(list);
+        try { sessionStorage.setItem('securetrail_jobs', JSON.stringify(list)); } catch {}
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
@@ -244,315 +706,547 @@ const DashboardPage = () => {
   useEffect(() => { fetchJobs(); }, [fetchJobs]);
 
   /* ── Derived data ── */
-  const done  = jobs.filter(j => j.status === 'completed' || j.status === 'partial');
+  const done  = jobs.filter(isDone);
   const score = calcScore(jobs);
 
-  /* Bar chart: last 12 scans */
+  // P1: Previous score (second-latest batch) and score history
+  const scoreHistory = useMemo(() => {
+    if (done.length < 1) return [];
+    // Compute score progressively from each scan using exponential decay
+    return done.slice().reverse().map((_, i, arr) => {
+      const subset = arr.slice(0, i + 1);
+      const avgP = subset.reduce(
+        (s, j) => s + (j.critical_count || 0) * 20 + (j.high_count || 0) * 8
+                    + (j.medium_count || 0) * 3 + (j.low_count || 0) * 1, 0) / subset.length;
+      return Math.round(100 * Math.exp(-avgP / 300));
+    });
+  }, [done]);
+  const previousScore = scoreHistory.length >= 2 ? scoreHistory[scoreHistory.length - 2] : null;
+
+  // P3: Top action (most-critical unresolved scan)
+  const topAction = useMemo(() => {
+    const critScan = done.find(j => (j.critical_count || 0) > 0);
+    if (critScan) return {
+      label: `${critScan.critical_count} critical findings`,
+      jobId: critScan.job_id,
+      severity: 'critical',
+    };
+    const highScan = done.find(j => (j.high_count || 0) > 0);
+    if (highScan) return {
+      label: `${highScan.high_count} high findings`,
+      jobId: highScan.job_id,
+      severity: 'high',
+    };
+    return null;
+  }, [done]);
+
+  // P3: Actions list for the action card
+  const actionList = useMemo(() => {
+    const actions = [];
+    const seen = new Set();
+    for (const j of done) {
+      if (seen.size >= 3) break;
+      const name = (j.repository_name || 'Unnamed').split(/[/\\]/).pop() || 'Unnamed';
+      const key  = `${name}-${j.job_id}`;
+      if (seen.has(key)) continue;
+      if ((j.critical_count || 0) > 0) {
+        actions.push({ repo: name, count: j.critical_count, severity: 'critical', jobId: j.job_id });
+        seen.add(key);
+      } else if ((j.high_count || 0) > 0) {
+        actions.push({ repo: name, count: j.high_count, severity: 'high', jobId: j.job_id });
+        seen.add(key);
+      }
+    }
+    return actions;
+  }, [done]);
+
+  // Bar chart: last 12 completed scans
   const barData = [...done].reverse().slice(-12).map((j, i) => ({
-    name:     (j.repository_name || `S${i+1}`).split(/[/\\]/).pop()?.slice(0, 9) || `S${i+1}`,
+    name:     (j.repository_name || `S${i + 1}`).split(/[/\\]/).pop()?.slice(0, 9) || `S${i + 1}`,
     Critical: j.critical_count || 0,
     High:     j.high_count     || 0,
     Medium:   j.medium_count   || 0,
   }));
 
-  /* Area chart: last 10 scans */
+  // Area chart: last 10 completed scans
   const areaData = [...done].reverse().slice(-10).map((j, i) => ({
-    name:     (j.repository_name || `S${i+1}`).split(/[/\\]/).pop()?.slice(0, 7) || `S${i+1}`,
+    name:     (j.repository_name || `S${i + 1}`).split(/[/\\]/).pop()?.slice(0, 7) || `S${i + 1}`,
     Total:    j.total_vulnerabilities || 0,
     Critical: j.critical_count        || 0,
     High:     j.high_count            || 0,
   }));
 
-  /* Pie chart: aggregate distribution */
-  const pieData = SEV_META
-    .map(s => ({ name: s.label, value: done.reduce((a, j) => a + (j[s.key]||0), 0), color: s.color }))
+  // Severity distribution
+  const pieData    = SEV_META
+    .map(s => ({
+      name: isStudentMode ? s.studentLabel : s.label,
+      value: done.reduce((a, j) => a + (j[s.key] || 0), 0),
+      color: s.color,
+    }))
     .filter(d => d.value > 0);
   const grandTotal = pieData.reduce((a, d) => a + d.value, 0);
 
-  /* KPI values */
-  const totalCritical = done.reduce((s, j) => s + (j.critical_count||0), 0);
-  const totalHighRisk = done.reduce((s, j) => s + ((j.critical_count||0) + (j.high_count||0)), 0);
-  const cleanCount    = done.filter(j => (j.total_vulnerabilities||0) === 0).length;
-  const trendCrit     = done.length < 2 ? 0 : (done[0].critical_count||0) - (done[1].critical_count||0);
-  const trendFindings = done.length < 2 ? 0 : (done[0].total_vulnerabilities||0) - (done[1].total_vulnerabilities||0);
+  // KPIs
+  const totalCritical = done.reduce((s, j) => s + (j.critical_count || 0), 0);
+  const totalHighRisk = done.reduce((s, j) => s + ((j.critical_count || 0) + (j.high_count || 0)), 0);
+  const cleanCount    = done.filter(j => (j.total_vulnerabilities || 0) === 0).length;
+  const trendCrit     = done.length < 2 ? 0 : (done[0].critical_count || 0) - (done[1].critical_count || 0);
+
+  // P2: Grouped feed items
+  const feedGroups = useMemo(() => groupFeedItems(jobs.slice(0, 30)), [jobs]);
 
   const greeting = () => {
     const h = new Date().getHours();
     return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
   };
 
-  /* Theme-aware tokens */
+  /* ── Theme tokens ── */
   const tk = {
-    pageBg:   isDark ? 'bg-[#0d0f17]'   : 'bg-[#f0f2f8]',
-    cardBg:   isDark ? 'bg-[#161929]'   : 'bg-white',
-    border:   isDark ? 'border-white/5' : 'border-slate-100',
+    pageBg:   isDark ? 'bg-[#0d0f17]'  : 'bg-[#f4f6fb]',
+    cardBg:   isDark ? 'bg-white/[0.03] backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.2)]'
+                      : 'bg-white/70 backdrop-blur-xl shadow-[0_4px_24px_rgba(99,102,241,0.06)]',
+    border:   isDark ? 'border-white/[0.08]' : 'border-white/60',
     heading:  isDark ? 'text-white'     : 'text-slate-900',
     subtext:  isDark ? 'text-slate-400' : 'text-slate-500',
-    label:    isDark ? 'text-slate-500' : 'text-slate-400',
-    grid:     isDark ? '#1e2a3a'        : '#f1f5f9',
+    label:    isDark ? 'text-slate-500' : 'text-slate-500',
+    grid:     isDark ? '#1a1f35'        : '#f1f5f9',
     axisText: isDark ? '#475569'        : '#94a3b8',
   };
 
-  if (loading) {
-    return (
-      <div className={`min-h-screen flex items-center justify-center ${tk.pageBg}`}>
-        <div className="text-center space-y-3">
-          <Loader2 size={32} className="animate-spin text-indigo-500 mx-auto" />
-          <p className={`text-sm ${tk.subtext}`}>Loading your security data…</p>
-        </div>
-      </div>
-    );
+  /* ── P6: Skeleton loading state ── */
+  if (loading && jobs.length === 0) {
+    return <SkeletonDashboard isDark={isDark} />;
   }
 
+  /* ═══════════════════════════════════════════════════════════
+     RENDER
+     ═══════════════════════════════════════════════════════ */
   return (
-    <div className={`min-h-screen ${tk.pageBg} transition-colors duration-300`}>
-      <div className="max-w-[1480px] mx-auto px-6 py-8 space-y-6">
+    <main aria-label="Security Dashboard" className={`min-h-screen ${tk.pageBg} transition-colors duration-300 relative`}>
 
-        {/* ── Header ────────────────────────────────────────── */}
-        <div className="flex items-end justify-between">
+      {/* Ambient orbs (decorative) */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none z-0" aria-hidden="true">
+        <div
+          className="absolute -top-32 -right-32 w-[550px] h-[550px] rounded-full opacity-[0.06] animate-float blur-3xl"
+          style={{ background: 'radial-gradient(circle, #6366f1, transparent 70%)' }}
+        />
+        <div
+          className="absolute top-1/2 -left-48 w-[420px] h-[420px] rounded-full opacity-[0.04] animate-float-delayed blur-3xl"
+          style={{ background: 'radial-gradient(circle, #22c55e, transparent 70%)' }}
+        />
+        <div
+          className="absolute -bottom-20 right-1/3 w-96 h-96 rounded-full opacity-[0.035] animate-float blur-3xl"
+          style={{ background: 'radial-gradient(circle, #f97316, transparent 70%)', animationDelay: '10s' }}
+        />
+        <div
+          className="absolute top-1/4 left-1/2 w-[300px] h-[300px] rounded-full opacity-[0.025] animate-float-delayed blur-3xl"
+          style={{ background: 'radial-gradient(circle, #8b5cf6, transparent 70%)', animationDelay: '5s' }}
+        />
+      </div>
+
+      <div className="max-w-[1440px] mx-auto px-6 py-8 relative z-10">
+
+        {/* ════════════════════════════════════════════════════
+            HEADER
+           ════════════════════════════════════════════════════ */}
+        <div className="flex items-end justify-between mb-8 animate-fade-in-up">
           <div>
-            <p className={`text-[11px] font-bold uppercase tracking-widest mb-1.5 ${tk.label}`}>
-              {greeting()}{user?.name ? `, ${user.name.split(' ')[0]}` : ''}
-            </p>
-            <h1 className={`text-[2rem] font-black tracking-tight leading-none ${tk.heading}`}>
-              Security Dashboard
+            <div className="flex items-center gap-2 mb-2">
+              <Eye size={14} className={isDark ? 'text-indigo-400' : 'text-indigo-500'} />
+              <p className={`text-[11px] font-bold uppercase tracking-[0.15em]
+                ${isDark ? 'text-indigo-400/70' : 'text-indigo-500/70'}`}>
+                {greeting()}{user?.name ? `, ${user.name.split(' ')[0]}` : ''}
+              </p>
+            </div>
+            <h1 className={`text-[1.75rem] font-black tracking-tight leading-none ${tk.heading}`}>
+              Command Center
             </h1>
           </div>
-          <div className="flex items-center gap-3">
+
+          <div className="flex items-center gap-2.5">
+            {loading && (
+              <div className="flex items-center gap-1.5 mr-2" aria-live="polite">
+                <Loader2 size={12} className="animate-spin text-indigo-400" />
+                <span className={`text-[10px] font-medium ${tk.label}`}>Updating…</span>
+              </div>
+            )}
             <button
               onClick={fetchJobs}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold border transition-colors
+              aria-label="Refresh dashboard data"
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px]
+                         font-semibold border transition-all duration-200 backdrop-blur-md
                 ${isDark
-                  ? 'border-white/10 text-slate-300 hover:bg-white/5'
-                  : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                  ? 'border-white/[0.1] text-slate-300 bg-white/[0.04] hover:bg-white/[0.08] hover:border-white/[0.15]'
+                  : 'border-white/70 text-slate-600 bg-white/50 hover:bg-white/80 hover:shadow-md'}`}
             >
-              <Activity size={14} />
+              <RefreshCw size={13} />
               Refresh
             </button>
             <button
               onClick={() => navigate('/scan')}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600
-                         hover:bg-indigo-500 text-white text-sm font-semibold
-                         transition-colors shadow-lg shadow-indigo-900/40"
+              aria-label="Start a new security scan"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[13px] font-semibold
+                         text-white transition-all duration-200 shadow-lg
+                         bg-gradient-to-r from-indigo-600 via-violet-600 to-purple-600
+                         hover:from-indigo-500 hover:via-violet-500 hover:to-purple-500
+                         shadow-indigo-500/25 hover:shadow-indigo-500/40
+                         hover:scale-[1.02] active:scale-[0.98]"
             >
+              <Plus size={14} />
               New Scan
-              <ArrowRight size={14} />
             </button>
           </div>
         </div>
 
-        {/* ── Row 1: Score ring + 4 KPI cards ──────────────── */}
-        <div className="grid grid-cols-12 gap-5">
-          <div className="col-span-12 lg:col-span-4">
-            <ScoreRing score={score} isDark={isDark} />
+        {/* ════════════════════════════════════════════════════
+            ROW 1 — Health gauge (3) + Tiles (6) + ActionCard (3)
+           ════════════════════════════════════════════════════ */}
+        <div className="grid grid-cols-12 gap-4 mb-4 stagger-children">
+
+          <div className="col-span-12 md:col-span-6 lg:col-span-3">
+            <HealthGauge
+              score={score}
+              previousScore={previousScore}
+              scoreHistory={scoreHistory}
+              topAction={topAction}
+              isDark={isDark}
+              isStudentMode={isStudentMode}
+              onNavigate={navigate}
+            />
           </div>
-          <div className="col-span-12 lg:col-span-8 grid grid-cols-2 gap-5">
-            <KpiCard label="Total Scans"    value={jobs.length}    sub={`${done.length} completed`}         icon={ShieldCheck}  accentColor="#6366f1" trend={undefined}    isDark={isDark} />
-            <KpiCard label="Critical"       value={totalCritical}  sub="high-impact findings"                icon={AlertTriangle} accentColor="#f43f5e" trend={trendCrit}   isDark={isDark} />
-            <KpiCard label="High Risk"      value={totalHighRisk}  sub="critical + high combined"           icon={ShieldAlert}  accentColor="#f97316" trend={undefined}    isDark={isDark} />
-            <KpiCard label="Clean Scans"    value={cleanCount}     sub="zero vulnerabilities found"         icon={Shield}       accentColor="#22c55e" trend={undefined}    isDark={isDark} />
+
+          <div className="col-span-12 md:col-span-6 lg:col-span-6
+                          grid grid-cols-2 gap-4">
+            <MetricTile
+              label={isStudentMode ? 'Scans Run' : 'Total Scans'}
+              value={jobs.length}
+              sub={`${done.length} completed`}
+              icon={Fingerprint} accent="#6366f1"
+              isDark={isDark} isStudentMode={isStudentMode}
+            />
+            <MetricTile
+              label={isStudentMode ? 'Urgent Fixes' : 'Critical'}
+              value={totalCritical}
+              sub={isStudentMode ? 'fix these first' : 'high-impact findings'}
+              icon={Crosshair} accent="#ef4444" trend={trendCrit}
+              isDark={isDark} isStudentMode={isStudentMode} tipKey="critical"
+            />
+            <MetricTile
+              label={isStudentMode ? 'Important' : 'High Risk'}
+              value={totalHighRisk}
+              sub={isStudentMode ? 'critical + high' : 'critical + high combined'}
+              icon={Flame} accent="#f97316"
+              isDark={isDark} isStudentMode={isStudentMode} tipKey="high"
+            />
+            <MetricTile
+              label={isStudentMode ? 'Clean Repos' : 'Clean Scans'}
+              value={cleanCount}
+              sub="zero vulnerabilities"
+              icon={Sparkles} accent="#22c55e"
+              isDark={isDark} isStudentMode={isStudentMode}
+            />
+          </div>
+
+          <div className="col-span-12 lg:col-span-3">
+            <ActionCard
+              actions={actionList}
+              isDark={isDark}
+              isStudentMode={isStudentMode}
+              onNavigate={navigate}
+            />
           </div>
         </div>
 
-        {/* ── Row 2: Area chart (8) + Pie chart (4) ─────────── */}
-        <div className="grid grid-cols-12 gap-5">
+        {/* ════════════════════════════════════════════════════
+            ROW 2 — Threat landscape (7) + Severity matrix (5)
+           ════════════════════════════════════════════════════ */}
+        <div className="grid grid-cols-12 gap-4 mb-4">
 
-          {/* Area / Line chart */}
-          <div className={`col-span-12 lg:col-span-8 rounded-2xl border p-6
-            ${tk.cardBg} ${tk.border}`}>
+          {/* ── Area chart ── */}
+          <div
+            role="region"
+            aria-label="Vulnerability trend chart"
+            className={`col-span-12 lg:col-span-7 rounded-2xl border p-6 animate-fade-in-up backdrop-blur-xl
+              ${isDark
+                ? 'bg-white/[0.03] border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.2)]'
+                : 'bg-white/70 border-white/60 shadow-[0_4px_24px_rgba(99,102,241,0.06)]'}`}
+            style={{ animationDelay: '0.15s' }}
+          >
             <div className="flex items-start justify-between mb-5">
-              <div>
-                <p className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${tk.label}`}>
-                  Vulnerability Trend
-                </p>
-                <p className={`text-sm font-semibold ${tk.subtext}`}>
-                  {areaData.length > 0
-                    ? `Last ${areaData.length} completed scans`
-                    : 'Run your first scan to see trends'}
-                </p>
+              <div className="flex items-center gap-3">
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center
+                  ${isDark ? 'bg-indigo-500/10' : 'bg-indigo-50'}`}>
+                  <Radar size={16} className="text-indigo-400" />
+                </div>
+                <div>
+                  <p className={`text-sm font-bold ${tk.heading}`}>Threat Landscape</p>
+                  <p className={`text-[11px] ${tk.label}`}>
+                    {areaData.length > 0
+                      ? `Last ${areaData.length} completed scans`
+                      : 'No scan data yet'}
+                  </p>
+                </div>
               </div>
               {areaData.length > 0 && (
-                <div className={`text-right px-3 py-2 rounded-xl border
-                  ${isDark ? 'bg-indigo-500/10 border-indigo-500/20' : 'bg-indigo-50 border-indigo-100'}`}>
-                  <p className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider">Latest scan</p>
+                <div className={`text-right px-3 py-1.5 rounded-lg
+                  ${isDark ? 'bg-white/[0.03]' : 'bg-slate-50'}`}>
                   <p className="text-lg font-black text-indigo-400 tabular-nums">
-                    {areaData[areaData.length-1]?.Total ?? 0}
+                    {areaData[areaData.length - 1]?.Total ?? 0}
                   </p>
-                  <p className={`text-[10px] ${tk.subtext}`}>total findings</p>
+                  <p className={`text-[9px] font-semibold uppercase tracking-wider ${tk.label}`}>latest</p>
                 </div>
               )}
             </div>
 
             {areaData.length === 0 ? (
-              <div className={`flex flex-col items-center justify-center h-[240px] rounded-xl border-2 border-dashed
+              <div className={`flex flex-col items-center justify-center h-[260px]
+                              rounded-xl border-2 border-dashed
                 ${isDark ? 'border-white/5 text-slate-600' : 'border-slate-200 text-slate-300'}`}>
-                <Activity size={32} className="mb-2" />
-                <p className="text-sm">No completed scans yet</p>
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height={240}>
-                <AreaChart data={areaData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="gradTotal" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%"  stopColor="#6366f1" stopOpacity={isDark ? 0.25 : 0.15} />
-                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="gradCrit" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%"  stopColor="#f43f5e" stopOpacity={isDark ? 0.2 : 0.12} />
-                      <stop offset="95%" stopColor="#f43f5e" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="gradHigh" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%"  stopColor="#f97316" stopOpacity={isDark ? 0.18 : 0.1} />
-                      <stop offset="95%" stopColor="#f97316" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid stroke={tk.grid} strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fill: tk.axisText, fontSize: 10, fontWeight: 600 }}
-                    axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fill: tk.axisText, fontSize: 10 }} axisLine={false} tickLine={false} />
-                  <Tooltip content={<CustomTooltip isDark={isDark} />} />
-                  <Legend iconType="circle" iconSize={7}
-                    wrapperStyle={{ fontSize: '11px', paddingTop: '12px', color: tk.axisText }} />
-                  <Area type="monotone" dataKey="Total"    stroke="#6366f1" strokeWidth={2.5}
-                    fill="url(#gradTotal)"    dot={false} activeDot={{ r: 5, fill: '#6366f1' }} />
-                  <Area type="monotone" dataKey="Critical" stroke="#f43f5e" strokeWidth={2.5}
-                    fill="url(#gradCrit)"     dot={false} activeDot={{ r: 5, fill: '#f43f5e' }} />
-                  <Area type="monotone" dataKey="High"     stroke="#f97316" strokeWidth={2.5}
-                    fill="url(#gradHigh)"     dot={false} activeDot={{ r: 5, fill: '#f97316' }} />
-                </AreaChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-
-          {/* Donut chart */}
-          <div className={`col-span-12 lg:col-span-4 rounded-2xl border p-6 flex flex-col
-            ${tk.cardBg} ${tk.border}`}>
-            <div className="mb-4">
-              <p className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${tk.label}`}>
-                Distribution
-              </p>
-              <p className={`text-sm font-semibold ${tk.subtext}`}>Vulnerability breakdown</p>
-            </div>
-
-            {pieData.length === 0 ? (
-              <div className={`flex-1 flex flex-col items-center justify-center rounded-xl border-2 border-dashed
-                ${isDark ? 'border-white/5 text-slate-600' : 'border-slate-200 text-slate-300'}`}>
-                <Shield size={28} className="mb-2" />
-                <p className="text-xs">No findings recorded</p>
-              </div>
-            ) : (
-              <>
-                <div className="flex justify-center">
-                  <div style={{ color: isDark ? '#fff' : '#0f172a' }}>
-                    <ResponsiveContainer width={180} height={180}>
-                      <PieChart>
-                        <Pie data={pieData} cx="50%" cy="50%" innerRadius={52} outerRadius={80}
-                          dataKey="value" strokeWidth={0}
-                          label={false}>
-                          {pieData.map((entry, index) => (
-                            <Cell key={index} fill={entry.color} />
-                          ))}
-                        </Pie>
-                        <Tooltip content={<CustomTooltip isDark={isDark} />} />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-                {/* Legend */}
-                <div className="space-y-2 mt-3">
-                  {pieData.map((d, i) => (
-                    <div key={i} className="flex items-center gap-2.5">
-                      <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: d.color }} />
-                      <span className={`text-xs flex-1 font-medium ${tk.subtext}`}>{d.name}</span>
-                      <span className={`text-xs font-black tabular-nums ${tk.heading}`}>{d.value}</span>
-                      <span className={`text-[10px] tabular-nums ${tk.label}`}>
-                        {grandTotal ? Math.round((d.value/grandTotal)*100) : 0}%
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* ── Row 3: Bar chart (8) + Activity feed (4) ──────── */}
-        <div className="grid grid-cols-12 gap-5">
-
-          {/* Bar chart */}
-          <div className={`col-span-12 lg:col-span-8 rounded-2xl border p-6
-            ${tk.cardBg} ${tk.border}`}>
-            <div className="flex items-start justify-between mb-5">
-              <div>
-                <p className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${tk.label}`}>
-                  Scan Analytics
-                </p>
-                <p className={`text-sm font-semibold ${tk.subtext}`}>
-                  Findings per scan · last {barData.length || 0} scans
-                </p>
-              </div>
-              <button onClick={() => navigate('/history')}
-                className={`flex items-center gap-1 text-xs font-bold transition-colors
-                  ${isDark ? 'text-indigo-400 hover:text-indigo-300' : 'text-indigo-600 hover:text-indigo-800'}`}>
-                Full history <ChevronRight size={13} />
-              </button>
-            </div>
-
-            {barData.length === 0 ? (
-              <div className={`flex flex-col items-center justify-center h-[220px] rounded-xl border-2 border-dashed
-                ${isDark ? 'border-white/5 text-slate-600' : 'border-slate-200 text-slate-300'}`}>
-                <Activity size={28} className="mb-2" />
-                <p className="text-xs">No data available</p>
+                <Radar size={36} className="mb-3 opacity-40" />
+                <p className="text-sm font-medium">Run a scan to see trends</p>
                 <button onClick={() => navigate('/scan')}
                   className="mt-3 text-xs font-bold text-indigo-400 hover:underline">
-                  Start a scan →
-                </button>
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={barData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}
-                  barSize={20} barCategoryGap="30%">
-                  <CartesianGrid stroke={tk.grid} strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fill: tk.axisText, fontSize: 10, fontWeight: 600 }}
-                    axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fill: tk.axisText, fontSize: 10 }} axisLine={false} tickLine={false} />
-                  <Tooltip content={<CustomTooltip isDark={isDark} />} cursor={{ fill: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)' }} />
-                  <Legend iconType="circle" iconSize={7}
-                    wrapperStyle={{ fontSize: '11px', paddingTop: '12px', color: tk.axisText }} />
-                  <Bar dataKey="Critical" fill="#f43f5e" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="High"     fill="#f97316" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="Medium"   fill="#f59e0b" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-
-          {/* Activity sidebar */}
-          <div className={`col-span-12 lg:col-span-4 rounded-2xl border overflow-hidden flex flex-col
-            ${tk.cardBg} ${tk.border}`}>
-            <div className={`px-4 py-4 border-b flex items-center justify-between ${tk.border}`}>
-              <p className={`text-[10px] font-bold uppercase tracking-widest ${tk.label}`}>
-                Recent Activity
-              </p>
-              <button onClick={() => navigate('/history')}
-                className={`text-[10px] font-bold flex items-center gap-0.5 transition-colors
-                  ${isDark ? 'text-indigo-400 hover:text-indigo-300' : 'text-indigo-600 hover:text-indigo-800'}`}>
-                All <ChevronRight size={10} />
-              </button>
-            </div>
-            {jobs.length === 0 ? (
-              <div className={`flex-1 flex flex-col items-center justify-center py-12 gap-2 ${tk.label}`}>
-                <Shield size={24} />
-                <p className="text-xs">No scan history yet.</p>
-                <button onClick={() => navigate('/scan')}
-                  className="text-xs font-bold text-indigo-400 hover:underline">
                   Start scanning →
                 </button>
               </div>
             ) : (
-              <div className="overflow-y-auto max-h-[320px] flex-1">
-                {jobs.slice(0, 20).map(job => (
-                  <SidebarRow key={job.job_id} job={job} onView={loadReport} isDark={isDark} />
+              <ResponsiveContainer width="100%" height={260}>
+                <AreaChart data={areaData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="gAreaTotal" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#6366f1" stopOpacity={isDark ? 0.3 : 0.18} />
+                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="gAreaCrit" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#ef4444" stopOpacity={isDark ? 0.25 : 0.12} />
+                      <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="gAreaHigh" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#f97316" stopOpacity={isDark ? 0.2 : 0.1} />
+                      <stop offset="95%" stopColor="#f97316" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid stroke={tk.grid} strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="name"
+                    tick={{ fill: tk.axisText, fontSize: 10, fontWeight: 600 }}
+                    axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fill: tk.axisText, fontSize: 10 }} axisLine={false} tickLine={false} />
+                  <Tooltip content={<ChartTooltip isDark={isDark} />} />
+                  <Legend iconType="circle" iconSize={6}
+                    wrapperStyle={{ fontSize: '10px', paddingTop: '10px', color: tk.axisText }} />
+                  <Area type="monotone" dataKey="Total" stroke="#6366f1" strokeWidth={2}
+                    fill="url(#gAreaTotal)" dot={false}
+                    activeDot={{ r: 4, fill: '#6366f1', stroke: '#6366f120', strokeWidth: 8 }} />
+                  <Area type="monotone" dataKey="Critical" stroke="#ef4444" strokeWidth={2}
+                    fill="url(#gAreaCrit)" dot={false}
+                    activeDot={{ r: 4, fill: '#ef4444' }} />
+                  <Area type="monotone" dataKey="High" stroke="#f97316" strokeWidth={2}
+                    fill="url(#gAreaHigh)" dot={false}
+                    activeDot={{ r: 4, fill: '#f97316' }} />
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
+            {isStudentMode && <LearningTip text={LEARNING_TIPS.trend} isDark={isDark} />}
+          </div>
+
+          {/* ── Severity matrix ── */}
+          <div
+            role="region"
+            aria-label="Severity distribution"
+            className={`col-span-12 lg:col-span-5 rounded-2xl border p-6 flex flex-col
+                        animate-fade-in-up backdrop-blur-xl
+                        ${isDark
+                          ? 'bg-white/[0.03] border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.2)]'
+                          : 'bg-white/70 border-white/60 shadow-[0_4px_24px_rgba(99,102,241,0.06)]'}`}
+            style={{ animationDelay: '0.2s' }}
+          >
+            <div className="flex items-center gap-3 mb-5">
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center
+                ${isDark ? 'bg-violet-500/10' : 'bg-violet-50'}`}>
+                <Gauge size={16} className="text-violet-400" />
+              </div>
+              <div>
+                <p className={`text-sm font-bold ${tk.heading}`}>Severity Matrix</p>
+                <p className={`text-[11px] ${tk.label}`}>Distribution across all scans</p>
+              </div>
+            </div>
+
+            {pieData.length === 0 ? (
+              <div className={`flex-1 flex flex-col items-center justify-center rounded-xl
+                              border-2 border-dashed
+                ${isDark ? 'border-white/5 text-slate-600' : 'border-slate-200 text-slate-300'}`}>
+                <Gauge size={32} className="mb-2 opacity-40" />
+                <p className="text-xs font-medium">No findings recorded</p>
+                <button onClick={() => navigate('/scan')}
+                  className="mt-2 text-xs font-bold text-indigo-400 hover:underline">
+                  Run your first scan →
+                </button>
+              </div>
+            ) : (
+              <div className="flex-1 flex flex-col">
+                <div className="flex justify-center mb-3">
+                  <div style={{ color: isDark ? '#fff' : '#0f172a' }}>
+                    <ResponsiveContainer width={160} height={160}>
+                      <PieChart>
+                        <Pie data={pieData} cx="50%" cy="50%"
+                          innerRadius={48} outerRadius={72}
+                          dataKey="value" strokeWidth={0} label={false}>
+                          {pieData.map((entry, idx) => (
+                            <Cell key={idx} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip content={<ChartTooltip isDark={isDark} />} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+                <div className="space-y-2.5 mt-auto">
+                  {SEV_META.map((s) => {
+                    const val = done.reduce((a, j) => a + (j[s.key] || 0), 0);
+                    if (val === 0 && grandTotal > 0) return null;
+                    return (
+                      <SeverityBar key={s.key}
+                        label={isStudentMode ? s.studentLabel : s.label}
+                        value={val} total={grandTotal} color={s.color} isDark={isDark} />
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            {isStudentMode && <LearningTip text={LEARNING_TIPS.severity} isDark={isDark} />}
+          </div>
+        </div>
+
+        {/* ════════════════════════════════════════════════════
+            ROW 3 — Scan analytics (7) + Smart feed (5)
+           ════════════════════════════════════════════════════ */}
+        <div className="grid grid-cols-12 gap-4">
+
+          {/* ── Bar chart ── */}
+          <div
+            role="region"
+            aria-label="Scan analytics chart"
+            className={`col-span-12 lg:col-span-7 rounded-2xl border p-6 animate-fade-in-up backdrop-blur-xl
+              ${isDark
+                ? 'bg-white/[0.03] border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.2)]'
+                : 'bg-white/70 border-white/60 shadow-[0_4px_24px_rgba(99,102,241,0.06)]'}`}
+            style={{ animationDelay: '0.25s' }}
+          >
+            <div className="flex items-start justify-between mb-5">
+              <div className="flex items-center gap-3">
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center
+                  ${isDark ? 'bg-amber-500/10' : 'bg-amber-50'}`}>
+                  <BarChart3 size={16} className="text-amber-400" />
+                </div>
+                <div>
+                  <p className={`text-sm font-bold ${tk.heading}`}>Scan Analytics</p>
+                  <p className={`text-[11px] ${tk.label}`}>
+                    {barData.length > 0
+                      ? `Findings across ${barData.length} scans`
+                      : 'No scan data available'}
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => navigate('/history')}
+                className={`flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-lg
+                           transition-colors
+                  ${isDark ? 'text-indigo-400 hover:bg-indigo-500/10'
+                           : 'text-indigo-600 hover:bg-indigo-50'}`}>
+                History <ChevronRight size={12} />
+              </button>
+            </div>
+
+            {barData.length === 0 ? (
+              <div className={`flex flex-col items-center justify-center h-[240px]
+                              rounded-xl border-2 border-dashed
+                ${isDark ? 'border-white/5 text-slate-600' : 'border-slate-200 text-slate-300'}`}>
+                <BarChart3 size={32} className="mb-3 opacity-40" />
+                <p className="text-sm font-medium">No analysis available</p>
+                <button onClick={() => navigate('/scan')}
+                  className="mt-3 text-xs font-bold text-indigo-400 hover:underline">
+                  Run your first scan →
+                </button>
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={240}>
+                <BarChart data={barData}
+                  margin={{ top: 4, right: 4, left: -20, bottom: 0 }}
+                  barSize={16} barCategoryGap="25%">
+                  <CartesianGrid stroke={tk.grid} strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="name"
+                    tick={{ fill: tk.axisText, fontSize: 10, fontWeight: 600 }}
+                    axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fill: tk.axisText, fontSize: 10 }} axisLine={false} tickLine={false} />
+                  <Tooltip content={<ChartTooltip isDark={isDark} />}
+                    cursor={{ fill: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)', radius: 4 }} />
+                  <Legend iconType="circle" iconSize={6}
+                    wrapperStyle={{ fontSize: '10px', paddingTop: '10px', color: tk.axisText }} />
+                  <Bar dataKey="Critical" fill="#ef4444" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="High"     fill="#f97316" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="Medium"   fill="#eab308" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+            {isStudentMode && <LearningTip text={LEARNING_TIPS.analytics} isDark={isDark} />}
+          </div>
+
+          {/* ── P2: Smart feed (grouped + accessible) ── */}
+          <div
+            role="feed"
+            aria-label="Recent scan activity"
+            aria-live="polite"
+            className={`col-span-12 lg:col-span-5 rounded-2xl border overflow-hidden
+                        flex flex-col animate-fade-in-up backdrop-blur-xl
+                        ${isDark
+                          ? 'bg-white/[0.03] border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.2)]'
+                          : 'bg-white/70 border-white/60 shadow-[0_4px_24px_rgba(99,102,241,0.06)]'}`}
+            style={{ animationDelay: '0.3s' }}
+          >
+            <div className={`px-5 py-4 border-b flex items-center justify-between ${tk.border}`}>
+              <div className="flex items-center gap-2.5">
+                <div className={`w-7 h-7 rounded-lg flex items-center justify-center
+                  ${isDark ? 'bg-cyan-500/10' : 'bg-cyan-50'}`}>
+                  <Zap size={13} className="text-cyan-400" />
+                </div>
+                <p className={`text-sm font-bold ${tk.heading}`}>Live Feed</p>
+                {jobs.length > 0 && (
+                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded
+                    ${isDark ? 'bg-white/[0.04] text-slate-500' : 'bg-slate-50 text-slate-400'}`}>
+                    {feedGroups.length} {feedGroups.length === 1 ? 'repo' : 'repos'}
+                  </span>
+                )}
+              </div>
+              <button onClick={() => navigate('/history')}
+                className={`text-[10px] font-bold flex items-center gap-0.5 px-2 py-1 rounded-lg
+                           transition-colors
+                  ${isDark ? 'text-indigo-400 hover:bg-indigo-500/10'
+                           : 'text-indigo-600 hover:bg-indigo-50'}`}>
+                View all <ChevronRight size={10} />
+              </button>
+            </div>
+
+            {jobs.length === 0 ? (
+              <div className={`flex-1 flex flex-col items-center justify-center py-12 gap-3 ${tk.label}`}>
+                <Zap size={28} className="opacity-40" />
+                <p className="text-xs font-medium">No scan activity yet.</p>
+                <p className={`text-[10px] max-w-[180px] text-center ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>
+                  Start your first scan to see results here.
+                </p>
+                <button onClick={() => navigate('/scan')}
+                  className="text-xs font-bold text-indigo-400 hover:underline">
+                  Start Scanning →
+                </button>
+              </div>
+            ) : (
+              <div className="overflow-y-auto max-h-[340px] flex-1 py-2">
+                {feedGroups.slice(0, 15).map((group, i, arr) => (
+                  <FeedGroup
+                    key={`${group.name}-${i}`}
+                    group={group}
+                    onView={loadReport}
+                    isDark={isDark}
+                    isLast={i === Math.min(arr.length, 15) - 1}
+                  />
                 ))}
               </div>
             )}
@@ -560,7 +1254,7 @@ const DashboardPage = () => {
         </div>
 
       </div>
-    </div>
+    </main>
   );
 };
 

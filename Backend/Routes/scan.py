@@ -98,6 +98,10 @@ async def list_jobs(db: AsyncSession = Depends(get_db_session)):
     live_jobs = job_manager.all_jobs()
     for jid, live in live_jobs.items():
         result = live.get("result") or {}
+        # Normalise status to a plain string (Enum .value) so the
+        # frontend can simply compare === "completed" etc.
+        raw_status = live.get("status", "queued")
+        status_str = raw_status.value if hasattr(raw_status, "value") else str(raw_status)
         db_job_map[jid] = {
             "job_id":                jid,
             "repository_name":       live.get("repository_name"),
@@ -105,7 +109,7 @@ async def list_jobs(db: AsyncSession = Depends(get_db_session)):
             "repo_full_name":        live.get("repo_full_name"),
             "branch":                live.get("branch"),
             "s3_url":                live.get("s3_url"),
-            "status":                str(live.get("status", "queued")),
+            "status":                status_str,
             "progress":              live.get("progress", 0),
             "stage":                 live.get("stage", "queued"),
             "total_vulnerabilities": result.get("total_vulnerabilities"),
