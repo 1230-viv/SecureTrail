@@ -104,3 +104,61 @@ html.dark ::-webkit-scrollbar-thumb:hover {
 .animate-dash-draw {
   animation: dashDraw 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
+
+/* ── Dashboard-specific animations ─────────────────────────────────────────── */
+
+/* Floating background orbs */
+@keyframes float {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%      { transform: translate(30px, -20px) scale(1.05); }
+  66%      { transform: translate(-15px, 15px) scale(0.95); }
+}
+.animate-float {
+  animation: float 20s ease-in-out infinite;
+}
+.animate-float-delayed {
+  animation: float 25s ease-in-out 5s infinite;
+}
+
+/* Card hover micro-interaction */
+.card-hover {
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.25s ease;
+}
+.card-hover:hover {
+  transform: translateY(-2px);
+}
+
+/* Shimmer sweep for loading skeletons & accents */
+@keyframes shimmerSweep {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+.shimmer-sweep::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.04), transparent);
+  animation: shimmerSweep 2.5s ease-in-out infinite;
+}
+
+/* ═══ P5 — Accessibility: reduced motion ═══ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .animate-fade-in-up,
+  .stagger-children > *,
+  .animate-slide-down,
+  .animate-float,
+  .animate-float-delayed,
+  .card-hover,
+  .shimmer-sweep::after {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}

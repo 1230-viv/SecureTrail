@@ -1,46 +1,47 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Shield, Loader2, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
+import {
+  Shield, Loader2, CheckCircle2, XCircle, AlertTriangle,
+  Clock, Fingerprint, Eye,
+} from 'lucide-react';
 import { scanAPI } from '../services/api';
 import { useTheme } from '../context/ThemeContext';
 
-// Human-readable labels for each backend stage
+/* ── Stage labels ──────────────────────────────────────────────────────────── */
 const STAGE_LABELS = {
-  queued: 'Queued — waiting to start',
-  running: 'Initialising scan pipeline',
-  running_scanners: 'Running scanners (Semgrep · Trivy · Gitleaks)',
-  normalizing: 'Normalising findings',
-  scoring: 'Scoring exploitability',
-  correlating: 'Correlating vulnerabilities',
-  config_analysis: 'Analysing security configuration',
-  business_impact: 'Assessing business impact',
-  ai_analysis: 'Generating AI insights',
-  building_report: 'Building final report',
-  completed: 'Scan complete',
-  partial: 'Scan complete (with warnings)',
-  failed: 'Scan failed',
+  queued:            'Queued — waiting to start',
+  running:           'Initialising scan pipeline',
+  running_scanners:  'Running scanners',
+  normalizing:       'Normalising findings',
+  scoring:           'Scoring exploitability',
+  correlating:       'Correlating vulnerabilities',
+  config_analysis:   'Analysing security config',
+  business_impact:   'Assessing business impact',
+  ai_analysis:       'Generating AI insights',
+  building_report:   'Building final report',
+  completed:         'Scan complete',
+  partial:           'Complete (with warnings)',
+  failed:            'Scan failed',
 };
 
-// Progress milestone decorations shown in the progress track
+/* ── Milestones shown on the track ─────────────────────────────────────────── */
 const MILESTONES = [
-  { pct: 5,  label: 'Scanners' },
-  { pct: 30, label: 'Normalise' },
-  { pct: 55, label: 'Correlate' },
-  { pct: 75, label: 'Impact' },
-  { pct: 85, label: 'AI' },
-  { pct: 100, label: 'Done' },
+  { pct: 5,   label: 'Scan',      icon: Shield },
+  { pct: 30,  label: 'Normalise', icon: Fingerprint },
+  { pct: 55,  label: 'Correlate', icon: Eye },
+  { pct: 75,  label: 'Impact',    icon: AlertTriangle },
+  { pct: 85,  label: 'AI',        icon: Loader2 },
+  { pct: 100, label: 'Done',      icon: CheckCircle2 },
 ];
 
-const POLL_INTERVAL = 2000; // ms
+const SCANNERS = [
+  { name: 'Semgrep',  light: 'bg-violet-50 text-violet-700 border-violet-200', dark: 'bg-violet-500/10 text-violet-300 border-violet-500/20' },
+  { name: 'Trivy',    light: 'bg-blue-50 text-blue-700 border-blue-200',       dark: 'bg-blue-500/10 text-blue-300 border-blue-500/20' },
+  { name: 'Gitleaks', light: 'bg-rose-50 text-rose-700 border-rose-200',       dark: 'bg-rose-500/10 text-rose-300 border-rose-500/20' },
+];
 
-/**
- * ScanProgress
- *
- * Props
- *   jobId       : string  — job id to poll
- *   repoName    : string  — shown as scan target label
- *   onComplete  : (jobId) => void  — called when status is completed/partial
- *   onError     : (msg) => void    — called when status is failed
- */
+const POLL_INTERVAL = 2000;
+
+/* ── Component ─────────────────────────────────────────────────────────────── */
 const ScanProgress = ({ jobId, repoName, onComplete, onError }) => {
   const [progress, setProgress] = useState(0);
   const [stage, setStage]       = useState('queued');
@@ -51,7 +52,6 @@ const ScanProgress = ({ jobId, repoName, onComplete, onError }) => {
   const startedAt = useRef(Date.now());
   const { isDark } = useTheme();
 
-  // Elapsed-time ticker
   useEffect(() => {
     timerRef.current = setInterval(() => {
       setElapsed(Math.floor((Date.now() - startedAt.current) / 1000));
@@ -59,17 +59,14 @@ const ScanProgress = ({ jobId, repoName, onComplete, onError }) => {
     return () => clearInterval(timerRef.current);
   }, []);
 
-  // Polling loop
   useEffect(() => {
     if (!jobId) return;
-
     const poll = async () => {
       try {
         const { data } = await scanAPI.getStatus(jobId);
         setProgress(data.progress ?? 0);
         setStage(data.stage ?? 'running');
         setStatus(data.status);
-
         if (data.status === 'completed' || data.status === 'partial') {
           clearInterval(pollRef.current);
           clearInterval(timerRef.current);
@@ -80,12 +77,10 @@ const ScanProgress = ({ jobId, repoName, onComplete, onError }) => {
           onError?.(data.error || 'Scan failed');
         }
       } catch (err) {
-        // network blip — keep polling
         console.warn('Status poll error:', err.message);
       }
     };
-
-    poll(); // immediate first call
+    poll();
     pollRef.current = setInterval(poll, POLL_INTERVAL);
     return () => clearInterval(pollRef.current);
   }, [jobId, onComplete, onError]);
@@ -93,125 +88,178 @@ const ScanProgress = ({ jobId, repoName, onComplete, onError }) => {
   const isFailed = status === 'failed';
   const isDone   = status === 'completed' || status === 'partial';
 
-  const formatElapsed = (s) => {
-    if (s < 60) return `${s}s`;
-    return `${Math.floor(s / 60)}m ${s % 60}s`;
-  };
+  const fmtTime = (s) => (s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`);
+
+  /* Colour helpers */
+  const accentColor = isFailed ? 'red' : isDone ? 'emerald' : 'blue';
+
+  const ringBg = {
+    blue:    isDark ? 'bg-blue-500/10'    : 'bg-blue-50',
+    emerald: isDark ? 'bg-emerald-500/10' : 'bg-emerald-50',
+    red:     isDark ? 'bg-red-500/10'     : 'bg-red-50',
+  }[accentColor];
+
+  const iconCls = {
+    blue:    isDark ? 'text-blue-400'    : 'text-blue-600',
+    emerald: isDark ? 'text-emerald-400' : 'text-emerald-600',
+    red:     isDark ? 'text-red-400'     : 'text-red-600',
+  }[accentColor];
+
+  const barCls = {
+    blue: 'bg-gradient-to-r from-blue-500 to-blue-400',
+    emerald: 'bg-gradient-to-r from-emerald-500 to-emerald-400',
+    red: 'bg-gradient-to-r from-red-500 to-red-400',
+  }[accentColor];
 
   return (
-    <div className={`rounded-xl shadow-md p-8 max-w-2xl mx-auto
-      ${isDark ? 'bg-[#161929] border border-white/5' : 'bg-white'}`}>
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
-        <div className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0
-          ${isFailed
-            ? isDark ? 'bg-red-500/10' : 'bg-red-100'
-            : isDone
-              ? isDark ? 'bg-green-500/10' : 'bg-green-100'
-              : isDark ? 'bg-blue-500/10' : 'bg-blue-100'}`}>
-          {isFailed ? (
-            <XCircle className={isDark ? 'text-red-400' : 'text-red-600'} size={28} />
-          ) : isDone ? (
-            <CheckCircle2 className={isDark ? 'text-green-400' : 'text-green-600'} size={28} />
-          ) : (
-            <Loader2 className={`animate-spin ${isDark ? 'text-blue-400' : 'text-blue-600'}`} size={28} />
-          )}
-        </div>
-        <div>
-          <h2 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-gray-800'}`}>
-            {isFailed ? 'Scan Failed' : isDone ? 'Scan Complete' : 'Scanning Repository'}
-          </h2>
-          <p className={`text-sm truncate max-w-xs ${isDark ? 'text-slate-500' : 'text-gray-500'}`} title={repoName}>
-            {repoName || jobId}
-          </p>
-        </div>
-        <div className="ml-auto text-right">
-          <p className={`text-xs ${isDark ? 'text-slate-600' : 'text-gray-400'}`}>Elapsed</p>
-          <p className={`text-sm font-mono ${isDark ? 'text-slate-300' : 'text-gray-600'}`}>{formatElapsed(elapsed)}</p>
-        </div>
-      </div>
+    <div className="w-full max-w-2xl mx-auto animate-fade-in-up">
+      {/* ── Card ──────────────────────────────────────────────────────── */}
+      <div className={`rounded-2xl p-8 relative overflow-hidden
+        ${isDark ? 'bg-[#161929] border border-white/[0.06]' : 'bg-white border border-slate-100 shadow-lg shadow-slate-200/50'}`}>
 
-      {/* Progress bar */}
-      <div className="mb-2">
-        <div className={`flex justify-between text-sm mb-1 ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
-          <span>{STAGE_LABELS[stage] ?? stage}</span>
-          <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-700'}`}>{progress}%</span>
-        </div>
-        <div className={`w-full rounded-full h-4 overflow-hidden ${isDark ? 'bg-white/5' : 'bg-gray-100'}`}>
-          <div
-            className={`h-4 rounded-full transition-all duration-700 ease-out
-              ${isFailed ? 'bg-red-500' : isDone ? 'bg-green-500' : 'bg-blue-500'}`}
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-      </div>
+        {/* Decorative gradient orb behind icon */}
+        {!isFailed && !isDone && (
+          <div className="absolute -top-10 -left-10 w-40 h-40 rounded-full bg-blue-500/10 blur-3xl pointer-events-none" />
+        )}
 
-      {/* Milestone markers */}
-      <div className="relative flex justify-between mt-1 mb-6 px-0">
-        {MILESTONES.map((m) => {
-          const reached = progress >= m.pct;
-          return (
-            <div key={m.pct} className="flex flex-col items-center">
-              <div className={`w-2.5 h-2.5 rounded-full border-2
-                ${reached
-                  ? isFailed ? 'bg-red-400 border-red-400' : 'bg-blue-500 border-blue-500'
-                  : isDark ? 'bg-[#161929] border-white/20' : 'bg-white border-gray-300'
-                }`}
-              />
-              <span className={`text-[10px] mt-1 ${reached
-                ? isDark ? 'text-blue-400 font-medium' : 'text-blue-600 font-medium'
-                : isDark ? 'text-slate-600' : 'text-gray-400'}`}>
-                {m.label}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Scanner badges */}
-      <div className="flex gap-3 flex-wrap">
-        {[
-          { name: 'Semgrep', color: 'purple' },
-          { name: 'Trivy',   color: 'orange' },
-          { name: 'Gitleaks', color: 'red' },
-        ].map(({ name, color }) => {
-          const active = progress >= 5 && progress < 30;
-          return (
-            <div key={name}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border
-                ${active
-                  ? `bg-${color}-50 border-${color}-200 text-${color}-700`
-                  : progress >= 30
-                    ? isDark ? 'bg-green-500/10 border-green-500/20 text-green-400' : 'bg-green-50 border-green-200 text-green-700'
-                    : isDark ? 'bg-white/5 border-white/10 text-slate-500' : 'bg-gray-50 border-gray-200 text-gray-400'}`}
-            >
-              {active ? (
-                <Loader2 size={12} className="animate-spin" />
-              ) : progress >= 30 ? (
-                <CheckCircle2 size={12} />
+        {/* ── Top row: icon + heading + elapsed ──────── */}
+        <div className="flex items-center gap-4 mb-8 relative">
+          {/* Animated icon cluster */}
+          <div className="relative flex-shrink-0">
+            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${ringBg}`}>
+              {isFailed ? (
+                <XCircle className={iconCls} size={28} />
+              ) : isDone ? (
+                <CheckCircle2 className={iconCls} size={28} />
               ) : (
-                <Shield size={12} />
+                <Loader2 className={`animate-spin ${iconCls}`} size={28} />
               )}
-              {name}
             </div>
-          );
-        })}
-      </div>
+            {/* Pulse ring for active scanning */}
+            {!isFailed && !isDone && (
+              <div className="absolute inset-0 rounded-2xl border-2 border-blue-500/30 animate-pulse-ring" />
+            )}
+          </div>
 
-      {/* Status indicator for partial / warning */}
-      {status === 'partial' && (
-        <div className={`mt-4 flex items-center gap-2 text-sm border rounded-lg px-4 py-2
-          ${isDark
-            ? 'text-amber-400 bg-amber-500/10 border-amber-500/20'
-            : 'text-amber-700 bg-amber-50 border-amber-200'}`}>
-          <AlertTriangle size={16} />
-          Some scanners encountered errors. Results may be incomplete.
+          <div className="flex-1 min-w-0">
+            <h2 className={`text-xl font-bold tracking-tight
+              ${isDark ? 'text-white' : 'text-slate-900'}`}>
+              {isFailed ? 'Scan Failed' : isDone ? 'Scan Complete' : 'Scanning Repository'}
+            </h2>
+            <p className={`text-sm truncate max-w-md mt-0.5
+              ${isDark ? 'text-slate-500' : 'text-slate-400'}`} title={repoName}>
+              {repoName || jobId}
+            </p>
+          </div>
+
+          {/* Elapsed chip */}
+          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl flex-shrink-0
+            ${isDark ? 'bg-white/[0.04]' : 'bg-slate-50'}`}>
+            <Clock size={13} className={isDark ? 'text-slate-500' : 'text-slate-400'} />
+            <span className={`text-sm font-mono font-medium ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+              {fmtTime(elapsed)}
+            </span>
+          </div>
         </div>
-      )}
 
-      {/* Job ID chip */}
-      <div className="mt-4 text-right">
-        <span className={`text-xs font-mono ${isDark ? 'text-slate-600' : 'text-gray-400'}`}>Job: {jobId}</span>
+        {/* ── Stage label + percentage ────────────────── */}
+        <div className="flex items-baseline justify-between mb-2">
+          <span className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+            {STAGE_LABELS[stage] ?? stage}
+          </span>
+          <span className={`text-lg font-bold tabular-nums ${isDark ? 'text-white' : 'text-slate-800'}`}>
+            {progress}<span className={`text-xs font-normal ml-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>%</span>
+          </span>
+        </div>
+
+        {/* ── Progress bar ────────────────────────────── */}
+        <div className={`w-full rounded-full h-2.5 overflow-hidden mb-6
+          ${isDark ? 'bg-white/[0.06]' : 'bg-slate-100'}`}>
+          <div className={`h-2.5 rounded-full transition-all duration-700 ease-out relative ${barCls}`}
+               style={{ width: `${progress}%` }}>
+            {!isFailed && !isDone && <div className="absolute inset-0 rounded-full progress-shimmer" />}
+          </div>
+        </div>
+
+        {/* ── Milestone track ─────────────────────────── */}
+        <div className="relative mb-8">
+          {/* Connecting line */}
+          <div className={`absolute top-4 left-4 right-4 h-px
+            ${isDark ? 'bg-white/[0.06]' : 'bg-slate-100'}`} />
+
+          <div className="relative flex justify-between">
+            {MILESTONES.map((m) => {
+              const reached = progress >= m.pct;
+              const Icon = m.icon;
+              return (
+                <div key={m.pct} className="flex flex-col items-center relative z-10">
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all duration-500
+                    ${reached
+                      ? isFailed
+                        ? isDark ? 'bg-red-500/15 text-red-400' : 'bg-red-50 text-red-500'
+                        : isDark ? 'bg-blue-500/15 text-blue-400' : 'bg-blue-50 text-blue-600'
+                      : isDark ? 'bg-white/[0.04] text-slate-600' : 'bg-slate-50 text-slate-300'}`}>
+                    <Icon size={14} className={reached && !isFailed && m.pct > progress - 15 && !isDone ? 'animate-pulse' : ''} />
+                  </div>
+                  <span className={`text-[10px] mt-1.5 font-medium
+                    ${reached
+                      ? isDark ? 'text-slate-300' : 'text-slate-600'
+                      : isDark ? 'text-slate-600' : 'text-slate-300'}`}>
+                    {m.label}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ── Scanner badges ──────────────────────────── */}
+        <div className={`flex gap-2 flex-wrap pt-5 border-t
+          ${isDark ? 'border-white/[0.04]' : 'border-slate-50'}`}>
+          <span className={`text-[10px] font-bold uppercase tracking-[0.12em] self-center mr-1
+            ${isDark ? 'text-slate-600' : 'text-slate-300'}`}>Engines</span>
+          {SCANNERS.map(({ name, light, dark }) => {
+            const active   = progress >= 5 && progress < 30;
+            const finished = progress >= 30;
+            return (
+              <div key={name}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all duration-300
+                  ${finished
+                    ? isDark ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                    : active
+                      ? isDark ? dark : light
+                      : isDark ? 'bg-white/[0.03] border-white/[0.06] text-slate-600' : 'bg-slate-50 border-slate-100 text-slate-300'}`}
+              >
+                {active ? (
+                  <Loader2 size={12} className="animate-spin" />
+                ) : finished ? (
+                  <CheckCircle2 size={12} />
+                ) : (
+                  <Shield size={12} />
+                )}
+                {name}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Partial warning */}
+        {status === 'partial' && (
+          <div className={`mt-5 flex items-center gap-2 text-sm rounded-xl px-4 py-3
+            ${isDark
+              ? 'text-amber-300 bg-amber-500/10 border border-amber-500/20'
+              : 'text-amber-700 bg-amber-50 border border-amber-200'}`}>
+            <AlertTriangle size={15} />
+            Some scanners had warnings. Results may be incomplete.
+          </div>
+        )}
+
+        {/* Job ID */}
+        <div className="mt-5 text-right">
+          <span className={`text-[10px] font-mono ${isDark ? 'text-slate-700' : 'text-slate-300'}`}>
+            {jobId}
+          </span>
+        </div>
       </div>
     </div>
   );

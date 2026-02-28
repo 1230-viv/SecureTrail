@@ -1,0 +1,936 @@
+{
+  "ux_audit": {
+    "heuristics": [
+      {
+        "id": "H1",
+        "heuristic": "Visibility of system status",
+        "element": "Security Posture gauge: 0/100, At Risk",
+        "issue": "Score of 0 with 'At Risk' label and red arc conveys pure danger with no trend, no delta, and no guidance. Users cannot tell if they are improving or degrading. The gauge arc calculates fill via a semicircle but shows no sparkline or previous-score comparison.",
+        "severity": "High"
+      },
+      {
+        "id": "H2",
+        "heuristic": "Match between system and the real world",
+        "element": "Live Feed: 12 repeated 'sparktrack-mini-master — 28 High' rows",
+        "issue": "Identical entries are not grouped. Scanning the same repo multiple times produces a wall of duplicates. Users lose information scent — the feed feels broken, not informative. No deduplication or 'show N more similar' pattern.",
+        "severity": "High"
+      },
+      {
+        "id": "H3",
+        "heuristic": "Recognition rather than recall",
+        "element": "MetricTile cards (Total Scans, Critical, High Risk, Clean Scans)",
+        "issue": "Numbers without context: '13 Total Scans' and '0 Critical' are facts but not actionable. No micro-copy like 'All clear — keep scanning!' or 'Fix 3 criticals before your next commit.' Students need guided interpretation, not raw counters.",
+        "severity": "Medium"
+      },
+      {
+        "id": "H4",
+        "heuristic": "Aesthetic and minimalist design",
+        "element": "Row 3 — bar chart blank space below legend",
+        "issue": "Screenshot shows Scan Analytics bar chart occupying 7 cols but the area below the chart legend to the card bottom is empty white. ~120 px of wasted vertical space. The chart height is fixed at 240 px regardless of actual data range.",
+        "severity": "Low"
+      },
+      {
+        "id": "H5",
+        "heuristic": "Help users recognize, diagnose, and recover from errors",
+        "element": "Empty states ('No findings recorded', 'Run a scan to see trends')",
+        "issue": "Empty states show a muted icon + 1-line text, but lack a primary CTA button. Only the bar chart empty state has 'Run your first scan →' as a text link. The gauge, area chart, and severity matrix empty states are dead ends.",
+        "severity": "Medium"
+      },
+      {
+        "id": "H6",
+        "heuristic": "Flexibility and efficiency of use",
+        "element": "No keyboard shortcuts or quick-action panel",
+        "issue": "Power users cannot press 'N' for new scan or 'R' to refresh. No command palette. Students who are keyboard-oriented (terminal users) get no accelerators.",
+        "severity": "Low"
+      }
+    ],
+    "accessibility_issues": [
+      {
+        "id": "A1",
+        "element": "HealthGauge SVG arc",
+        "issue": "SVG <text> elements for score and '/100' have no aria-label or role='img'. Screen readers will read raw text nodes out of context. The arc color encodes status (green/yellow/red) with no text alternative beyond the status label below.",
+        "wcag": "1.1.1 Non-text Content, 1.4.1 Use of Color",
+        "fix": "Add role='img' and aria-label='Security posture score {score} out of 100, status {status}' to the <svg>. Add aria-hidden='true' to decorative glow div."
+      },
+      {
+        "id": "A2",
+        "element": "MetricTile animated counter (useAnimatedValue)",
+        "issue": "Counter animates from 0 to target over 900ms. Users with vestibular disorders may find rapid number changes disorienting. No prefers-reduced-motion check.",
+        "wcag": "2.3.3 Animation from Interactions",
+        "fix": "Wrap requestAnimationFrame in a `matchMedia('(prefers-reduced-motion: reduce)')` check; if true, set value instantly."
+      },
+      {
+        "id": "A3",
+        "element": "TimelineRow click handler",
+        "issue": "div with onClick but no role='button', no tabIndex, no onKeyDown for Enter/Space. Entire row is not keyboard-focusable.",
+        "wcag": "2.1.1 Keyboard",
+        "fix": "Add role='button' tabIndex={0} onKeyDown handler, or switch to <button> element."
+      },
+      {
+        "id": "A4",
+        "element": "Color contrast — text-[10px] labels on light bg",
+        "issue": "Labels like 'text-slate-400' (#94a3b8) on white (#ffffff) background yield contrast ratio ~2.9:1, below WCAG AA minimum of 4.5:1 for small text.",
+        "wcag": "1.4.3 Contrast (Minimum)",
+        "fix": "Upgrade label color to text-slate-500 (#64748b) which achieves ~4.6:1 on white."
+      },
+      {
+        "id": "A5",
+        "element": "Live Feed scroll container",
+        "issue": "max-h-[340px] overflow-y-auto div has no aria-label or landmark. Screen reader users land in an unlabeled scrollable region. No aria-live for new entries.",
+        "wcag": "1.3.1 Info and Relationships, 4.1.3 Status Messages",
+        "fix": "Add role='feed' aria-label='Recent scan activity' and aria-live='polite' for dynamic updates."
+      }
+    ],
+    "performance_issues": [
+      {
+        "id": "PERF1",
+        "element": "recharts bundle (AreaChart + BarChart + PieChart)",
+        "issue": "All three chart types are eagerly imported. recharts is ~220KB gzipped. Dashboard loads all chart code before first paint even when user has zero scans.",
+        "fix": "React.lazy() + Suspense for chart containers. Show skeleton placeholders during load."
+      },
+      {
+        "id": "PERF2",
+        "element": "Floating ambient orbs (3 fixed divs with radial-gradient + animate-float)",
+        "issue": "Three 450px/360px/288px fixed-position divs with CSS animations run continuously. On low-end devices, these trigger compositing layers and GPU memory for purely decorative effect.",
+        "fix": "Use will-change: transform on orbs, add prefers-reduced-motion media query to disable animation, and consider removing on mobile viewports via Tailwind responsive classes."
+      },
+      {
+        "id": "PERF3",
+        "element": "fetchJobs on every mount",
+        "issue": "No SWR/cache layer. Navigating away and back refetches all jobs. No stale-while-revalidate pattern. Perceived slowness during loading spinner.",
+        "fix": "Add 30s cache with stale-while-revalidate. Show previous data instantly, refresh in background. Use an optimistic loading pattern — render skeleton then swap."
+      }
+    ],
+    "opportunities": [
+      "Add 'Top 3 Actions' hero card — prioritize the most critical unfixed vulnerabilities with direct 'View Details' links.",
+      "Group duplicate Live Feed entries — collapse repeated scans into 'sparktrack-mini-master × 8' with expand.",
+      "Add learning tips in Student Mode — each card gets a collapsible '💡 What does this mean?' section.",
+      "Integrate trend sparkline into the gauge card — show last 5 scores as a tiny line.",
+      "Add keyboard shortcut hints in tooltip for Refresh (R) and New Scan (N).",
+      "Progressive disclosure — show simplified view in Student Mode, full analytics in Pro Mode.",
+      "Add confetti or success animation when Clean Scans increases.",
+      "Implement skeleton loading states for each card instead of a single centered spinner."
+    ]
+  },
+  "prioritized_problems": [
+    {
+      "id": "P1",
+      "title": "Security Posture gauge is non-actionable and alarming",
+      "description": "The gauge shows raw score (e.g., 0/100 At Risk) with no trend, no delta from last scan, no guidance text, and no CTA. Red color with 'At Risk' creates anxiety without showing a path forward. Zero-state shows '—' with no explanation.",
+      "impact": "High",
+      "cost": "Medium",
+      "why": "The gauge is the hero element (top-left). It sets the emotional tone of the entire dashboard. A non-actionable danger signal without next steps creates learned helplessness in students."
+    },
+    {
+      "id": "P2",
+      "title": "Live Feed displays duplicate entries with no grouping",
+      "description": "Scanning the same repo repeatedly creates identical rows ('sparktrack-mini-master — 28 High' × 10). No deduplication, no collapsing, no 'show more' pattern. Feed becomes noise rather than signal.",
+      "impact": "High",
+      "cost": "Low",
+      "why": "Information scent is destroyed. Users cannot find novel events. Cognitive load increases as they scan identical rows. Feed loses its core value — surfacing what changed."
+    },
+    {
+      "id": "P3",
+      "title": "No 'Next Best Action' recommendation anywhere",
+      "description": "Dashboard shows numbers but never tells the user what to do next. No 'Fix these 3 critical issues', no 'Your last scan found 28 high — review them', no prioritized action list.",
+      "impact": "High",
+      "cost": "Medium",
+      "why": "Students need guidance, not just data. Without a clear next step, users view the dashboard passively and leave. Conversion to 'click through to fix' drops."
+    },
+    {
+      "id": "P4",
+      "title": "No Student Mode differentiation on dashboard",
+      "description": "isStudentMode is available from ThemeContext but the dashboard renders identically in both modes. No learning tips, no simplified explanations, no educational callouts.",
+      "impact": "Medium",
+      "cost": "Medium",
+      "why": "The Student Mode toggle exists in the sidebar but has zero effect on the dashboard. Students expect simplified language and learning support. The toggle feels broken."
+    },
+    {
+      "id": "P5",
+      "title": "Accessibility gaps — keyboard, contrast, screen reader",
+      "description": "TimelineRow uses div+onClick without keyboard support. SVG gauge lacks aria-labels. Small text labels fail WCAG AA contrast. No aria-live for dynamic feed updates. Animated counters ignore prefers-reduced-motion.",
+      "impact": "High",
+      "cost": "Low",
+      "why": "Accessibility is non-negotiable for a student platform. Screen reader users cannot navigate the feed. Keyboard-only users cannot interact with scan rows. Color-only status encoding excludes colorblind users."
+    },
+    {
+      "id": "P6",
+      "title": "Loading state is a single spinner — no skeleton or progressive render",
+      "description": "The entire dashboard shows a centered Loader2 spinner until all data loads. No skeleton placeholders, no progressive render of layout, no cached data shown while refreshing.",
+      "impact": "Medium",
+      "cost": "Low",
+      "why": "Perceived performance suffers. Users see a blank screen with a spinner, then a sudden full-page render. Skeleton screens reduce perceived wait time by ~40% (research by Viget Labs)."
+    }
+  ],
+  "design_solutions": {
+    "P1": {
+      "quick_win": {
+        "description": "Add trend delta indicator and one-line guidance text to existing HealthGauge",
+        "changes": [
+          "Calculate delta = current score - previous score. Show '↑ 5 pts' or '↓ 3 pts' badge next to status label.",
+          "Add guidance copy below: score >= 75 → 'Looking good — keep scanning regularly.' | score >= 50 → 'Review medium-severity findings to improve.' | score < 50 → 'Focus on fixing critical issues first.'",
+          "Zero state: 'Run your first scan to get a score' with a CTA button."
+        ],
+        "effort": "0.5 developer days",
+        "tailwind_snippet": "/* Trend badge */ <span className='ml-2 text-xs font-bold px-2 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-400'>↑ 5</span>\n/* Guidance */ <p className='text-[11px] text-center mt-2 max-w-[240px]'>Review medium-severity findings to improve your score.</p>"
+      },
+      "recommended": {
+        "description": "Full redesign: HealthGauge with sparkline history, animated arc, contextual guidance, and zero-state CTA",
+        "changes": [
+          "Add a tiny 5-point sparkline (last 5 scores) below the arc using a lightweight SVG polyline.",
+          "Show trend badge with delta value and direction arrow.",
+          "Add contextual action link: 'View 3 critical issues →' when score is low.",
+          "Zero state: illustration-style empty state with 'Your security journey starts here' and primary 'Run First Scan' button.",
+          "Aria-label on SVG: 'Security posture score {score} out of 100, {status}. Trend: {delta} points {direction} from last scan.'",
+          "Animate arc fill on mount with CSS stroke-dashoffset, respect prefers-reduced-motion."
+        ],
+        "effort": "2 developer days",
+        "component_props": {
+          "score": "number | null",
+          "previousScore": "number | null",
+          "scoreHistory": "number[] (last 5)",
+          "topAction": "{ label: string, jobId: string } | null",
+          "isDark": "boolean",
+          "isStudentMode": "boolean"
+        }
+      },
+      "stretch": {
+        "description": "Animated 3D-style gauge with needle, glow effect, and real-time score updates via WebSocket",
+        "effort": "5 developer days",
+        "tradeoff": "High visual impact but adds complexity. Requires WebSocket integration for live score updates. May be distracting for daily use."
+      }
+    },
+    "P2": {
+      "quick_win": {
+        "description": "Deduplicate consecutive entries by repository name in the feed",
+        "changes": [
+          "Group consecutive jobs with same repository_name into a single row showing 'sparktrack-mini-master × 8 scans' with latest timestamp and worst severity badge.",
+          "Add 'expand' toggle to show individual entries."
+        ],
+        "effort": "0.5 developer days"
+      },
+      "recommended": {
+        "description": "Smart feed with grouping, time headers, and severity-keyed highlights",
+        "changes": [
+          "Group by repository + day. Show time section headers ('Today', 'Yesterday').",
+          "Each group shows latest result + count. Click expands full list.",
+          "Highlight novel events (new repo scanned for first time, score changed significantly).",
+          "Add subtle pulse animation on the most recent entry.",
+          "Limit visible feed to 10 grouped entries with 'Show earlier' button."
+        ],
+        "effort": "2 developer days"
+      },
+      "stretch": {
+        "description": "Real-time feed with WebSocket push, auto-scroll, and notification badges",
+        "effort": "4 developer days",
+        "tradeoff": "Requires backend WebSocket support. Best for continuous monitoring use case, not student one-shot scans."
+      }
+    },
+    "P3": {
+      "quick_win": {
+        "description": "Add a 'Top Actions' banner above the charts showing up to 3 critical/high findings with direct links",
+        "changes": [
+          "Parse most recent completed scan. Extract top 3 critical/high findings.",
+          "Render as a horizontal card: 'Your top priorities: 3 critical findings in sparktrack-mini-master — Review now →'",
+          "Dismiss button stores preference in localStorage."
+        ],
+        "effort": "1 developer day"
+      },
+      "recommended": {
+        "description": "Dedicated 'Recommended Actions' card in Row 1 replacing one metric tile on large screens",
+        "changes": [
+          "On lg screens, replace the 4th metric tile (Clean Scans) with a smart action card.",
+          "Show up to 3 prioritized actions: 'Fix 5 critical issues', 'Review 28 high findings', 'Re-scan repo from 3 days ago'.",
+          "Each action is a clickable row that navigates to the relevant results page.",
+          "When all actions are clear, show a success state: '✨ All clear — no urgent actions.'",
+          "Student Mode: add explanatory text like 'Critical issues can be exploited immediately.'"
+        ],
+        "effort": "2 developer days"
+      },
+      "stretch": {
+        "description": "AI-powered action prioritization using the explanation engine to rank next steps",
+        "effort": "5 developer days",
+        "tradeoff": "Requires backend integration with the AI explanation engine to generate personalized next steps. High value but complex."
+      }
+    },
+    "P4": {
+      "quick_win": {
+        "description": "Add collapsible learning tips to each card in Student Mode",
+        "changes": [
+          "When isStudentMode is true, show a small 'Learn more' toggle below each card header.",
+          "Clicking reveals a 2-line explanation: 'Critical findings are vulnerabilities that can be exploited immediately with public tools.'",
+          "Use animate-slide-down for smooth expand."
+        ],
+        "effort": "1 developer day"
+      },
+      "recommended": {
+        "description": "Student Mode transforms the dashboard: simplified labels, learning sidebars, contextual tooltips",
+        "changes": [
+          "Swap technical labels for student-friendly ones: 'Critical' → 'Urgent Fixes', 'High Risk' → 'Important Issues'.",
+          "Add tooltip on hover explaining each metric.",
+          "Show a 'Security 101' callout card in empty state with links to learning resources.",
+          "Simplify chart legends with plain English: 'Most dangerous' instead of 'Critical'."
+        ],
+        "effort": "3 developer days"
+      },
+      "stretch": {
+        "description": "Interactive tutorial overlay on first dashboard visit in Student Mode",
+        "effort": "4 developer days",
+        "tradeoff": "Great for onboarding but requires state management for tutorial progress. May annoy returning users if not properly dismissed."
+      }
+    },
+    "P5": {
+      "quick_win": {
+        "description": "Fix keyboard navigation and aria labels for interactive elements",
+        "changes": [
+          "TimelineRow: change outer div to button, add aria-label='View scan results for {repo} from {time}'.",
+          "HealthGauge SVG: add role='img' aria-label='Security score {score} out of 100'.",
+          "useAnimatedValue: check prefers-reduced-motion, skip animation if true.",
+          "Upgrade text-slate-400 labels to text-slate-500 on light backgrounds for contrast."
+        ],
+        "effort": "0.5 developer days"
+      },
+      "recommended": {
+        "description": "Full WCAG 2.1 AA compliance pass with semantic landmarks and live regions",
+        "changes": [
+          "Wrap dashboard in <main> with aria-label='Security Dashboard'.",
+          "Add role='feed' and aria-live='polite' to Live Feed container.",
+          "Mark all decorative orbs and glows with aria-hidden='true'.",
+          "Add skip-to-content link for keyboard users.",
+          "Test with NVDA/VoiceOver and fix any announcement issues."
+        ],
+        "effort": "2 developer days"
+      },
+      "stretch": {
+        "description": "Full WCAG 2.1 AAA compliance with high-contrast mode toggle and screen reader optimization",
+        "effort": "5 developer days",
+        "tradeoff": "AAA is aspirational for most products. Focus on AA first, then consider AAA for specific elements."
+      }
+    },
+    "P6": {
+      "quick_win": {
+        "description": "Replace spinner with skeleton grid matching the dashboard layout",
+        "changes": [
+          "Instead of centered Loader2, render the full grid layout with skeleton placeholders.",
+          "Use animate-pulse on placeholder blocks that match exact card dimensions.",
+          "Keep exact same grid (gauge + 4 cards + charts + feed) with gray shimmer blocks."
+        ],
+        "effort": "0.5 developer days"
+      },
+      "recommended": {
+        "description": "Progressive render with cached data + skeleton fallback",
+        "changes": [
+          "Cache last jobs data in sessionStorage. On mount, show cached data immediately.",
+          "Overlay a subtle refresh indicator (thin progress bar at top of dashboard).",
+          "Use React.lazy for chart components with Suspense fallback skeletons.",
+          "Each card independently transitions from skeleton → real data."
+        ],
+        "effort": "2 developer days"
+      },
+      "stretch": {
+        "description": "Service worker caching with offline dashboard support",
+        "effort": "4 developer days",
+        "tradeoff": "Enables offline viewing but adds significant complexity. PWA support required."
+      }
+    }
+  },
+  "component_specs": {
+    "security_posture_card": {
+      "props": {
+        "score": "number | null — weighted security score 0-100",
+        "previousScore": "number | null — score from previous batch for delta",
+        "scoreHistory": "number[] — last 5 scores for sparkline",
+        "topAction": "{ label: string, jobId: string, severity: string } | null",
+        "isDark": "boolean",
+        "isStudentMode": "boolean"
+      },
+      "markup": "<div role='region' aria-label='Security Posture' class='rounded-2xl border p-6 h-full relative overflow-hidden {cardBg} {border}'><svg role='img' aria-label='Security score {score} out of 100, {status}'><!-- semicircular arc --></svg><div class='flex items-center gap-2 mt-1'><span class='w-2 h-2 rounded-full' /><span class='font-bold'>{status}</span>{delta && <span class='text-xs font-bold ml-2 px-2 py-0.5 rounded-lg'>{deltaIcon} {delta}</span>}</div><p class='text-xs mt-2'>{guidance}</p>{topAction && <button class='mt-3 text-xs font-bold text-indigo-400'>View {topAction.label} →</button>}</div>",
+      "tailwind": [
+        "rounded-2xl border p-6 h-full flex flex-col items-center justify-center relative overflow-hidden",
+        "Dark: bg-[#13162a] border-white/[0.06]",
+        "Light: bg-white border-slate-100 shadow-sm",
+        "Score text: text-3xl font-black tabular-nums",
+        "Label: text-[10px] font-bold uppercase tracking-[0.2em]",
+        "Trend badge: px-2 py-0.5 rounded-lg text-xs font-bold",
+        "Guidance: text-[11px] text-center mt-2 leading-relaxed max-w-[240px]"
+      ],
+      "aria": {
+        "svg_role": "img",
+        "svg_aria_label": "Security posture score {score} out of 100, status: {status}",
+        "decorative_glow": "aria-hidden='true'",
+        "region_wrapper": "role='region' aria-label='Security Posture'"
+      },
+      "states": {
+        "loading": "Skeleton placeholder with pulse animation",
+        "empty": "score=null → '—' score, 'No data' status, CTA: 'Run your first scan'",
+        "healthy": "score>=75 → green arc, 'Healthy' status, positive guidance",
+        "moderate": "score 50-74 → yellow arc, 'Moderate' status, improvement guidance",
+        "at_risk": "score <50 → red arc, 'At Risk' status, urgency guidance + top action link"
+      }
+    },
+    "action_card": {
+      "props": {
+        "actions": "Array<{ label: string, severity: string, jobId: string, count: number }>",
+        "isDark": "boolean",
+        "isStudentMode": "boolean",
+        "onNavigate": "(jobId: string) => void"
+      },
+      "markup": "<div role='region' aria-label='Recommended actions' class='rounded-2xl border p-5 {cardBg} {border}'><header class='flex items-center gap-2 mb-3'><Target icon /><h3>Next Steps</h3></header>{actions.length === 0 ? <EmptySuccess /> : <ul role='list'>{actions.map(a => <li role='listitem'><button onClick={onNavigate(a.jobId)}>Fix {a.count} {a.severity} in {a.label}</button></li>)}</ul>}{isStudentMode && <details><summary>💡 What should I fix first?</summary><p>Start with Critical issues...</p></details>}</div>",
+      "tailwind": [
+        "rounded-2xl border p-5 flex flex-col gap-2",
+        "Action row: flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/5 cursor-pointer transition-colors",
+        "Severity dot: w-2 h-2 rounded-full",
+        "Empty success: text-emerald-400 text-sm font-bold"
+      ],
+      "aria": {
+        "container": "role='region' aria-label='Recommended actions'",
+        "list": "role='list'",
+        "items": "role='listitem'",
+        "action_button": "aria-label='View {count} {severity} findings in {repoName}'"
+      },
+      "states": {
+        "has_actions": "Show up to 3 prioritized action rows",
+        "all_clear": "Show '✨ All clear — no urgent actions' with success icon",
+        "student_mode": "Show additional collapsed learning tip"
+      }
+    },
+    "grouped_feed_item": {
+      "props": {
+        "repoName": "string",
+        "scanCount": "number",
+        "latestTimestamp": "string",
+        "worstSeverity": "{ label: string, color: string }",
+        "isDark": "boolean",
+        "isExpanded": "boolean",
+        "onToggle": "() => void",
+        "onViewScan": "(jobId: string) => void"
+      },
+      "markup": "<div role='button' tabIndex={0} aria-expanded={isExpanded} aria-label='{repoName}, {scanCount} scans, worst: {worstSeverity.label}'><div class='flex items-center gap-3 px-5 py-3'><TimelineDot /><span>{repoName}</span>{scanCount > 1 && <span class='badge'>×{scanCount}</span>}<span>{relativeTime}</span><SeverityBadge /></div>{isExpanded && <div role='list' class='animate-slide-down pl-10'><!-- individual scan rows --></div>}</div>",
+      "tailwind": [
+        "Outer: flex items-start gap-3 px-5 py-3 transition-colors cursor-pointer",
+        "Group badge: text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-500/10 text-slate-400",
+        "Expanded list: pl-10 animate-slide-down",
+        "Focus ring: focus-visible:ring-2 focus-visible:ring-indigo-500/50 focus-visible:outline-none rounded-lg"
+      ],
+      "aria": {
+        "role": "button",
+        "tabIndex": 0,
+        "aria_expanded": "true | false",
+        "aria_label": "{repoName}, {scanCount} scans, worst severity: {worstSeverity.label}",
+        "keyboard": "Enter/Space toggles expand, items inside linked with role='list'"
+      }
+    },
+    "skeleton_dashboard": {
+      "props": {
+        "isDark": "boolean"
+      },
+      "markup": "<div class='grid grid-cols-12 gap-4'><div class='col-span-3 h-[260px] rounded-2xl animate-pulse {skeletonBg}' /><div class='col-span-9 grid grid-cols-4 gap-4'>{[1,2,3,4].map(i => <div class='h-[120px] rounded-2xl animate-pulse {skeletonBg}' />)}</div><div class='col-span-7 h-[340px] rounded-2xl animate-pulse {skeletonBg}' /><div class='col-span-5 h-[340px] rounded-2xl animate-pulse {skeletonBg}' /></div>",
+      "tailwind": [
+        "Dark skeleton: bg-[#13162a]/60",
+        "Light skeleton: bg-slate-100",
+        "Pulse: animate-pulse",
+        "Shimmer: add shimmer-sweep after class for directional shine"
+      ]
+    }
+  },
+  "micro_interactions": [
+    {
+      "element": "HealthGauge arc fill",
+      "animation": "stroke-dashoffset from full to target",
+      "duration": "1200ms",
+      "easing": "cubic-bezier(0.4, 0, 0.2, 1)",
+      "trigger": "On mount / score change",
+      "reduced_motion": "Skip animation, set final value instantly",
+      "css": ".animate-dash-draw { animation: dashDraw 1.2s cubic-bezier(0.4, 0, 0.2, 1) both; } @media (prefers-reduced-motion: reduce) { .animate-dash-draw { animation: none; } }"
+    },
+    {
+      "element": "MetricTile counter",
+      "animation": "Count from 0 to target value",
+      "duration": "900ms",
+      "easing": "ease-out cubic (1 - (1-t)^3)",
+      "trigger": "On mount / value change",
+      "reduced_motion": "Set value instantly without animation",
+      "implementation": "In useAnimatedValue hook, check window.matchMedia('(prefers-reduced-motion: reduce)').matches before starting rAF loop"
+    },
+    {
+      "element": "Card hover lift",
+      "animation": "translateY(-2px) + shadow increase",
+      "duration": "250ms",
+      "easing": "cubic-bezier(0.16, 1, 0.3, 1)",
+      "trigger": "Mouse hover",
+      "reduced_motion": "Keep shadow change, disable transform",
+      "css": ".card-hover { transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease; } .card-hover:hover { transform: translateY(-2px); } @media (prefers-reduced-motion: reduce) { .card-hover:hover { transform: none; } }"
+    },
+    {
+      "element": "Section entrance (fadeInUp)",
+      "animation": "opacity 0→1, translateY 16px→0",
+      "duration": "500ms",
+      "easing": "cubic-bezier(0.16, 1, 0.3, 1)",
+      "trigger": "On mount, staggered by index",
+      "reduced_motion": "Set opacity to 1 immediately, no transform",
+      "css": "@media (prefers-reduced-motion: reduce) { .animate-fade-in-up { animation: none; opacity: 1; } .stagger-children > * { animation: none; opacity: 1; } }"
+    },
+    {
+      "element": "Severity bars width",
+      "animation": "width from 0% to target%",
+      "duration": "1000ms",
+      "easing": "ease-out",
+      "trigger": "On mount",
+      "reduced_motion": "Set final width instantly"
+    },
+    {
+      "element": "Learning tip expand",
+      "animation": "slideDown — opacity 0→1, max-height 0→auto",
+      "duration": "350ms",
+      "easing": "cubic-bezier(0.16, 1, 0.3, 1)",
+      "trigger": "Click on 'Learn more' toggle",
+      "reduced_motion": "Instant show/hide without animation"
+    },
+    {
+      "element": "Feed new entry pulse",
+      "animation": "Border-left glow pulse 2 cycles",
+      "duration": "600ms per cycle",
+      "easing": "ease-in-out",
+      "trigger": "When a new scan completes and appears in feed",
+      "reduced_motion": "Static border highlight, no pulse"
+    },
+    {
+      "element": "Floating background orbs",
+      "animation": "translate + scale oscillation",
+      "duration": "20-25s infinite",
+      "easing": "ease-in-out",
+      "trigger": "Always running",
+      "reduced_motion": "Disable entirely — set animation: none",
+      "css": "@media (prefers-reduced-motion: reduce) { .animate-float, .animate-float-delayed { animation: none; } }"
+    }
+  ],
+  "accessibility_checklist": [
+    {
+      "id": "AC1",
+      "category": "Color Contrast",
+      "requirement": "All text meets WCAG 2.1 AA minimum — 4.5:1 for normal text, 3:1 for large text",
+      "status": "FAIL",
+      "fix": "Light mode: upgrade label classes from text-slate-400 to text-slate-500. Dark mode: ensure text-slate-400 on bg-[#13162a] achieves 4.5:1.",
+      "acceptance_test": "Run axe-core on dashboard page. Zero contrast violations."
+    },
+    {
+      "id": "AC2",
+      "category": "Keyboard Navigation",
+      "requirement": "All interactive elements reachable and operable via Tab, Enter, Space",
+      "status": "FAIL",
+      "fix": "TimelineRow: use <button> or add role='button' tabIndex={0} onKeyDown. All buttons must have visible focus ring.",
+      "acceptance_test": "Tab through entire dashboard. Every interactive element receives visible focus. Enter/Space activates all clickable elements."
+    },
+    {
+      "id": "AC3",
+      "category": "Semantic Landmarks",
+      "requirement": "Page uses proper landmark roles — main, navigation, region",
+      "status": "FAIL",
+      "fix": "Wrap dashboard content in <main aria-label='Security Dashboard'>. Use role='region' for each card section.",
+      "acceptance_test": "Screen reader landmark navigation lists: main, feed region, each chart section."
+    },
+    {
+      "id": "AC4",
+      "category": "Screen Reader Labels",
+      "requirement": "All non-text content has text alternatives. SVG charts have descriptive labels.",
+      "status": "FAIL",
+      "fix": "HealthGauge SVG: role='img' aria-label='Score {score}'. Charts: add <desc> elements. Decorative orbs: aria-hidden='true'.",
+      "acceptance_test": "NVDA/VoiceOver correctly announces score, chart purpose, and card values."
+    },
+    {
+      "id": "AC5",
+      "category": "Live Regions",
+      "requirement": "Dynamic content updates announced to screen readers",
+      "status": "FAIL",
+      "fix": "Feed container: aria-live='polite'. Score update: aria-live='polite' on the score text element. Refresh button: aria-label='Refresh dashboard data'.",
+      "acceptance_test": "After clicking Refresh, screen reader announces 'Dashboard data updated' or new count."
+    },
+    {
+      "id": "AC6",
+      "category": "Reduced Motion",
+      "requirement": "Animations respect prefers-reduced-motion media query",
+      "status": "FAIL",
+      "fix": "Add @media (prefers-reduced-motion: reduce) rules to disable fadeInUp, float, dashDraw, counter animation, card-hover transform.",
+      "acceptance_test": "With prefers-reduced-motion enabled, no elements animate. Content appears instantly."
+    },
+    {
+      "id": "AC7",
+      "category": "Focus Management",
+      "requirement": "Focus is managed during dynamic updates (loading → loaded transition)",
+      "status": "FAIL",
+      "fix": "After loading completes, move focus to the h1 'Command Center' heading. On skeleton→content transition, maintain focus position.",
+      "acceptance_test": "Loading completes, screen reader announces page heading. Focus is not lost."
+    }
+  ],
+  "performance_plan": {
+    "perceived_speed": [
+      {
+        "tactic": "Skeleton dashboard during loading",
+        "description": "Replace centered spinner with full-layout skeleton grid. Match exact card positions with pulse placeholders.",
+        "priority": 1,
+        "effort": "0.5 days"
+      },
+      {
+        "tactic": "Cache last response in sessionStorage",
+        "description": "On successful fetch, store jobs array with timestamp in sessionStorage. On next mount, render cached data instantly, fetch fresh data in background. Show subtle 'Updating...' indicator.",
+        "priority": 2,
+        "effort": "0.5 days"
+      },
+      {
+        "tactic": "Lazy-load chart components",
+        "description": "Use React.lazy() + Suspense for recharts AreaChart, BarChart, PieChart containers. Show chart-shaped skeleton during load. Reduces initial JS bundle by ~220KB.",
+        "priority": 3,
+        "effort": "1 day"
+      }
+    ],
+    "caching": [
+      {
+        "tactic": "AI explanation cache by MD5 hash",
+        "description": "Hash the vulnerability snippet before sending to AI engine. If hash exists in localStorage, use cached explanation. Expires after 7 days.",
+        "priority": 2,
+        "effort": "1 day"
+      },
+      {
+        "tactic": "Stale-while-revalidate for jobs list",
+        "description": "Show cached data immediately, update in background. Use a 30-second cache window. After 30s, show loading indicator alongside stale data.",
+        "priority": 1,
+        "effort": "0.5 days"
+      }
+    ],
+    "concurrency": [
+      {
+        "tactic": "Limit AI enrichments shown per page",
+        "description": "Only load AI explanations for the first 5 visible vulnerabilities. Load more on scroll or expand. Reduces concurrent Bedrock API calls.",
+        "priority": 1,
+        "effort": "0.5 days"
+      }
+    ],
+    "prioritized_tasks": [
+      "1. Skeleton dashboard (0.5 days) — biggest perceived speed improvement",
+      "2. Session cache with stale-while-revalidate (0.5 days) — instant second visit",
+      "3. Lazy-load recharts (1 day) — reduces bundle size",
+      "4. AI cache by hash (1 day) — prevents redundant API calls",
+      "5. Limit AI enrichments per page (0.5 days) — backend cost control"
+    ]
+  },
+  "ia_and_content": {
+    "layout_proposal": [
+      {
+        "position": "Hero / Top-left (col 1-3)",
+        "component": "HealthGauge with trend + guidance",
+        "rationale": "Sets emotional context. Users scan top-left first (F-pattern). Gauge with actionable guidance replaces passive score display."
+      },
+      {
+        "position": "Hero / Top-right (col 4-12)",
+        "component": "4 MetricTiles in 1×4 row + Next Best Action card",
+        "rationale": "KPIs provide at-a-glance summary. Action card bridges data → behavior."
+      },
+      {
+        "position": "Row 2 / Primary (col 1-7)",
+        "component": "Threat Landscape area chart",
+        "rationale": "Trend is the most important analytical view. Shows trajectory over time."
+      },
+      {
+        "position": "Row 2 / Secondary (col 8-12)",
+        "component": "Severity Matrix (donut + bars)",
+        "rationale": "Complements trend with aggregate distribution breakdown."
+      },
+      {
+        "position": "Row 3 / Primary (col 1-7)",
+        "component": "Scan Analytics bar chart",
+        "rationale": "Per-scan comparison supports drill-down behavior."
+      },
+      {
+        "position": "Row 3 / Secondary (col 8-12)",
+        "component": "Smart Activity Feed (grouped, deduped)",
+        "rationale": "Moved to bottom-right to reduce noise. Grouped entries reduce cognitive load."
+      }
+    ],
+    "copy_snippets": {
+      "gauge_healthy": "Your code is in good shape. Keep scanning after each commit.",
+      "gauge_moderate": "Some issues need attention. Review medium-severity findings.",
+      "gauge_at_risk": "Critical vulnerabilities detected. Fix these before deploying.",
+      "gauge_empty": "Your security journey starts here.",
+      "gauge_empty_cta": "Run First Scan",
+      "action_card_all_clear": "All clear — no urgent actions right now.",
+      "action_card_critical": "Fix {count} critical issues in {repo}",
+      "action_card_high": "Review {count} high-severity findings",
+      "action_card_rescan": "Re-scan {repo} (last scanned {time})",
+      "feed_empty": "No scan activity yet. Start your first scan to see results here.",
+      "feed_empty_cta": "Start Scanning",
+      "feed_grouped": "{repo} — {count} scans",
+      "student_tip_critical": "Critical means an attacker can exploit this right now using public tools. Fix these first.",
+      "student_tip_high": "High severity issues could be exploited with moderate effort. Address these after criticals.",
+      "student_tip_score": "Your score is based on weighted penalties. Each critical issue costs 20 points, high costs 8.",
+      "student_tip_trend": "This chart shows how your findings change over time. A downward trend means you're improving!",
+      "learning_cta": "What does this mean?",
+      "refresh_aria": "Refresh dashboard data",
+      "new_scan_aria": "Start a new security scan"
+    }
+  },
+  "analytics_and_metrics": {
+    "events": [
+      { "name": "dashboard_viewed", "properties": ["user_id", "score", "total_scans", "has_criticals"], "trigger": "Page mount" },
+      { "name": "dashboard_refreshed", "properties": ["user_id", "time_since_last_refresh"], "trigger": "Click Refresh button" },
+      { "name": "new_scan_clicked", "properties": ["user_id", "source_page"], "trigger": "Click New Scan on dashboard" },
+      { "name": "action_card_clicked", "properties": ["user_id", "action_type", "severity", "job_id"], "trigger": "Click action in Next Steps card" },
+      { "name": "feed_item_clicked", "properties": ["user_id", "job_id", "repo_name", "severity"], "trigger": "Click timeline row" },
+      { "name": "feed_group_expanded", "properties": ["user_id", "repo_name", "group_size"], "trigger": "Expand a grouped feed entry" },
+      { "name": "learning_tip_toggled", "properties": ["user_id", "card_name", "is_open"], "trigger": "Toggle learning tip in Student Mode" },
+      { "name": "student_mode_toggled", "properties": ["user_id", "is_student_mode"], "trigger": "Toggle Student Mode in sidebar" },
+      { "name": "chart_interacted", "properties": ["user_id", "chart_type", "data_point"], "trigger": "Hover/click on chart element" },
+      { "name": "history_navigated", "properties": ["user_id", "source_element"], "trigger": "Click History/View All from dashboard" }
+    ],
+    "kpis": [
+      { "metric": "Time to first meaningful action", "target": "< 8 seconds from dashboard load to clicking an action", "measurement": "Timestamp(action_card_clicked) - Timestamp(dashboard_viewed)" },
+      { "metric": "Dashboard engagement rate", "target": "> 60% of dashboard views result in at least one click", "measurement": "Sessions with any click event / Total dashboard_viewed" },
+      { "metric": "Feed signal-to-noise ratio", "target": "< 3 scrolls before clicking a feed item", "measurement": "Scroll depth before feed_item_clicked" },
+      { "metric": "Student Mode learning engagement", "target": "> 30% of Student Mode users open at least one learning tip", "measurement": "Users with learning_tip_toggled / Users with is_student_mode=true" },
+      { "metric": "Time to first fix", "target": "Reduce by 20% from baseline", "measurement": "Time from first dashboard_viewed to first vulnerability marked as resolved" },
+      { "metric": "Scan frequency", "target": "Average 3+ scans per user per week", "measurement": "Count of new_scan_clicked per user per 7 days" }
+    ],
+    "dashboard_spec": {
+      "title": "SecureTrail Product Dashboard",
+      "sections": [
+        { "title": "Usage", "charts": ["Daily active users", "Dashboard views / day", "New scans / day"] },
+        { "title": "Engagement", "charts": ["Action card CTR", "Feed item CTR", "Avg clicks per session"] },
+        { "title": "Student Mode", "charts": ["% users in Student Mode", "Learning tip open rate", "Student vs Pro engagement"] },
+        { "title": "Performance", "charts": ["Dashboard load time (p50/p95)", "Time to first action (p50/p95)"] }
+      ]
+    }
+  },
+  "usability_test_plan": {
+    "recruitment": {
+      "moderated": {
+        "count": 5,
+        "criteria": [
+          "Computer science students (years 1-4) or junior developers (<2 years experience)",
+          "Have used at least one code scanning tool before (e.g., SonarQube, Snyk, GitHub Advanced Security) OR have never used one (mix 3:2)",
+          "Comfortable thinking aloud in English",
+          "Use dark mode on at least one application daily"
+        ],
+        "incentive": "$30 Amazon gift card or equivalent",
+        "duration": "45 minutes per session"
+      },
+      "unmoderated": {
+        "count": 20,
+        "criteria": [
+          "Students or developers aged 18-30",
+          "Have a GitHub account",
+          "Mix of experience levels: 10 beginners, 10 intermediate"
+        ],
+        "platform": "Maze or UserTesting",
+        "incentive": "$15 gift card",
+        "duration": "15-20 minutes"
+      }
+    },
+    "tasks": [
+      {
+        "id": "T1",
+        "task": "You just logged in and see the dashboard. Without clicking anything, tell me: what is the overall security status of your codebase?",
+        "success_criteria": "User correctly identifies the score and its meaning (healthy/at risk) within 10 seconds. Mentions gauge or score card.",
+        "measures": "Time to answer, accuracy of interpretation, eye tracking fixation (if available)"
+      },
+      {
+        "id": "T2",
+        "task": "You want to fix the most urgent security issue. Find it and navigate to the details.",
+        "success_criteria": "User clicks on an action card item or navigates to the most-critical scan result within 30 seconds. Does not browse aimlessly.",
+        "measures": "Time to task completion, number of clicks, task success (yes/no)"
+      },
+      {
+        "id": "T3",
+        "task": "How many critical vulnerabilities do you have total? Has that number gone up or down recently?",
+        "success_criteria": "User identifies the Critical metric tile value AND notices the trend indicator (or checks the chart) within 15 seconds.",
+        "measures": "Accuracy, time, whether user looks at trend indicator vs chart"
+      },
+      {
+        "id": "T4",
+        "task": "Look at the Live Feed. What repositories were scanned most recently? Are there any that were scanned multiple times?",
+        "success_criteria": "User identifies the top repository and recognizes repetition. With grouping, user should see the group count. Without grouping (control), user should mention repetition as a problem.",
+        "measures": "Time to answer, mentions grouping/repetition, satisfaction rating"
+      },
+      {
+        "id": "T5",
+        "task": "Turn on Student Mode and explore the dashboard. What changes do you notice? Do the learning tips help you understand the data?",
+        "success_criteria": "User finds and toggles Student Mode. Notices at least one learning tip. Rates tips as helpful (4+ on 5-point scale).",
+        "measures": "Task success, learning tip interaction count, qualitative feedback, helpfulness rating"
+      }
+    ],
+    "script": [
+      {
+        "phase": "Introduction (3 min)",
+        "prompts": [
+          "Hi, thanks for participating. We're testing a security dashboard for student developers. There are no right or wrong answers — we're testing the design, not you.",
+          "Please think aloud as you work through each task. Tell me what you see, what you expect, and any confusion you feel.",
+          "Do you have any questions before we start?"
+        ]
+      },
+      {
+        "phase": "Warm-up (2 min)",
+        "prompts": [
+          "Have you ever used a security scanning tool before? Which one?",
+          "When you think of a 'security dashboard', what do you expect to see?"
+        ]
+      },
+      {
+        "phase": "Tasks (25 min)",
+        "prompts": [
+          "I'm going to give you 5 tasks one at a time. Take your time with each one.",
+          "After each task: 'On a scale of 1-5, how easy was that?' and 'What would have made it easier?'"
+        ]
+      },
+      {
+        "phase": "Post-task interview (10 min)",
+        "prompts": [
+          "Overall, what was your first impression of the dashboard?",
+          "What was the most confusing part?",
+          "What was the most useful part?",
+          "If you could change one thing, what would it be?",
+          "Would you use this tool for your own projects? Why or why not?"
+        ]
+      },
+      {
+        "phase": "SUS questionnaire (5 min)",
+        "prompts": [
+          "Please rate each statement from 1 (Strongly Disagree) to 5 (Strongly Agree):",
+          "1. I think that I would like to use this system frequently.",
+          "2. I found the system unnecessarily complex.",
+          "3. I thought the system was easy to use.",
+          "4. I think that I would need the support of a technical person to be able to use this system.",
+          "5. I found the various functions in this system were well integrated.",
+          "6. I thought there was too much inconsistency in this system.",
+          "7. I would imagine that most people would learn to use this system very quickly.",
+          "8. I found the system very cumbersome to use.",
+          "9. I felt very confident using the system.",
+          "10. I needed to learn a lot of things before I could get going with this system."
+        ]
+      }
+    ],
+    "success_criteria": {
+      "overall_sus_target": ">= 72 (above average)",
+      "task_success_rate": ">= 80% across all tasks",
+      "average_time_on_task": "T1 < 10s, T2 < 30s, T3 < 15s, T4 < 20s, T5 < 60s",
+      "satisfaction_per_task": ">= 4.0 on 5-point ease scale"
+    }
+  },
+  "ab_tests": [
+    {
+      "id": "A1",
+      "hypothesis": "Showing a 'Top 3 Actions' card in the hero row will increase click-through to vulnerability details by 25% compared to the current action-less dashboard.",
+      "metric": "CTR from dashboard to results page (action_card_clicked / dashboard_viewed)",
+      "variant_a": "Current dashboard — no action card",
+      "variant_b": "Dashboard with 'Next Steps' action card in hero row",
+      "sample_size": "200 users per variant (80% power, 5% significance, estimated 10% baseline CTR, 25% MDE)",
+      "duration_days": "14 days (assuming 30 DAU)"
+    },
+    {
+      "id": "A2",
+      "hypothesis": "Grouped Live Feed entries (collapsed duplicates) will reduce scrolling by 40% and increase feed item click rate by 20% compared to the ungrouped feed.",
+      "metric": "Feed item CTR (feed_item_clicked / dashboard_viewed) and scroll depth",
+      "variant_a": "Current ungrouped timeline feed",
+      "variant_b": "Grouped feed with expand/collapse",
+      "sample_size": "150 users per variant",
+      "duration_days": "14 days"
+    },
+    {
+      "id": "A3",
+      "hypothesis": "Adding a trend sparkline and contextual guidance text to the HealthGauge will increase user confidence (measured by post-session survey) by 15% and reduce time-to-first-action by 20%.",
+      "metric": "Time to first action (timestamp delta) and self-reported confidence (1-5 scale)",
+      "variant_a": "Current gauge (score + status only)",
+      "variant_b": "Enhanced gauge (score + trend sparkline + guidance + CTA)",
+      "sample_size": "100 users per variant (qualitative + quantitative)",
+      "duration_days": "21 days"
+    }
+  ],
+  "handoff_deliverables": [
+    "Figma file: Dashboard redesign screens (light + dark, empty + populated, Student + Pro mode) with auto-layout and component variants",
+    "Design tokens JSON: color palette, spacing scale, typography scale, border radius, shadow levels, animation durations — exported for Tailwind config",
+    "Component library: Storybook stories for HealthGauge, MetricTile, ActionCard, GroupedFeedItem, SkeletonDashboard, LearningTip, SeverityBar",
+    "Tailwind config diff: any new colors, animations, or utilities added to tailwind.config.js",
+    "Accessibility test results: axe-core report, keyboard navigation walkthrough video, screen reader test transcript (NVDA + VoiceOver)",
+    "Animation spec sheet: CSV of element, duration, easing, trigger, reduced-motion fallback for each micro-interaction",
+    "Copy deck: all labels, empty states, tooltips, ARIA labels, learning tips — in a spreadsheet with keys matching component props",
+    "Implementation checklist: ordered list of code changes with file paths, estimated effort, dependencies, and acceptance criteria",
+    "Analytics event spec: event name, properties, trigger, and example payloads for engineering to implement tracking"
+  ],
+  "acceptance_criteria": {
+    "P1": [
+      "HealthGauge displays trend delta (↑N or ↓N) when previous score is available",
+      "Guidance text changes based on score range (healthy/moderate/at_risk/empty)",
+      "Zero state shows CTA button 'Run First Scan' that navigates to /scan",
+      "SVG has role='img' and descriptive aria-label",
+      "Arc animation works on mount, disabled with prefers-reduced-motion",
+      "Sparkline visible if scoreHistory has >= 2 data points"
+    ],
+    "P2": [
+      "Consecutive feed entries with same repository_name are grouped into a single row",
+      "Grouped row shows repo name, scan count badge ('×N'), latest timestamp, and worst severity",
+      "Clicking grouped row expands to show individual entries with animate-slide-down",
+      "Expand/collapse is keyboard accessible (Enter/Space) with aria-expanded attribute",
+      "Maximum 10 groups visible, 'Show earlier' button loads more"
+    ],
+    "P3": [
+      "Action card appears in dashboard when there are critical or high findings",
+      "Shows up to 3 prioritized actions sorted by severity (critical first)",
+      "Each action navigates to relevant results page on click",
+      "Empty state shows '✨ All clear' message when no urgent actions",
+      "Student Mode adds a collapsed learning tip explaining priority logic"
+    ],
+    "P4": [
+      "isStudentMode is consumed from ThemeContext in DashboardPage",
+      "When Student Mode is ON: learning tips appear on HealthGauge, MetricTiles, and charts",
+      "Learning tips are collapsed by default, expand with 'What does this mean?' button",
+      "Expanded tips use animate-slide-down animation",
+      "Labels optionally show simplified versions in Student Mode"
+    ],
+    "P5": [
+      "All interactive elements are keyboard-focusable and operable (Tab, Enter, Space)",
+      "All text meets WCAG 2.1 AA contrast ratios (4.5:1 normal, 3:1 large)",
+      "SVG gauge has role='img' and aria-label",
+      "Feed container has role='feed' and aria-live='polite'",
+      "Dashboard wrapped in <main> element with aria-label",
+      "Decorative elements have aria-hidden='true'",
+      "prefers-reduced-motion disables all animations"
+    ],
+    "P6": [
+      "Loading state shows full-layout skeleton grid instead of centered spinner",
+      "Skeleton matches exact grid dimensions (3+9 cols, 7+5 cols)",
+      "Skeleton uses animate-pulse with theme-appropriate colors",
+      "Previous data from sessionStorage renders immediately on subsequent visits",
+      "Background refresh shows a subtle top-bar indicator, not a full-page spinner"
+    ]
+  },
+  "roadmap_4_weeks": {
+    "week_1": [
+      { "task": "P5 quick-win: Fix keyboard nav, aria-labels, contrast", "owner": "Frontend", "effort": "0.5 days" },
+      { "task": "P6 quick-win: Skeleton loading state", "owner": "Frontend", "effort": "0.5 days" },
+      { "task": "P2 quick-win: Deduplicate consecutive feed entries", "owner": "Frontend", "effort": "0.5 days" },
+      { "task": "P1 quick-win: Add trend delta and guidance text to gauge", "owner": "Frontend", "effort": "0.5 days" },
+      { "task": "Add prefers-reduced-motion CSS rules for all animations", "owner": "Frontend", "effort": "0.5 days" },
+      { "task": "Risk: recharts may resist lazy loading — test with dynamic import early", "owner": "Frontend", "effort": "0.5 days" }
+    ],
+    "week_2": [
+      { "task": "P3 recommended: Build ActionCard component with navigation", "owner": "Frontend", "effort": "2 days" },
+      { "task": "P4 quick-win: Add learning tips toggled by isStudentMode", "owner": "Frontend", "effort": "1 day" },
+      { "task": "P1 recommended: Sparkline + enhanced zero state for gauge", "owner": "Frontend", "effort": "1 day" },
+      { "task": "Analytics: implement event tracking for top 5 events", "owner": "Frontend + Backend", "effort": "1 day" },
+      { "task": "Risk: Ensure backend returns previousScore in jobs API response", "owner": "Backend", "effort": "0.5 days" }
+    ],
+    "week_3": [
+      { "task": "P2 recommended: Smart feed with grouping, time headers, expand/collapse", "owner": "Frontend", "effort": "2 days" },
+      { "task": "P6 recommended: Session cache with stale-while-revalidate", "owner": "Frontend", "effort": "1 day" },
+      { "task": "P5 recommended: Full WCAG AA pass with semantic landmarks and live regions", "owner": "Frontend", "effort": "1 day" },
+      { "task": "Internal usability review: 3 team members walk through all tasks", "owner": "UX", "effort": "0.5 days" },
+      { "task": "Risk: Test with NVDA + VoiceOver, fix any screen reader regressions", "owner": "UX + Frontend", "effort": "0.5 days" }
+    ],
+    "week_4": [
+      { "task": "Moderated usability tests: 5 sessions", "owner": "UX", "effort": "3 days" },
+      { "task": "Unmoderated tests: launch 20-participant study on Maze", "owner": "UX", "effort": "0.5 days" },
+      { "task": "Iterate on test findings: top 3 usability issues", "owner": "Frontend", "effort": "2 days" },
+      { "task": "A/B test A1 setup: Action card vs control", "owner": "Frontend + Analytics", "effort": "0.5 days" },
+      { "task": "Final QA: cross-browser (Chrome, Firefox, Safari), responsive (mobile, tablet, desktop)", "owner": "Frontend + QA", "effort": "1 day" },
+      { "task": "Risk: If SUS < 72, schedule rapid iteration sprint for Week 5", "owner": "UX + PM", "effort": "Plan only" }
+    ]
+  },
+  "exec_summary": "The SecureTrail dashboard currently displays accurate security data but fails to convert awareness into action. The top-left health gauge shows a raw score with no trend or guidance, the live feed is polluted with duplicate entries that obscure signal, and there is zero 'next best action' recommendation anywhere. Student Mode — the core differentiator — has no visible effect on the dashboard. Accessibility gaps (no keyboard navigation on feed items, failing contrast ratios, no screen reader labels) block adoption by assistive-technology users. Our 4-week plan addresses these through 6 prioritized problems: Week 1 ships quick-wins (skeleton loading, feed dedup, gauge guidance, a11y fixes) for immediate perceived quality improvement. Week 2 adds the strategic 'Next Steps' action card and Student Mode learning tips. Week 3 hardens the smart feed and caching layer. Week 4 validates everything through 5 moderated + 20 unmoderated usability tests targeting a SUS score of 72+ and 80%+ task success rate. Total frontend effort: ~12 developer-days. Expected outcomes: 25% increase in dashboard-to-details click-through, 20% reduction in time-to-first-fix, and a measurably differentiated Student Mode experience."
+}
