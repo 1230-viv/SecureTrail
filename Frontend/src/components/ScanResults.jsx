@@ -94,6 +94,7 @@ const ScanResults = ({ report, onNewScan }) => {
   const [filterSrc,   setFilterSrc]   = useState('ALL');
   const [sortBy,      setSortBy]      = useState('severity');
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [reportLoading,  setReportLoading]  = useState(false); // AI report generation in progress
   const { isDark }                    = useTheme();
 
   const vulns = report?.vulnerabilities || [];
@@ -147,25 +148,39 @@ const ScanResults = ({ report, onNewScan }) => {
   };
 
   const handleDownloadMarkdown = async () => {
+    setReportLoading(true);
     try {
       const { data } = await scanAPI.getReport(report.job_id);
       const blob = new Blob([data], { type: 'text/markdown' });
       const url  = URL.createObjectURL(blob);
       const a    = document.createElement('a');
-      a.href = url;
+      a.href     = url;
       a.download = `securetrail-${report.repository_name}-${report.job_id.slice(0, 8)}.md`;
+      document.body.appendChild(a);
       a.click();
-      URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 2000); // revoke after download starts
     } catch (err) {
       console.error('Report download failed', err);
+    } finally {
+      setReportLoading(false);
     }
   };
 
   const handlePrintPDF = async () => {
+    // Open the window SYNCHRONOUSLY (within the user-gesture context)
+    // so popup blockers don't kill it. We fill it after the fetch.
+    const win = window.open('', '_blank', 'width=900,height=720');
+    if (!win) {
+      alert('Popup was blocked. Please allow popups for this site and try again.');
+      return;
+    }
+    win.document.write('<html><head><title>Generating report…</title></head><body style="font-family:sans-serif;padding:40px;color:#334155"><p>Generating security report, please wait…</p></body></html>');
+    setReportLoading(true);
     try {
       const { data: md } = await scanAPI.getReport(report.job_id);
       const html = mdToHtml(md);
-      const win  = window.open('', '_blank', 'width=900,height=700');
+      win.document.open();
       win.document.write(`<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -206,6 +221,9 @@ const ScanResults = ({ report, onNewScan }) => {
       setTimeout(() => win.print(), 600);
     } catch (err) {
       console.error('PDF generation failed', err);
+      win.close();
+    } finally {
+      setReportLoading(false);
     }
   };
 
@@ -234,6 +252,39 @@ const ScanResults = ({ report, onNewScan }) => {
 
   return (
     <div className="space-y-5 animate-fade-in-up">
+
+      {/* ── Report generation loading toast ───────────────────────────────── */}
+      {reportLoading && (
+        <div className="fixed bottom-6 right-6 z-50 animate-fade-in-up">
+          <div className={`flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-2xl border backdrop-blur-xl
+            ${isDark
+              ? 'bg-slate-900/95 border-white/[0.08] shadow-black/60'
+              : 'bg-white/95 border-slate-200 shadow-slate-300/50'}`}>
+            {/* Spinning icon */}
+            <div className="relative flex-shrink-0">
+              <div className={`w-8 h-8 rounded-full border-2 border-t-transparent animate-spin
+                ${isDark ? 'border-indigo-400' : 'border-indigo-500'}`} />
+              <div className={`absolute inset-1.5 rounded-full animate-pulse
+                ${isDark ? 'bg-indigo-500/20' : 'bg-indigo-100'}`} />
+            </div>
+            <div>
+              <p className={`text-sm font-semibold leading-tight
+                ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
+                Generating AI report…
+              </p>
+              <p className={`text-[11px] mt-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                Bedrock is writing the analysis — this may take 20–40 s
+              </p>
+            </div>
+          </div>
+          {/* Indeterminate progress bar */}
+          <div className={`mt-1.5 h-1 rounded-full overflow-hidden
+            ${isDark ? 'bg-white/[0.06]' : 'bg-slate-100'}`}>
+            <div className="h-full w-1/3 rounded-full animate-report-bar
+              bg-gradient-to-r from-indigo-500 via-violet-500 to-indigo-500" />
+          </div>
+        </div>
+      )}
 
       {/* ── AI Analysis banner ─────────────────────────────────────────── */}
       {aiPending && (
@@ -291,11 +342,17 @@ const ScanResults = ({ report, onNewScan }) => {
               <div className="relative">
                 <button
                   onClick={() => setShowExportMenu(m => !m)}
+                  disabled={reportLoading}
                   className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-medium transition-all backdrop-blur-md
+                    ${reportLoading ? 'opacity-50 cursor-not-allowed' : ''}
                     ${isDark
                       ? 'bg-white/[0.04] text-slate-300 hover:bg-white/[0.07] ring-1 ring-white/[0.08]'
                       : 'bg-white/60 text-slate-600 hover:bg-white/80 ring-1 ring-white/60'}`}>
-                  <Download size={14} /> Export <ChevronDown size={12} className={`transition-transform ${showExportMenu ? 'rotate-180' : ''}`} />
+                  {reportLoading
+                    ? <><div className={`w-3.5 h-3.5 rounded-full border-2 border-t-transparent animate-spin flex-shrink-0
+                        ${isDark ? 'border-slate-400' : 'border-slate-500'}`} /> Generating…</>
+                    : <><Download size={14} /> Export <ChevronDown size={12} className={`transition-transform ${showExportMenu ? 'rotate-180' : ''}`} /></>
+                  }
                 </button>
 
                 {showExportMenu && (

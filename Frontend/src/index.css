@@ -142,6 +142,15 @@ html.dark ::-webkit-scrollbar-thumb:hover {
   animation: shimmerSweep 2.5s ease-in-out infinite;
 }
 
+/* Indeterminate loading bar for report generation */
+@keyframes reportBarSwipe {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
+.animate-report-bar {
+  animation: reportBarSwipe 1.4s ease-in-out infinite;
+}
+
 /* ═══ P5 — Accessibility: reduced motion ═══ */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
