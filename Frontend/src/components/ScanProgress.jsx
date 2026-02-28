@@ -165,12 +165,35 @@ const ScanProgress = ({ jobId, repoName, onComplete, onError }) => {
         </div>
 
         {/* ── Stage label + percentage ────────────────── */}
-        <div className="flex items-baseline justify-between mb-2">
-          <span className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+        <div className="flex items-center justify-between mb-2">
+          {/* Highlighted stage pill */}
+          <div
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold
+              transition-all duration-500`}
+            style={{
+              background: isFailed
+                ? isDark ? 'rgba(239,68,68,0.12)' : 'rgba(239,68,68,0.08)'
+                : isDone
+                  ? isDark ? 'rgba(34,197,94,0.12)' : 'rgba(34,197,94,0.08)'
+                  : isDark ? 'rgba(59,130,246,0.14)' : 'rgba(59,130,246,0.09)',
+              border: isFailed
+                ? '1px solid rgba(239,68,68,0.25)'
+                : isDone
+                  ? '1px solid rgba(34,197,94,0.25)'
+                  : '1px solid rgba(59,130,246,0.25)',
+              color: isFailed ? '#f87171' : isDone ? '#4ade80' : isDark ? '#60a5fa' : '#2563eb',
+            }}
+          >
+            <span className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+              style={{
+                background: isFailed ? '#f87171' : isDone ? '#4ade80' : '#60a5fa',
+                boxShadow: `0 0 6px ${isFailed ? '#f87171' : isDone ? '#4ade80' : '#60a5fa'}`,
+                animation: !isFailed && !isDone ? 'pulse 2s cubic-bezier(0.4,0,0.6,1) infinite' : 'none',
+              }} />
             {STAGE_LABELS[stage] ?? stage}
-          </span>
-          <span className={`text-lg font-bold tabular-nums ${isDark ? 'text-white' : 'text-slate-800'}`}>
-            {progress}<span className={`text-xs font-normal ml-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>%</span>
+          </div>
+          <span className={`text-2xl font-black tabular-nums leading-none ${isDark ? 'text-white' : 'text-slate-800'}`}>
+            {progress}<span className={`text-sm font-normal ml-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>%</span>
           </span>
         </div>
 
@@ -185,25 +208,48 @@ const ScanProgress = ({ jobId, repoName, onComplete, onError }) => {
 
         {/* ── Milestone track ─────────────────────────── */}
         <div className="relative mb-8">
-          {/* Connecting line */}
+          {/* Static base line */}
           <div className={`absolute top-4 left-4 right-4 h-px
             ${isDark ? 'bg-white/[0.06]' : 'bg-slate-100'}`} />
+
+          {/* Dynamic filled progress line */}
+          <div
+            className="absolute top-4 left-4 h-px transition-all duration-700 ease-out"
+            style={{
+              width: `calc(${Math.min(progress, 100)}% * 0.92)`,
+              background: isFailed
+                ? 'linear-gradient(90deg, #ef4444, #f87171)'
+                : isDone
+                  ? 'linear-gradient(90deg, #10b981, #34d399)'
+                  : 'linear-gradient(90deg, #3b82f6, #6366f1)',
+              boxShadow: isFailed
+                ? '0 0 6px rgba(239,68,68,0.5)'
+                : isDone
+                  ? '0 0 6px rgba(16,185,129,0.5)'
+                  : '0 0 6px rgba(99,102,241,0.5)',
+            }}
+          />
 
           <div className="relative flex justify-between">
             {MILESTONES.map((m) => {
               const reached = progress >= m.pct;
+              const active  = !isDone && !isFailed && progress >= m.pct && progress < (MILESTONES[MILESTONES.indexOf(m) + 1]?.pct ?? 101);
               const Icon = m.icon;
               return (
                 <div key={m.pct} className="flex flex-col items-center relative z-10">
                   <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all duration-500
                     ${reached
                       ? isFailed
-                        ? isDark ? 'bg-red-500/15 text-red-400' : 'bg-red-50 text-red-500'
-                        : isDark ? 'bg-blue-500/15 text-blue-400' : 'bg-blue-50 text-blue-600'
+                        ? isDark ? 'bg-red-500/15 text-red-400 shadow-[0_0_10px_rgba(239,68,68,0.25)]' : 'bg-red-50 text-red-500'
+                        : isDone
+                          ? isDark ? 'bg-emerald-500/15 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.25)]' : 'bg-emerald-50 text-emerald-600'
+                          : active
+                            ? isDark ? 'bg-blue-500/20 text-blue-400 shadow-[0_0_12px_rgba(59,130,246,0.35)] scale-110' : 'bg-blue-100 text-blue-600 shadow-[0_0_12px_rgba(59,130,246,0.2)] scale-110'
+                            : isDark ? 'bg-blue-500/15 text-blue-400' : 'bg-blue-50 text-blue-600'
                       : isDark ? 'bg-white/[0.04] text-slate-600' : 'bg-slate-50 text-slate-300'}`}>
-                    <Icon size={14} className={reached && !isFailed && m.pct > progress - 15 && !isDone ? 'animate-pulse' : ''} />
+                    <Icon size={14} className={active ? 'animate-pulse' : ''} />
                   </div>
-                  <span className={`text-[10px] mt-1.5 font-medium
+                  <span className={`text-[10px] mt-1.5 font-semibold
                     ${reached
                       ? isDark ? 'text-slate-300' : 'text-slate-600'
                       : isDark ? 'text-slate-600' : 'text-slate-300'}`}>
@@ -223,21 +269,26 @@ const ScanProgress = ({ jobId, repoName, onComplete, onError }) => {
           {SCANNERS.map(({ name, light, dark }) => {
             const active   = progress >= 5 && progress < 30;
             const finished = progress >= 30;
+            const waiting  = progress < 5;
             return (
               <div key={name}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all duration-300
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all duration-500
                   ${finished
-                    ? isDark ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                    ? isDark
+                      ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.12)]'
+                      : 'bg-emerald-50 border-emerald-200 text-emerald-700'
                     : active
                       ? isDark ? dark : light
-                      : isDark ? 'bg-white/[0.03] border-white/[0.06] text-slate-600' : 'bg-slate-50 border-slate-100 text-slate-300'}`}
+                      : isDark
+                        ? 'bg-white/[0.03] border-white/[0.06] text-slate-600'
+                        : 'bg-slate-50 border-slate-100 text-slate-300'}`}
               >
                 {active ? (
                   <Loader2 size={12} className="animate-spin" />
                 ) : finished ? (
                   <CheckCircle2 size={12} />
                 ) : (
-                  <Shield size={12} />
+                  <Shield size={12} className="opacity-40" />
                 )}
                 {name}
               </div>
