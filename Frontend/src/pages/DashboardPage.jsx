@@ -19,10 +19,10 @@ import { useTheme } from '../context/ThemeContext';
    CONSTANTS & HELPERS
    ═══════════════════════════════════════════════════════════ */
 const SEV_META = [
-  { key: 'critical_count', label: 'Critical', studentLabel: 'Urgent Fixes',      color: '#ef4444' },
-  { key: 'high_count',     label: 'High',     studentLabel: 'Important Issues',   color: '#f97316' },
-  { key: 'medium_count',   label: 'Medium',   studentLabel: 'Worth Reviewing',    color: '#eab308' },
-  { key: 'low_count',      label: 'Low',      studentLabel: 'Minor Suggestions',  color: '#8b5cf6' },
+  { key: 'critical_count', label: 'Critical', studentLabel: 'Urgent Fixes',      color: '#DC2626' },
+  { key: 'high_count',     label: 'High',     studentLabel: 'Important Issues',   color: '#EA580C' },
+  { key: 'medium_count',   label: 'Medium',   studentLabel: 'Worth Reviewing',    color: '#CA8A04' },
+  { key: 'low_count',      label: 'Low',      studentLabel: 'Minor Suggestions',  color: '#2563EB' },
   { key: 'info_count',     label: 'Info',     studentLabel: 'Informational',      color: '#64748b' },
 ];
 
@@ -169,156 +169,281 @@ const ChartTooltip = ({ active, payload, label, isDark }) => {
 /* ═══════════════════════════════════════════════════════════════
    P1 — HEALTH GAUGE with trend, sparkline, guidance, CTA
    ═══════════════════════════════════════════════════════════ */
+/* ── Zone segment paths (r=80, centre 120,120) ──────────────────
+   t=0→(40,120)  t=0.25→(63.43,63.43)  t=0.5→(120,40)
+   t=0.75→(176.57,63.43)  t=1→(200,120)
+   Each 90° arc — large-arc=0, sweep=1
+─────────────────────────────────────────────────────────────── */
+const GAUGE_ZONES = [
+  { d: 'M 40 120 A 80 80 0 0 1 63.43 63.43', color: '#ef4444' },   // 0-25  critical
+  { d: 'M 63.43 63.43 A 80 80 0 0 1 120 40', color: '#f97316' },  // 25-50 at risk
+  { d: 'M 120 40 A 80 80 0 0 1 176.57 63.43', color: '#eab308' }, // 50-75 moderate
+  { d: 'M 176.57 63.43 A 80 80 0 0 1 200 120', color: '#22c55e' }, // 75-100 healthy
+];
+
 const HealthGauge = ({ score, previousScore, scoreHistory, topAction, isDark, isStudentMode, onNavigate }) => {
-  const r     = 70;
-  const arc   = Math.PI * r;
-  const fill  = score !== null ? (score / 100) * arc : 0;
+  const R   = 80;
+  const arc = Math.PI * R;   // ≈ 251.3
+  const fill = score !== null ? (score / 100) * arc : 0;
+
   const color = score === null ? '#94a3b8'
     : score >= 75 ? '#22c55e'
     : score >= 50 ? '#eab308'
     : score >= 25 ? '#f97316'
     : '#ef4444';
-  const status = score === null ? 'No data'
-    : score >= 75 ? 'Healthy'
-    : score >= 50 ? 'Moderate'
-    : score >= 25 ? 'At Risk'
-    : 'Critical';
+
+  const statusMeta = score === null
+    ? { label: 'No data',  bg: isDark ? 'bg-slate-700/60' : 'bg-slate-100',      text: isDark ? 'text-slate-400' : 'text-slate-500' }
+    : score >= 75
+    ? { label: 'Healthy',  bg: isDark ? 'bg-emerald-500/15' : 'bg-emerald-50',   text: isDark ? 'text-emerald-400' : 'text-emerald-700' }
+    : score >= 50
+    ? { label: 'Moderate', bg: isDark ? 'bg-yellow-500/15' : 'bg-yellow-50',     text: isDark ? 'text-yellow-400' : 'text-yellow-700' }
+    : score >= 25
+    ? { label: 'At Risk',  bg: isDark ? 'bg-orange-500/15' : 'bg-orange-50',     text: isDark ? 'text-orange-400' : 'text-orange-700' }
+    : { label: 'Critical', bg: isDark ? 'bg-red-500/15' : 'bg-red-50',           text: isDark ? 'text-red-400' : 'text-red-700' };
 
   const delta = (score !== null && previousScore !== null)
     ? score - previousScore
     : null;
 
   const guidance = score === null
-    ? 'Your security journey starts here.'
+    ? 'Run your first scan to begin tracking your security posture.'
     : score >= 75
-      ? 'Your code is in great shape. Keep scanning after each commit.'
+      ? 'Great shape — keep scanning after each commit to stay on top.'
       : score >= 50
-        ? 'Room for improvement — focus on High-severity findings next.'
+        ? 'Room to improve. Focus on High-severity findings next.'
         : score >= 25
           ? 'Significant vulnerabilities found. Prioritize fixes now.'
-          : 'Critical state — address urgent findings immediately.';
+          : 'Critical exposure — address urgent findings immediately.';
 
-  // Sparkline points (last 5 scores)
+  const animScore = useAnimatedValue(score ?? 0, 1100);
+  const displayScore = score !== null ? animScore : null;
+
+  // Sparkline points (last 5 scores, rendered inside SVG)
   const sparkPoints = useMemo(() => {
     if (!scoreHistory || scoreHistory.length < 2) return null;
     const pts = scoreHistory.slice(-5);
-    const max = 100;
-    const w = 80, h = 20;
-    return pts.map((v, i) => `${(i / (pts.length - 1)) * w},${h - (v / max) * h}`).join(' ');
+    const w = 60, h = 16;
+    return pts.map((v, i) =>
+      `${(i / (pts.length - 1)) * w},${h - (v / 100) * h}`
+    ).join(' ');
   }, [scoreHistory]);
 
   const ariaLabel = score !== null
-    ? `Security posture score ${score} out of 100, status: ${status}.${delta !== null ? ` Trend: ${delta > 0 ? 'up' : 'down'} ${Math.abs(delta)} points from last scan.` : ''}`
-    : 'Security posture: no data available. Run your first scan.';
+    ? `Security posture score ${score} out of 100, status: ${statusMeta.label}.`
+    : 'Security posture: no data. Run your first scan.';
 
   return (
     <div
       role="region"
       aria-label="Security Posture"
-      className={`rounded-2xl border p-6 h-full flex flex-col items-center justify-center
-                   relative overflow-hidden backdrop-blur-xl
+      className={`rounded-2xl border p-6 h-full flex flex-col items-center
+                  relative overflow-hidden backdrop-blur-xl
         ${isDark
-          ? 'bg-white/[0.03] border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.3)]'
-          : 'bg-white/80 border-slate-200/50 shadow-[0_8px_32px_rgba(99,102,241,0.08)]'}`}
+          ? 'bg-surface-darkElevated/90 border-white/[0.06] shadow-dark-hero'
+          : 'bg-white border-slate-200/60 shadow-hero'}`}
     >
-      {/* Decorative glow — larger and more prominent */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none" aria-hidden="true">
-        <div className="w-56 h-56 rounded-full opacity-[0.12] blur-xl"
-          style={{ background: `radial-gradient(circle, ${color}, transparent 60%)` }} />
-      </div>
-      {/* Inner ring shimmer */}
-      <div className="absolute inset-0 rounded-2xl opacity-[0.04] pointer-events-none" aria-hidden="true"
-        style={{ background: `conic-gradient(from 180deg, transparent, ${color}40, transparent 60%)` }} />
+      {/* Background radial glow */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        aria-hidden="true"
+        style={{
+          background: `radial-gradient(ellipse 80% 60% at 50% 40%, ${color}14 0%, transparent 70%)`,
+        }}
+      />
 
-      <p className={`text-[10px] font-bold uppercase tracking-[0.2em] mb-4 z-10
-        ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-        Security Posture
-      </p>
-
-      {/* Gauge SVG */}
-      <div className="relative z-10">
-        <svg
-          width="200" height="120" viewBox="0 0 200 120"
-          role="img" aria-label={ariaLabel}
-        >
-          <defs>
-            <linearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor={color} />
-              <stop offset="100%" stopColor={score >= 75 ? '#6366f1' : score >= 50 ? '#f97316' : '#f97316'} />
-            </linearGradient>
-            <filter id="gaugeGlow">
-              <feGaussianBlur stdDeviation="3" result="blur" />
-              <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-            </filter>
-          </defs>
-          <path d="M 30 105 A 70 70 0 0 1 170 105" fill="none"
-            stroke={isDark ? '#1e2235' : '#e8ecf4'} strokeWidth="14" strokeLinecap="round" />
-          <path d="M 30 105 A 70 70 0 0 1 170 105" fill="none"
-            stroke={`url(#gaugeGrad)`} strokeWidth="14" strokeLinecap="round"
-            strokeDasharray={`${fill} ${arc}`}
-            filter="url(#gaugeGlow)"
-            className="animate-dash-draw"
-            style={{ transition: 'stroke-dasharray 1.2s cubic-bezier(.4,0,.2,1)' }} />
-          <text x="100" y="88" textAnchor="middle" fontSize="36" fontWeight="900"
-            fill={isDark ? '#fff' : '#0f172a'}
-            style={{ filter: isDark ? `drop-shadow(0 0 6px ${color}40)` : 'none' }}
-          >{score ?? '—'}</text>
-          <text x="100" y="108" textAnchor="middle" fontSize="10" fontWeight="600"
-            fill={isDark ? '#475569' : '#94a3b8'}>/100</text>
-        </svg>
-      </div>
-
-      {/* Status + trend delta */}
-      <div className="flex items-center gap-2 mt-1 z-10 flex-wrap justify-center">
-        <div className="w-2 h-2 rounded-full" style={{ background: color }} />
-        <span className="text-sm font-bold" style={{ color }}>{status}</span>
+      {/* Header row */}
+      <div className="w-full flex items-center justify-between mb-4 z-10">
+        <p className={`text-[10px] font-bold uppercase tracking-[0.2em]
+          ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+          Security Posture
+        </p>
+        {/* Trend badge */}
         {delta !== null && delta !== 0 && (
           <span
-            className={`inline-flex items-center gap-0.5 text-[11px] font-bold px-2 py-0.5 rounded-lg
+            className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-lg
               ${delta > 0
-                ? isDark ? 'bg-emerald-500/10 text-emerald-400' : 'bg-emerald-50 text-emerald-600'
-                : isDark ? 'bg-red-500/10 text-red-400' : 'bg-red-50 text-red-600'}`}
+                ? isDark ? 'bg-emerald-500/12 text-emerald-400' : 'bg-emerald-50 text-emerald-600'
+                : isDark ? 'bg-red-500/12 text-red-400' : 'bg-red-50 text-red-600'}`}
           >
-            {delta > 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
+            {delta > 0 ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
             {delta > 0 ? '+' : ''}{delta}
           </span>
         )}
       </div>
 
-      {/* Sparkline */}
-      {sparkPoints && (
-        <svg width="80" height="20" viewBox="0 0 80 20" className="mt-2 z-10" aria-hidden="true">
-          <polyline points={sparkPoints} fill="none" stroke={color} strokeWidth="1.5"
-            strokeLinecap="round" strokeLinejoin="round" opacity="0.6" />
-        </svg>
-      )}
+      {/* ── Gauge SVG ─────────────────────────────── */}
+      <div className="relative z-10 -mb-2">
+        <svg width="240" height="148" viewBox="0 0 240 148" role="img" aria-label={ariaLabel}>
+          <defs>
+            {/* Fill gradient — follows the score colour */}
+            <linearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor={color} stopOpacity="1" />
+              <stop offset="100%" stopColor={
+                score >= 75 ? '#6366f1'
+                : score >= 50 ? '#f97316'
+                : score >= 25 ? '#ef4444'
+                : '#be123c'
+              } />
+            </linearGradient>
+            {/* Glow filter on fill */}
+            <filter id="gaugeGlow" x="-20%" y="-20%" width="140%" height="140%">
+              <feGaussianBlur in="SourceGraphic" stdDeviation="3.5" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+          </defs>
 
-      {/* Guidance */}
-      <p className={`text-[11px] text-center mt-2 leading-relaxed max-w-[240px] z-10
+          {/* Zone tracks (dim coloured segments behind fill) */}
+          {GAUGE_ZONES.map((z, i) => (
+            <path
+              key={i}
+              d={z.d}
+              fill="none"
+              stroke={z.color}
+              strokeWidth="14"
+              strokeLinecap="butt"
+              opacity={isDark ? 0.13 : 0.18}
+            />
+          ))}
+
+          {/* Zone gap dots at t = 0.25, 0.5, 0.75 */}
+          {[
+            { cx: 63.43, cy: 63.43 },
+            { cx: 120,   cy: 40    },
+            { cx: 176.57,cy: 63.43 },
+          ].map((pt, i) => (
+            <circle
+              key={i}
+              cx={pt.cx} cy={pt.cy} r={3}
+              fill={isDark ? '#0f1120' : '#fff'}
+              opacity={0.8}
+            />
+          ))}
+
+          {/* Fill arc */}
+          <path
+            d="M 40 120 A 80 80 0 0 1 200 120"
+            fill="none"
+            stroke="url(#gaugeGrad)"
+            strokeWidth="14"
+            strokeLinecap="round"
+            strokeDasharray={`${fill} ${arc}`}
+            filter="url(#gaugeGlow)"
+            style={{ transition: 'stroke-dasharray 1.3s cubic-bezier(.4,0,.2,1)' }}
+          />
+
+          {/* End cap dot that travels with the fill */}
+          {score !== null && score > 2 && (() => {
+            const theta = Math.PI * (1 - score / 100);
+            const ex = 120 + R * Math.cos(theta);
+            const ey = 120 - R * Math.sin(theta);
+            return (
+              <circle cx={ex} cy={ey} r="5" fill={color}
+                filter="url(#gaugeGlow)"
+                style={{ transition: 'all 1.3s cubic-bezier(.4,0,.2,1)' }} />
+            );
+          })()}
+
+          {/* Scale labels */}
+          <text x="36"  y="136" textAnchor="middle" fontSize="9" fontWeight="700"
+            fill={isDark ? '#475569' : '#94a3b8'}>0</text>
+          <text x="204" y="136" textAnchor="middle" fontSize="9" fontWeight="700"
+            fill={isDark ? '#475569' : '#94a3b8'}>100</text>
+          <text x="120" y="28"  textAnchor="middle" fontSize="9" fontWeight="700"
+            fill={isDark ? '#475569' : '#94a3b8'}>50</text>
+
+          {/* Score — large centred number */}
+          <text
+            x="120" y="102"
+            textAnchor="middle"
+            fontSize="52" fontWeight="900"
+            letterSpacing="-2"
+            fill={isDark ? '#f8fafc' : '#0f172a'}
+            style={{ filter: isDark ? `drop-shadow(0 0 12px ${color}55)` : 'none' }}
+          >
+            {displayScore ?? '—'}
+          </text>
+          <text x="120" y="122" textAnchor="middle" fontSize="13" fontWeight="600"
+            fill={isDark ? '#475569' : '#94a3b8'}>
+            / 100
+          </text>
+
+          {/* Inline sparkline */}
+          {sparkPoints && (
+            <g transform="translate(150, 108)">
+              <polyline
+                points={sparkPoints}
+                fill="none"
+                stroke={color}
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                opacity="0.6"
+              />
+            </g>
+          )}
+        </svg>
+      </div>
+
+      {/* ── Status pill ───────────────────────────── */}
+      <div className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full z-10
+        ${statusMeta.bg}`}>
+        {/* Animated pulse dot */}
+        <span className="relative flex h-2.5 w-2.5">
+          <span
+            className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-60"
+            style={{ background: color }}
+          />
+          <span
+            className="relative inline-flex rounded-full h-2.5 w-2.5"
+            style={{ background: color }}
+          />
+        </span>
+        <span className={`text-sm font-bold ${statusMeta.text}`}>
+          {statusMeta.label}
+        </span>
+      </div>
+
+      {/* ── Guidance text ─────────────────────────── */}
+      <p className={`text-xs text-center mt-3 leading-relaxed max-w-[230px] z-10
         ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
         {guidance}
       </p>
 
-      {/* CTA for zero state or at-risk */}
-      {score === null ? (
-        <button
-          onClick={() => onNavigate('/scan')}
-          className="mt-3 z-10 flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-xl
-                     bg-indigo-600 text-white hover:bg-indigo-500 transition-colors shadow-md shadow-indigo-500/25"
-        >
-          Run First Scan <ArrowRight size={12} />
-        </button>
-      ) : topAction ? (
-        <button
-          onClick={() => onNavigate(`/results/${topAction.jobId}`)}
-          className={`mt-3 z-10 flex items-center gap-1 text-[11px] font-bold transition-colors
-            ${isDark ? 'text-indigo-400 hover:text-indigo-300' : 'text-indigo-600 hover:text-indigo-500'}`}
-        >
-          View {topAction.label} <ArrowUpRight size={11} />
-        </button>
-      ) : null}
+      {/* ── CTA ───────────────────────────────────── */}
+      <div className="mt-4 z-10 w-full flex flex-col items-center gap-2">
+        {score === null ? (
+          <button
+            onClick={() => onNavigate('/scan')}
+            className="flex items-center gap-2 text-xs font-bold px-5 py-2.5 rounded-xl
+                       bg-indigo-600 text-white hover:bg-indigo-500 active:scale-95
+                       transition-all duration-150 shadow-lg shadow-indigo-600/30"
+          >
+            Run First Scan <ArrowRight size={13} />
+          </button>
+        ) : topAction ? (
+          <button
+            onClick={() => onNavigate(`/results/${topAction.jobId}`)}
+            className={`group flex items-center gap-1.5 text-xs font-bold
+              px-4 py-2 rounded-xl border transition-all duration-150 active:scale-95
+              ${isDark
+                ? 'border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/10'
+                : 'border-indigo-200 text-indigo-600 hover:bg-indigo-50'}`}
+          >
+            View {topAction.label}
+            <ArrowUpRight size={12} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+          </button>
+        ) : null}
+      </div>
 
-      {isStudentMode && <LearningTip text={LEARNING_TIPS.gauge} isDark={isDark} />}
+      {isStudentMode && (
+        <div className="mt-3 z-10 w-full">
+          <LearningTip text={LEARNING_TIPS.gauge} isDark={isDark} />
+        </div>
+      )}
     </div>
   );
 };
@@ -333,54 +458,51 @@ const MetricTile = ({ label, value, sub, icon: Icon, accent, trend, isDark, isSt
 
   return (
     <div
-      className={`rounded-2xl border p-5 relative overflow-hidden group card-hover backdrop-blur-xl
+      className={`rounded-2xl border p-6 relative overflow-hidden group transition-all duration-200
         ${isUrgent
           ? isDark
-            ? 'bg-red-500/[0.04] border-red-500/30 ring-2 ring-red-500/20 animate-[pulse_3s_ease-in-out_infinite] shadow-[0_8px_32px_rgba(239,68,68,0.15)]'
-            : 'bg-red-50/50 border-red-300/60 ring-2 ring-red-400/20 animate-[pulse_3s_ease-in-out_infinite] shadow-[0_8px_32px_rgba(239,68,68,0.1)]'
+            ? 'bg-red-500/[0.06] border-red-500/30 ring-2 ring-red-500/20 shadow-dark-hero'
+            : 'bg-gradient-to-br from-red-50 to-red-100/50 border-red-300/60 ring-2 ring-red-400/20 shadow-alert'
           : isDark
-            ? 'bg-white/[0.03] border-white/[0.08] hover:border-white/[0.15] shadow-[0_8px_32px_rgba(0,0,0,0.2)]'
-            : 'bg-white/80 border-slate-200/50 hover:shadow-xl shadow-[0_4px_24px_rgba(99,102,241,0.06)]'}`}
+            ? 'bg-surface-darkCard/80 backdrop-blur-xl border-white/[0.06] hover:border-white/[0.12] shadow-dark-card hover:shadow-dark-hero'
+            : 'bg-white/95 backdrop-blur-xl border-slate-200/60 hover:shadow-card-hover shadow-card'}`}
     >
-      <div className="absolute top-0 left-5 right-5 h-[2px] rounded-b-full opacity-60"
-        style={{ background: `linear-gradient(90deg, transparent, ${accent}, transparent)` }} aria-hidden="true" />
-      {/* Glass shine */}
-      <div className="absolute top-0 right-0 w-24 h-24 rounded-full -translate-y-1/2 translate-x-1/2
-                      opacity-[0.04] pointer-events-none" aria-hidden="true"
-        style={{ background: `radial-gradient(circle, ${accent}, transparent 70%)` }} />
+      <div className="absolute top-0 left-0 right-0 h-1 rounded-b-lg"
+        style={{ background: accent }} aria-hidden="true" />
 
-      <div className="flex items-start justify-between mb-3">
+      <div className="flex items-start justify-between mb-4">
         <div
-          className="w-11 h-11 rounded-xl flex items-center justify-center
+          className="w-14 h-14 rounded-xl flex items-center justify-center
                      transition-transform duration-300 group-hover:scale-110"
           style={{ background: `${accent}15` }}
         >
-          <Icon size={20} style={{ color: accent }} strokeWidth={2.2} />
+          <Icon size={24} style={{ color: accent }} strokeWidth={2.5} />
         </div>
         {trend !== undefined && trend !== 0 && (
           <div
-            className={`flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-lg
+            className={`flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-lg
               ${isUp
-                ? accent === '#ef4444' || accent === '#f97316'
+                ? accent === '#DC2626' || accent === '#EA580C'
                   ? isDark ? 'bg-red-500/10 text-red-400' : 'bg-red-50 text-red-600'
                   : isDark ? 'bg-emerald-500/10 text-emerald-400' : 'bg-emerald-50 text-emerald-600'
                 : isDark ? 'bg-emerald-500/10 text-emerald-400' : 'bg-emerald-50 text-emerald-600'}`}
           >
-            {isUp ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
+            {isUp ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
             {isUp ? '+' : ''}{trend}
           </div>
         )}
       </div>
 
-      <p className={`text-[28px] font-black tabular-nums leading-none mb-1
+      <p className={`text-[40px] font-black tabular-nums leading-none mb-2
         ${isDark ? 'text-white' : 'text-slate-900'}`}
+        style={{ letterSpacing: '-0.02em' }}
         aria-live="polite">
         {animVal}
       </p>
-      <p className={`text-xs font-semibold mb-0.5
-        ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{label}</p>
+      <p className={`text-sm font-semibold mb-1
+        ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>{label}</p>
       {sub && (
-        <p className={`text-[10px] ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>{sub}</p>
+        <p className={`text-xs ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>{sub}</p>
       )}
       {isStudentMode && tipKey && LEARNING_TIPS[tipKey] && (
         <LearningTip text={LEARNING_TIPS[tipKey]} isDark={isDark} />
@@ -398,10 +520,10 @@ const ActionCard = ({ actions, isDark, isStudentMode, onNavigate }) => {
     <div
       role="region"
       aria-label="Recommended actions"
-      className={`rounded-2xl border p-5 flex flex-col card-hover backdrop-blur-xl
+      className={`rounded-2xl border p-5 flex flex-col transition-all duration-200 backdrop-blur-xl
         ${isDark
-          ? 'bg-white/[0.03] border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.2)]'
-          : 'bg-white/80 border-slate-200/50 shadow-[0_4px_24px_rgba(99,102,241,0.06)]'}`}
+          ? 'bg-surface-darkCard/80 border-white/[0.06] shadow-dark-card hover:shadow-dark-hero'
+          : 'bg-white/95 border-slate-200/60 shadow-card hover:shadow-card-hover'}`}
     >
       <div className="absolute top-0 left-5 right-5 h-[2px] rounded-b-full opacity-50 bg-cyan-400" aria-hidden="true" />
 
@@ -428,20 +550,23 @@ const ActionCard = ({ actions, isDark, isStudentMode, onNavigate }) => {
             <li key={i} role="listitem">
               <button
                 onClick={() => onNavigate(`/results/${a.jobId}`)}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left
-                           transition-colors text-xs font-medium group/action
-                  ${isDark ? 'hover:bg-white/[0.04]' : 'hover:bg-slate-50'}`}
+                className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-left
+                           transition-all duration-200 text-sm font-medium group/action
+                           border
+                  ${isDark 
+                    ? 'bg-gradient-to-r from-slate-800/40 to-slate-800/20 border-white/[0.06] hover:border-white/[0.12] hover:bg-slate-800/60' 
+                    : 'bg-gradient-to-r from-slate-50 to-white border-slate-200 hover:border-indigo-300 hover:shadow-md'}`}
                 aria-label={`View ${a.count} ${a.severity} findings in ${a.repo}`}
               >
-                <div className="w-2 h-2 rounded-full flex-shrink-0"
+                <div className="w-3 h-3 rounded-full flex-shrink-0"
                   style={{ background: SEV_COLORS[a.severity] || '#8b5cf6' }} />
-                <span className={isDark ? 'text-slate-300' : 'text-slate-600'}>
+                <span className={isDark ? 'text-slate-300' : 'text-slate-700'}>
                   {a.severity === 'medium' ? 'Review' : 'Fix'}{' '}
-                  <span className="font-bold">{a.count} {a.severity}</span> in {a.repo}
+                  <span className="font-bold" style={{ color: SEV_COLORS[a.severity] }}>{a.count} {a.severity}</span> in {a.repo}
                 </span>
-                <ArrowUpRight size={11}
-                  className={`ml-auto flex-shrink-0
-                    ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
+                <ArrowUpRight size={14}
+                  className={`ml-auto flex-shrink-0 transition-transform group-hover/action:translate-x-0.5 group-hover/action:-translate-y-0.5
+                    ${isDark ? 'text-slate-500 group-hover/action:text-indigo-400' : 'text-slate-400 group-hover/action:text-indigo-600'}`} />
               </button>
             </li>
           ))}
@@ -519,24 +644,24 @@ const FeedGroup = ({ group, onView, isDark, isLast }) => {
           else if (isViewable) onView(latest.job_id);
         }}
         onKeyDown={handleKeyDown}
-        className={`flex items-start gap-3 px-5 py-3 transition-colors select-none relative
-                    focus-visible:ring-2 focus-visible:ring-indigo-500/50 focus-visible:outline-none rounded-lg
+        className={`flex items-start gap-4 px-5 py-4 transition-all duration-150 select-none relative
+                    focus-visible:ring-2 focus-visible:ring-indigo-500/50 focus-visible:outline-none rounded-xl
           ${isViewable || count > 1
-            ? isDark ? 'hover:bg-white/[0.02] cursor-pointer' : 'hover:bg-slate-50/50 cursor-pointer'
+            ? isDark ? 'hover:bg-white/[0.03] cursor-pointer' : 'hover:bg-slate-50 cursor-pointer'
             : ''}`}
       >
         {/* Timeline dot */}
         <div className="flex flex-col items-center flex-shrink-0 pt-1.5">
           <div
-            className="w-2.5 h-2.5 rounded-full border-2 flex-shrink-0"
+            className="w-3 h-3 rounded-full border-3 flex-shrink-0"
             style={{
               borderColor: badge?.color || (isDark ? '#334155' : '#cbd5e1'),
-              background:  badge ? `${badge.color}25` : 'transparent',
+              background:  badge ? `${badge.color}30` : 'transparent',
             }}
           />
           {!isLast && (
-            <div className={`w-px flex-1 mt-1 min-h-[16px]
-              ${isDark ? 'bg-white/[0.04]' : 'bg-slate-100'}`} />
+            <div className={`w-0.5 flex-1 mt-2 min-h-[16px]
+              ${isDark ? 'bg-white/[0.06]' : 'bg-slate-200'}`} />
           )}
         </div>
 
@@ -859,15 +984,17 @@ const DashboardPage = () => {
 
   /* ── Theme tokens ── */
   const tk = {
-    pageBg:   isDark ? 'bg-[#0d0f17]'  : 'bg-[#f4f6fb]',
-    cardBg:   isDark ? 'bg-white/[0.03] backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.2)]'
-                      : 'bg-white/80 backdrop-blur-xl shadow-[0_4px_24px_rgba(99,102,241,0.06)]',
-    border:   isDark ? 'border-white/[0.08]' : 'border-slate-200/50',
+    pageBg:   isDark ? 'bg-surface-dark'  : 'bg-surface-light',
+    cardBg:   isDark ? 'bg-surface-darkCard/80 backdrop-blur-xl shadow-dark-card'
+                      : 'bg-white/95 backdrop-blur-xl shadow-card',
+    heroBg:   isDark ? 'bg-surface-darkElevated/90 backdrop-blur-xl shadow-dark-hero'
+                      : 'bg-white shadow-hero',
+    border:   isDark ? 'border-white/[0.06]' : 'border-slate-200/60',
     heading:  isDark ? 'text-white'     : 'text-slate-900',
-    subtext:  isDark ? 'text-slate-400' : 'text-slate-500',
+    subtext:  isDark ? 'text-slate-400' : 'text-slate-600',
     label:    isDark ? 'text-slate-500' : 'text-slate-500',
-    grid:     isDark ? '#1a1f35'        : '#f1f5f9',
-    axisText: isDark ? '#475569'        : '#94a3b8',
+    grid:     isDark ? '#1E293B'        : '#F1F5F9',
+    axisText: isDark ? '#64748B'        : '#94a3b8',
   };
 
   /* ── P6: Skeleton loading state ── */
@@ -915,7 +1042,8 @@ const DashboardPage = () => {
                 {greeting()}{user?.name ? `, ${user.name.split(' ')[0]}` : ''}
               </p>
             </div>
-            <h1 className={`text-[1.75rem] font-black tracking-tight leading-none ${tk.heading}`}>
+            <h1 className={`text-[32px] font-extrabold tracking-tight leading-none ${tk.heading}`}
+              style={{ letterSpacing: '-0.015em' }}>
               Command Center
             </h1>
           </div>
@@ -985,7 +1113,7 @@ const DashboardPage = () => {
               label={isStudentMode ? 'Urgent Fixes' : 'Critical'}
               value={totalCritical}
               sub={isStudentMode ? 'fix these first' : 'high-impact findings'}
-              icon={Crosshair} accent="#ef4444" trend={trendCrit}
+              icon={Crosshair} accent="#DC2626" trend={trendCrit}
               isDark={isDark} isStudentMode={isStudentMode} tipKey="critical"
               urgent
             />
@@ -993,7 +1121,7 @@ const DashboardPage = () => {
               label={isStudentMode ? 'Important' : 'High Risk'}
               value={totalHighRisk}
               sub={isStudentMode ? 'critical + high' : 'critical + high combined'}
-              icon={Flame} accent="#f97316"
+              icon={Flame} accent="#EA580C"
               isDark={isDark} isStudentMode={isStudentMode} tipKey="high"
             />
             <MetricTile
@@ -1026,8 +1154,8 @@ const DashboardPage = () => {
             aria-label="Vulnerability trend chart"
             className={`col-span-12 lg:col-span-7 rounded-2xl border p-6 animate-fade-in-up backdrop-blur-xl
               ${isDark
-                ? 'bg-white/[0.03] border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.2)]'
-                : 'bg-white/80 border-slate-200/50 shadow-[0_4px_24px_rgba(99,102,241,0.06)]'}`}
+                ? 'bg-surface-darkCard/80 border-white/[0.06] shadow-dark-card'
+                : 'bg-white/95 border-slate-200/60 shadow-card'}`}
             style={{ animationDelay: '0.15s' }}
           >
             <div className="flex items-start justify-between mb-5">
@@ -1136,8 +1264,8 @@ const DashboardPage = () => {
             className={`col-span-12 lg:col-span-5 rounded-2xl border p-6 flex flex-col
                         animate-fade-in-up backdrop-blur-xl
                         ${isDark
-                          ? 'bg-white/[0.03] border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.2)]'
-                          : 'bg-white/80 border-slate-200/50 shadow-[0_4px_24px_rgba(99,102,241,0.06)]'}`}
+                          ? 'bg-surface-darkCard/80 border-white/[0.06] shadow-dark-card'
+                          : 'bg-white/95 border-slate-200/60 shadow-card'}`}
             style={{ animationDelay: '0.2s' }}
           >
             <div className="flex items-center gap-3 mb-5">
@@ -1217,8 +1345,8 @@ const DashboardPage = () => {
             aria-label="Scan analytics chart"
             className={`col-span-12 lg:col-span-7 rounded-2xl border p-6 animate-fade-in-up backdrop-blur-xl
               ${isDark
-                ? 'bg-white/[0.03] border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.2)]'
-                : 'bg-white/80 border-slate-200/50 shadow-[0_4px_24px_rgba(99,102,241,0.06)]'}`}
+                ? 'bg-surface-darkCard/80 border-white/[0.06] shadow-dark-card'
+                : 'bg-white/95 border-slate-200/60 shadow-card'}`}
             style={{ animationDelay: '0.25s' }}
           >
             <div className="flex items-start justify-between mb-5">
@@ -1287,8 +1415,8 @@ const DashboardPage = () => {
             className={`col-span-12 lg:col-span-5 rounded-2xl border overflow-hidden
                         flex flex-col animate-fade-in-up backdrop-blur-xl
                         ${isDark
-                          ? 'bg-white/[0.03] border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.2)]'
-                          : 'bg-white/80 border-slate-200/50 shadow-[0_4px_24px_rgba(99,102,241,0.06)]'}`}
+                          ? 'bg-surface-darkCard/80 border-white/[0.06] shadow-dark-card'
+                          : 'bg-white/95 border-slate-200/60 shadow-card'}`}
             style={{ animationDelay: '0.3s' }}
           >
             <div className={`px-5 py-4 border-b flex items-center justify-between ${tk.border}`}>
