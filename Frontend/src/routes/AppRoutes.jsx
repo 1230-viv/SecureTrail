@@ -9,6 +9,9 @@ const ScanPage      = lazy(() => import('../pages/ScanPage'));
 const ScanningPage  = lazy(() => import('../pages/ScanningPage'));
 const ResultsPage   = lazy(() => import('../pages/ResultsPage'));
 const HistoryPage   = lazy(() => import('../pages/HistoryPage'));
+const LearningPage  = lazy(() => import('../pages/LearningPage'));
+const LearningCoachPage = lazy(() => import('../pages/LearningCoachPage'));
+const RepositoriesPage = lazy(() => import('../pages/RepositoriesPage'));
 
 /* Minimal full-screen loader for chunk downloads */
 const PageLoader = () => (
@@ -48,6 +51,15 @@ const AppRoutes = () => (
       } />
       <Route path="/history" element={
         <ProtectedRoute><HistoryPage /></ProtectedRoute>
+      } />
+      <Route path="/repositories" element={
+        <ProtectedRoute><RepositoriesPage /></ProtectedRoute>
+      } />
+      <Route path="/learning" element={
+        <ProtectedRoute><LearningPage /></ProtectedRoute>
+      } />
+      <Route path="/coach" element={
+        <ProtectedRoute><LearningCoachPage /></ProtectedRoute>
       } />
 
       <Route path="*" element={<Navigate to="/" replace />} />

@@ -186,3 +186,7 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
     """
     async with get_session() as session:
         yield session
+
+
+# Alias for convenience
+get_db = get_db_session

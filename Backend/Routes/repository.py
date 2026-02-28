@@ -1,13 +1,18 @@
-from fastapi import APIRouter, HTTPException, Header, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Header, BackgroundTasks, Depends
 from typing import List, Optional
 from github import Github, GithubException
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, desc
+from datetime import datetime
+from pydantic import BaseModel
 from Controller.models import Repository
 from Jobs.job_manager import job_manager, JobStatus
 from Utils.temp_manager import create_job_directory
 from Utils.logger import get_logger
 from Utils.s3_manager import create_and_upload_zip
-from Database.connection import get_session
+from Database.connection import get_session, get_db
 from Database.repositories import scan_repo as db_scan_repo
+from Database.models import ScanJob
 import subprocess
 import os
 
@@ -169,4 +174,242 @@ async def _clone_and_scan(
     except Exception as e:
         log.error(f"Clone/scan failed for job {job_id}: {e}")
         job_manager.update_job(job_id, status=JobStatus.FAILED, error=str(e))
+
+
+# ── Repository Statistics and Management ──────────────────────────────────────
+
+class RepositoryStats(BaseModel):
+    """Statistics for repository overview"""
+    total_repositories: int
+    active_scans: int
+    high_risk_repos: int
+    last_scan_hours: int
+
+
+class RepositoryInfo(BaseModel):
+    """Detailed repository information"""
+    repository_name: str
+    branch: str
+    last_scan_date: datetime
+    scan_count: int
+    status: str
+    total_vulnerabilities: int
+    critical_count: int
+    high_count: int
+    medium_count: int
+    low_count: int
+    job_id: str
+    risk_level: str
+    security_score: int
+
+
+class RepositoryListResponse(BaseModel):
+    """Response for repository list endpoint"""
+    repositories: List[RepositoryInfo]
+    stats: RepositoryStats
+
+
+def calculate_risk_level(critical: int, high: int, medium: int) -> str:
+    """Calculate risk level based on vulnerability counts"""
+    if critical > 0:
+        return "Critical"
+    elif high >= 3:
+        return "High"
+    elif high > 0 or medium >= 5:
+        return "Medium"
+    else:
+        return "Low"
+
+
+def calculate_security_score(critical: int, high: int, medium: int, low: int) -> int:
+    """Calculate security score (0-100) based on vulnerabilities"""
+    total = critical + high + medium + low
+    if total == 0:
+        return 100
+    
+    # Weighted scoring: critical=10, high=5, medium=2, low=1
+    weighted_score = (critical * 10) + (high * 5) + (medium * 2) + low
+    score = max(0, 100 - weighted_score)
+    return round(score)
+
+
+@router.get("/stats", response_model=RepositoryListResponse)
+async def get_repository_stats(
+    user_id: Optional[int] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get list of all repositories with their scan information.
+    Groups scans by repository and returns the most recent scan data.
+    """
+    try:
+        # Query to get all scan jobs
+        query = select(ScanJob).order_by(desc(ScanJob.created_at))
+        
+        if user_id:
+            query = query.where(ScanJob.user_id == user_id)
+        
+        result = await db.execute(query)
+        all_jobs = result.scalars().all()
+        
+        # Group by repository name
+        repo_map = {}
+        active_scan_count = 0
+        
+        for job in all_jobs:
+            repo_name = job.repository_name or "Unnamed Repository"
+            
+            # Count active scans
+            if job.status in ["scanning", "in_progress"]:
+                active_scan_count += 1
+            
+            if repo_name not in repo_map:
+                # First scan for this repo
+                repo_map[repo_name] = {
+                    "repository_name": repo_name,
+                    "branch": job.branch or "main",
+                    "last_scan_date": job.created_at,
+                    "scan_count": 1,
+                    "status": job.status,
+                    "total_vulnerabilities": job.total_vulnerabilities or 0,
+                    "critical_count": job.critical_count or 0,
+                    "high_count": job.high_count or 0,
+                    "medium_count": job.medium_count or 0,
+                    "low_count": job.low_count or 0,
+                    "job_id": str(job.id),
+                }
+            else:
+                # Update scan count
+                repo_map[repo_name]["scan_count"] += 1
+                
+                # Keep most recent scan data
+                if job.created_at > repo_map[repo_name]["last_scan_date"]:
+                    repo_map[repo_name].update({
+                        "branch": job.branch or "main",
+                        "last_scan_date": job.created_at,
+                        "status": job.status,
+                        "total_vulnerabilities": job.total_vulnerabilities or 0,
+                        "critical_count": job.critical_count or 0,
+                        "high_count": job.high_count or 0,
+                        "medium_count": job.medium_count or 0,
+                        "low_count": job.low_count or 0,
+                        "job_id": str(job.id),
+                    })
+        
+        # Convert to list and add calculated fields
+        repositories = []
+        high_risk_count = 0
+        
+        for repo_data in repo_map.values():
+            risk_level = calculate_risk_level(
+                repo_data["critical_count"],
+                repo_data["high_count"],
+                repo_data["medium_count"]
+            )
+            
+            security_score = calculate_security_score(
+                repo_data["critical_count"],
+                repo_data["high_count"],
+                repo_data["medium_count"],
+                repo_data["low_count"]
+            )
+            
+            if risk_level in ["Critical", "High"]:
+                high_risk_count += 1
+            
+            repo_info = RepositoryInfo(
+                **repo_data,
+                risk_level=risk_level,
+                security_score=security_score
+            )
+            repositories.append(repo_info)
+        
+        # Sort by last scan date (most recent first)
+        repositories.sort(key=lambda x: x.last_scan_date, reverse=True)
+        
+        # Calculate last scan hours
+        last_scan_hours = 0
+        if repositories:
+            # Make datetime timezone-aware for comparison
+            from datetime import timezone
+            now = datetime.now(timezone.utc)
+            last_scan = repositories[0].last_scan_date
+            # Ensure last_scan is timezone-aware
+            if last_scan.tzinfo is None:
+                from zoneinfo import ZoneInfo
+                last_scan = last_scan.replace(tzinfo=timezone.utc)
+            time_diff = now - last_scan
+            last_scan_hours = int(time_diff.total_seconds() / 3600)
+        
+        # Build stats
+        stats = RepositoryStats(
+            total_repositories=len(repositories),
+            active_scans=active_scan_count,
+            high_risk_repos=high_risk_count,
+            last_scan_hours=last_scan_hours
+        )
+        
+        return RepositoryListResponse(
+            repositories=repositories,
+            stats=stats
+        )
+        
+    except Exception as e:
+        logger.error(f"Error fetching repositories: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch repositories: {str(e)}"
+        )
+
+
+@router.get("/{repository_name}/scans")
+async def get_repository_scans(
+    repository_name: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get all scans for a specific repository.
+    """
+    try:
+        query = select(ScanJob).where(
+            ScanJob.repository_name == repository_name
+        ).order_by(desc(ScanJob.created_at))
+        
+        result = await db.execute(query)
+        scans = result.scalars().all()
+        
+        if not scans:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No scans found for repository: {repository_name}"
+            )
+        
+        return {
+            "repository_name": repository_name,
+            "total_scans": len(scans),
+            "scans": [
+                {
+                    "job_id": str(scan.id),
+                    "branch": scan.branch,
+                    "status": scan.status,
+                    "created_at": scan.created_at,
+                    "completed_at": scan.completed_at,
+                    "total_vulnerabilities": scan.total_vulnerabilities,
+                    "critical_count": scan.critical_count,
+                    "high_count": scan.high_count,
+                    "medium_count": scan.medium_count,
+                    "low_count": scan.low_count,
+                }
+                for scan in scans
+            ]
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching repository scans: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch repository scans: {str(e)}"
+        )
 

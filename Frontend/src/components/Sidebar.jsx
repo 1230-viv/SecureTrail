@@ -3,17 +3,19 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, History, BookOpen, Settings, LogOut,
   ShieldCheck, ScanLine, Sun, Moon, GraduationCap, Briefcase,
-  Lock, ChevronRight, Sparkles,
+  Lock, ChevronRight, Sparkles, Folder,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 
 const NAV_ITEMS = [
-  { icon: LayoutDashboard, label: 'Dashboard',        path: '/dashboard', description: 'Overview & stats'     },
-  { icon: ScanLine,        label: 'New Scan',          path: '/scan',      description: 'Start a security scan' },
-  { icon: History,         label: 'Scan History',      path: '/history',   description: 'Past scan results'     },
-  { icon: BookOpen,        label: 'Learning Insights', path: null,         description: 'AI-powered tips'       },
-  { icon: Settings,        label: 'Settings',          path: null,         description: 'Preferences'           },
+  { icon: LayoutDashboard, label: 'Dashboard',        path: '/dashboard',     description: 'Overview & stats'     },
+  { icon: ScanLine,        label: 'New Scan',          path: '/scan',          description: 'Start a security scan' },
+  { icon: Folder,          label: 'Repositories',      path: '/repositories',  description: 'Manage repos'          },
+  { icon: History,         label: 'Scan History',      path: '/history',       description: 'Past scan results'     },
+  { icon: BookOpen,        label: 'Learning Insights', path: '/learning',      description: 'AI-powered tips'       },
+  { icon: Sparkles,        label: 'AI Coach',          path: '/coach',         description: 'Ask me anything'       },
+  { icon: Settings,        label: 'Settings',          path: null,             description: 'Preferences'           },
 ];
 
 /** Pill toggle used in the footer */

@@ -38,6 +38,20 @@ export const repositoryAPI = {
     api.post('/api/repository/scan', null, {
       params: { repo_full_name: repoFullName, branch },
     }),
+
+  /**
+   * Get repository statistics and scan history
+   * Returns { repositories: [], stats: {} }
+   */
+  getRepositoryStats: (userId) => api.get('/api/repository/stats', {
+    params: userId ? { user_id: userId } : {},
+  }),
+
+  /**
+   * Get all scans for a specific repository
+   */
+  getRepositoryScans: (repositoryName) => 
+    api.get(`/api/repository/${repositoryName}/scans`),
 };
 
 // ── Upload ────────────────────────────────────────────────────────────────────
