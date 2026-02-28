@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom';
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine,
 } from 'recharts';
 import {
   ArrowRight, Loader2, Github, FileArchive, ChevronRight, ChevronDown,
@@ -219,7 +219,7 @@ const HealthGauge = ({ score, previousScore, scoreHistory, topAction, isDark, is
                    relative overflow-hidden backdrop-blur-xl
         ${isDark
           ? 'bg-white/[0.03] border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.3)]'
-          : 'bg-white/70 border-white/60 shadow-[0_8px_32px_rgba(99,102,241,0.08)]'}`}
+          : 'bg-white/80 border-slate-200/50 shadow-[0_8px_32px_rgba(99,102,241,0.08)]'}`}
     >
       {/* Decorative glow — larger and more prominent */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none" aria-hidden="true">
@@ -326,16 +326,21 @@ const HealthGauge = ({ score, previousScore, scoreHistory, topAction, isDark, is
 /* ═══════════════════════════════════════════════════════════════
    METRIC TILE — animated counter + accent stripe
    ═══════════════════════════════════════════════════════════ */
-const MetricTile = ({ label, value, sub, icon: Icon, accent, trend, isDark, isStudentMode, tipKey }) => {
+const MetricTile = ({ label, value, sub, icon: Icon, accent, trend, isDark, isStudentMode, tipKey, urgent }) => {
   const animVal = useAnimatedValue(value);
   const isUp    = trend > 0;
+  const isUrgent = urgent && value > 0;
 
   return (
     <div
       className={`rounded-2xl border p-5 relative overflow-hidden group card-hover backdrop-blur-xl
-        ${isDark
-          ? 'bg-white/[0.03] border-white/[0.08] hover:border-white/[0.15] shadow-[0_8px_32px_rgba(0,0,0,0.2)]'
-          : 'bg-white/70 border-white/60 hover:shadow-xl shadow-[0_4px_24px_rgba(99,102,241,0.06)]'}`}
+        ${isUrgent
+          ? isDark
+            ? 'bg-red-500/[0.04] border-red-500/30 ring-2 ring-red-500/20 animate-[pulse_3s_ease-in-out_infinite] shadow-[0_8px_32px_rgba(239,68,68,0.15)]'
+            : 'bg-red-50/50 border-red-300/60 ring-2 ring-red-400/20 animate-[pulse_3s_ease-in-out_infinite] shadow-[0_8px_32px_rgba(239,68,68,0.1)]'
+          : isDark
+            ? 'bg-white/[0.03] border-white/[0.08] hover:border-white/[0.15] shadow-[0_8px_32px_rgba(0,0,0,0.2)]'
+            : 'bg-white/80 border-slate-200/50 hover:shadow-xl shadow-[0_4px_24px_rgba(99,102,241,0.06)]'}`}
     >
       <div className="absolute top-0 left-5 right-5 h-[2px] rounded-b-full opacity-60"
         style={{ background: `linear-gradient(90deg, transparent, ${accent}, transparent)` }} aria-hidden="true" />
@@ -396,7 +401,7 @@ const ActionCard = ({ actions, isDark, isStudentMode, onNavigate }) => {
       className={`rounded-2xl border p-5 flex flex-col card-hover backdrop-blur-xl
         ${isDark
           ? 'bg-white/[0.03] border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.2)]'
-          : 'bg-white/70 border-white/60 shadow-[0_4px_24px_rgba(99,102,241,0.06)]'}`}
+          : 'bg-white/80 border-slate-200/50 shadow-[0_4px_24px_rgba(99,102,241,0.06)]'}`}
     >
       <div className="absolute top-0 left-5 right-5 h-[2px] rounded-b-full opacity-50 bg-cyan-400" aria-hidden="true" />
 
@@ -419,7 +424,7 @@ const ActionCard = ({ actions, isDark, isStudentMode, onNavigate }) => {
         </div>
       ) : (
         <ul role="list" className="space-y-1.5 flex-1">
-          {actions.slice(0, 3).map((a, i) => (
+          {actions.slice(0, 4).map((a, i) => (
             <li key={i} role="listitem">
               <button
                 onClick={() => onNavigate(`/results/${a.jobId}`)}
@@ -431,15 +436,26 @@ const ActionCard = ({ actions, isDark, isStudentMode, onNavigate }) => {
                 <div className="w-2 h-2 rounded-full flex-shrink-0"
                   style={{ background: SEV_COLORS[a.severity] || '#8b5cf6' }} />
                 <span className={isDark ? 'text-slate-300' : 'text-slate-600'}>
-                  Fix <span className="font-bold">{a.count} {a.severity}</span> in {a.repo}
+                  {a.severity === 'medium' ? 'Review' : 'Fix'}{' '}
+                  <span className="font-bold">{a.count} {a.severity}</span> in {a.repo}
                 </span>
                 <ArrowUpRight size={11}
-                  className={`ml-auto opacity-0 group-hover/action:opacity-100 transition-opacity flex-shrink-0
+                  className={`ml-auto flex-shrink-0
                     ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
               </button>
             </li>
           ))}
         </ul>
+      )}
+
+      {actions.length > 4 && (
+        <button
+          onClick={() => onNavigate('/history')}
+          className={`text-[11px] font-bold mt-1 self-start
+            ${isDark ? 'text-indigo-400 hover:text-indigo-300' : 'text-indigo-600 hover:text-indigo-500'}`}
+        >
+          View all actions →
+        </button>
       )}
 
       {isStudentMode && <LearningTip text={LEARNING_TIPS.actions} isDark={isDark} />}
@@ -627,28 +643,31 @@ const SeverityBar = ({ label, value, total, color, isDark }) => {
    P6 — SKELETON DASHBOARD — layout-matching loading state
    ═══════════════════════════════════════════════════════════ */
 const SkeletonDashboard = ({ isDark }) => {
-  const bg = isDark ? 'bg-white/[0.04] backdrop-blur-xl' : 'bg-white/40 backdrop-blur-xl';
+  const bg = isDark
+    ? 'bg-white/[0.04] backdrop-blur-xl'
+    : 'bg-white/40 backdrop-blur-xl';
+  const shimmer = `relative overflow-hidden shimmer-sweep rounded-2xl ${bg}`;
   return (
     <div className={`min-h-screen ${isDark ? 'bg-[#0d0f17]' : 'bg-[#f4f6fb]'} transition-colors duration-300`}>
       <div className="max-w-[1440px] mx-auto px-6 py-8">
         {/* Header skeleton */}
         <div className="flex items-end justify-between mb-8">
           <div className="space-y-2">
-            <div className={`h-3 w-32 rounded ${bg} animate-pulse`} />
-            <div className={`h-7 w-48 rounded ${bg} animate-pulse`} />
+            <div className={`h-3 w-32 rounded ${shimmer}`} />
+            <div className={`h-7 w-48 rounded ${shimmer}`} />
           </div>
           <div className="flex gap-2.5">
-            <div className={`h-10 w-24 rounded-xl ${bg} animate-pulse`} />
-            <div className={`h-10 w-28 rounded-xl ${bg} animate-pulse`} />
+            <div className={`h-10 w-24 ${shimmer}`} />
+            <div className={`h-10 w-28 ${shimmer}`} />
           </div>
         </div>
 
         {/* Row 1: Gauge + 4 tiles */}
         <div className="grid grid-cols-12 gap-4 mb-4">
-          <div className={`col-span-12 md:col-span-6 lg:col-span-3 h-[280px] rounded-2xl ${bg} animate-pulse`} />
+          <div className={`col-span-12 md:col-span-6 lg:col-span-3 h-[280px] ${shimmer}`} />
           <div className="col-span-12 md:col-span-6 lg:col-span-9 grid grid-cols-2 lg:grid-cols-4 gap-4">
             {[1,2,3,4].map(i => (
-              <div key={i} className={`h-[130px] rounded-2xl ${bg} animate-pulse`}
+              <div key={i} className={`h-[130px] ${shimmer}`}
                 style={{ animationDelay: `${i * 100}ms` }} />
             ))}
           </div>
@@ -656,15 +675,15 @@ const SkeletonDashboard = ({ isDark }) => {
 
         {/* Row 2: chart + sidebar */}
         <div className="grid grid-cols-12 gap-4 mb-4">
-          <div className={`col-span-12 lg:col-span-7 h-[360px] rounded-2xl ${bg} animate-pulse`} />
-          <div className={`col-span-12 lg:col-span-5 h-[360px] rounded-2xl ${bg} animate-pulse`}
+          <div className={`col-span-12 lg:col-span-7 h-[360px] ${shimmer}`} />
+          <div className={`col-span-12 lg:col-span-5 h-[360px] ${shimmer}`}
             style={{ animationDelay: '100ms' }} />
         </div>
 
         {/* Row 3: chart + feed */}
         <div className="grid grid-cols-12 gap-4">
-          <div className={`col-span-12 lg:col-span-7 h-[330px] rounded-2xl ${bg} animate-pulse`} />
-          <div className={`col-span-12 lg:col-span-5 h-[330px] rounded-2xl ${bg} animate-pulse`}
+          <div className={`col-span-12 lg:col-span-7 h-[330px] ${shimmer}`} />
+          <div className={`col-span-12 lg:col-span-5 h-[330px] ${shimmer}`}
             style={{ animationDelay: '100ms' }} />
         </div>
       </div>
@@ -682,14 +701,21 @@ const DashboardPage = () => {
   const { isDark, isStudentMode } = useTheme();
 
   const [jobs, setJobs]       = useState(() => {
-    // P6: Load cached data from sessionStorage for instant render
+    // P6: Load cached data from sessionStorage for instant render (5-min TTL)
     try {
-      const cached = sessionStorage.getItem('securetrail_jobs');
-      if (cached) return JSON.parse(cached);
+      const raw = sessionStorage.getItem('securetrail_jobs');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        // Support both TTL-wrapped {ts,data} and legacy plain array
+        if (Array.isArray(parsed)) return parsed;
+        if (parsed.ts && Date.now() - parsed.ts < 5 * 60 * 1000) return parsed.data;
+      }
     } catch {}
     return [];
   });
   const [loading, setLoading] = useState(true);
+  const [lastFetchTs, setLastFetchTs] = useState(null);
+  const [agoLabel, setAgoLabel]       = useState('');
 
   const fetchJobs = useCallback(() => {
     setLoading(true);
@@ -697,13 +723,36 @@ const DashboardPage = () => {
       .then(({ data }) => {
         const list = Array.isArray(data) ? data : (data.jobs || []);
         setJobs(list);
-        try { sessionStorage.setItem('securetrail_jobs', JSON.stringify(list)); } catch {}
+        setLastFetchTs(Date.now());
+        try { sessionStorage.setItem('securetrail_jobs', JSON.stringify({ ts: Date.now(), data: list })); } catch {}
       })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => { fetchJobs(); }, [fetchJobs]);
+
+  // Update "X ago" label every 15s
+  useEffect(() => {
+    if (!lastFetchTs) return;
+    const update = () => {
+      const s = Math.round((Date.now() - lastFetchTs) / 1000);
+      if (s < 5) setAgoLabel('just now');
+      else if (s < 60) setAgoLabel(`${s}s ago`);
+      else setAgoLabel(`${Math.floor(s / 60)}m ago`);
+    };
+    update();
+    const id = setInterval(update, 15000);
+    return () => clearInterval(id);
+  }, [lastFetchTs]);
+
+  // Auto-refresh when running jobs exist (poll every 8s)
+  const hasRunning = jobs.some(j => j.status === 'running' || j.status === 'pending');
+  useEffect(() => {
+    if (!hasRunning) return;
+    const id = setInterval(fetchJobs, 8000);
+    return () => clearInterval(id);
+  }, [hasRunning, fetchJobs]);
 
   /* ── Derived data ── */
   const done  = jobs.filter(isDone);
@@ -745,7 +794,7 @@ const DashboardPage = () => {
     const actions = [];
     const seen = new Set();
     for (const j of done) {
-      if (seen.size >= 3) break;
+      if (seen.size >= 4) break;
       const name = (j.repository_name || 'Unnamed').split(/[/\\]/).pop() || 'Unnamed';
       const key  = `${name}-${j.job_id}`;
       if (seen.has(key)) continue;
@@ -754,6 +803,9 @@ const DashboardPage = () => {
         seen.add(key);
       } else if ((j.high_count || 0) > 0) {
         actions.push({ repo: name, count: j.high_count, severity: 'high', jobId: j.job_id });
+        seen.add(key);
+      } else if ((j.medium_count || 0) > 0) {
+        actions.push({ repo: name, count: j.medium_count, severity: 'medium', jobId: j.job_id });
         seen.add(key);
       }
     }
@@ -775,6 +827,11 @@ const DashboardPage = () => {
     Critical: j.critical_count        || 0,
     High:     j.high_count            || 0,
   }));
+
+  // Average total for trend annotation
+  const avgTotal = areaData.length > 0
+    ? Math.round(areaData.reduce((a, d) => a + d.Total, 0) / areaData.length)
+    : 0;
 
   // Severity distribution
   const pieData    = SEV_META
@@ -804,8 +861,8 @@ const DashboardPage = () => {
   const tk = {
     pageBg:   isDark ? 'bg-[#0d0f17]'  : 'bg-[#f4f6fb]',
     cardBg:   isDark ? 'bg-white/[0.03] backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.2)]'
-                      : 'bg-white/70 backdrop-blur-xl shadow-[0_4px_24px_rgba(99,102,241,0.06)]',
-    border:   isDark ? 'border-white/[0.08]' : 'border-white/60',
+                      : 'bg-white/80 backdrop-blur-xl shadow-[0_4px_24px_rgba(99,102,241,0.06)]',
+    border:   isDark ? 'border-white/[0.08]' : 'border-slate-200/50',
     heading:  isDark ? 'text-white'     : 'text-slate-900',
     subtext:  isDark ? 'text-slate-400' : 'text-slate-500',
     label:    isDark ? 'text-slate-500' : 'text-slate-500',
@@ -930,6 +987,7 @@ const DashboardPage = () => {
               sub={isStudentMode ? 'fix these first' : 'high-impact findings'}
               icon={Crosshair} accent="#ef4444" trend={trendCrit}
               isDark={isDark} isStudentMode={isStudentMode} tipKey="critical"
+              urgent
             />
             <MetricTile
               label={isStudentMode ? 'Important' : 'High Risk'}
@@ -969,7 +1027,7 @@ const DashboardPage = () => {
             className={`col-span-12 lg:col-span-7 rounded-2xl border p-6 animate-fade-in-up backdrop-blur-xl
               ${isDark
                 ? 'bg-white/[0.03] border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.2)]'
-                : 'bg-white/70 border-white/60 shadow-[0_4px_24px_rgba(99,102,241,0.06)]'}`}
+                : 'bg-white/80 border-slate-200/50 shadow-[0_4px_24px_rgba(99,102,241,0.06)]'}`}
             style={{ animationDelay: '0.15s' }}
           >
             <div className="flex items-start justify-between mb-5">
@@ -987,15 +1045,31 @@ const DashboardPage = () => {
                   </p>
                 </div>
               </div>
-              {areaData.length > 0 && (
-                <div className={`text-right px-3 py-1.5 rounded-lg
-                  ${isDark ? 'bg-white/[0.03]' : 'bg-slate-50'}`}>
-                  <p className="text-lg font-black text-indigo-400 tabular-nums">
-                    {areaData[areaData.length - 1]?.Total ?? 0}
-                  </p>
-                  <p className={`text-[9px] font-semibold uppercase tracking-wider ${tk.label}`}>latest</p>
-                </div>
-              )}
+              {areaData.length > 0 && (() => {
+                const latest = areaData[areaData.length - 1]?.Total ?? 0;
+                const first  = areaData[0]?.Total ?? 0;
+                const delta  = first > 0 ? Math.round(((latest - first) / first) * 100) : 0;
+                const improving = delta <= 0;
+                return (
+                  <div className="flex items-center gap-2">
+                    {areaData.length >= 2 && delta !== 0 && (
+                      <span className={`flex items-center gap-0.5 text-[10px] font-bold px-2 py-1 rounded-lg
+                        ${improving
+                          ? (isDark ? 'bg-emerald-500/10 text-emerald-400' : 'bg-emerald-50 text-emerald-600')
+                          : (isDark ? 'bg-red-500/10 text-red-400' : 'bg-red-50 text-red-600')
+                        }`}>
+                        {improving ? <TrendingDown size={11} /> : <TrendingUp size={11} />}
+                        {improving ? '' : '+'}{delta}%
+                      </span>
+                    )}
+                    <div className={`text-right px-3 py-1.5 rounded-lg
+                      ${isDark ? 'bg-white/[0.03]' : 'bg-slate-50'}`}>
+                      <p className="text-lg font-black text-indigo-400 tabular-nums">{latest}</p>
+                      <p className={`text-[9px] font-semibold uppercase tracking-wider ${tk.label}`}>latest</p>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             {areaData.length === 0 ? (
@@ -1034,6 +1108,12 @@ const DashboardPage = () => {
                   <Tooltip content={<ChartTooltip isDark={isDark} />} />
                   <Legend iconType="circle" iconSize={6}
                     wrapperStyle={{ fontSize: '10px', paddingTop: '10px', color: tk.axisText }} />
+                  {avgTotal > 0 && (
+                    <ReferenceLine y={avgTotal} stroke={isDark ? '#6366f180' : '#6366f160'}
+                      strokeDasharray="6 4" strokeWidth={1}
+                      label={{ value: `avg ${avgTotal}`, position: 'insideTopRight',
+                        fill: isDark ? '#a5b4fc' : '#6366f1', fontSize: 9, fontWeight: 600 }} />
+                  )}
                   <Area type="monotone" dataKey="Total" stroke="#6366f1" strokeWidth={2}
                     fill="url(#gAreaTotal)" dot={false}
                     activeDot={{ r: 4, fill: '#6366f1', stroke: '#6366f120', strokeWidth: 8 }} />
@@ -1057,7 +1137,7 @@ const DashboardPage = () => {
                         animate-fade-in-up backdrop-blur-xl
                         ${isDark
                           ? 'bg-white/[0.03] border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.2)]'
-                          : 'bg-white/70 border-white/60 shadow-[0_4px_24px_rgba(99,102,241,0.06)]'}`}
+                          : 'bg-white/80 border-slate-200/50 shadow-[0_4px_24px_rgba(99,102,241,0.06)]'}`}
             style={{ animationDelay: '0.2s' }}
           >
             <div className="flex items-center gap-3 mb-5">
@@ -1085,11 +1165,11 @@ const DashboardPage = () => {
             ) : (
               <div className="flex-1 flex flex-col">
                 <div className="flex justify-center mb-3">
-                  <div style={{ color: isDark ? '#fff' : '#0f172a' }}>
-                    <ResponsiveContainer width={160} height={160}>
+                  <div className="relative" style={{ width: 200, height: 200, color: isDark ? '#fff' : '#0f172a' }}>
+                    <ResponsiveContainer width={200} height={200}>
                       <PieChart>
                         <Pie data={pieData} cx="50%" cy="50%"
-                          innerRadius={48} outerRadius={72}
+                          innerRadius={60} outerRadius={90}
                           dataKey="value" strokeWidth={0} label={false}>
                           {pieData.map((entry, idx) => (
                             <Cell key={idx} fill={entry.color} />
@@ -1098,6 +1178,15 @@ const DashboardPage = () => {
                         <Tooltip content={<ChartTooltip isDark={isDark} />} />
                       </PieChart>
                     </ResponsiveContainer>
+                    {/* Center label */}
+                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                      <span className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                        {grandTotal}
+                      </span>
+                      <span className={`text-[10px] font-medium tracking-wide uppercase ${isDark ? 'text-white/50' : 'text-slate-400'}`}>
+                        {grandTotal === 1 ? 'finding' : 'findings'}
+                      </span>
+                    </div>
                   </div>
                 </div>
                 <div className="space-y-2.5 mt-auto">
@@ -1129,7 +1218,7 @@ const DashboardPage = () => {
             className={`col-span-12 lg:col-span-7 rounded-2xl border p-6 animate-fade-in-up backdrop-blur-xl
               ${isDark
                 ? 'bg-white/[0.03] border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.2)]'
-                : 'bg-white/70 border-white/60 shadow-[0_4px_24px_rgba(99,102,241,0.06)]'}`}
+                : 'bg-white/80 border-slate-200/50 shadow-[0_4px_24px_rgba(99,102,241,0.06)]'}`}
             style={{ animationDelay: '0.25s' }}
           >
             <div className="flex items-start justify-between mb-5">
@@ -1199,7 +1288,7 @@ const DashboardPage = () => {
                         flex flex-col animate-fade-in-up backdrop-blur-xl
                         ${isDark
                           ? 'bg-white/[0.03] border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.2)]'
-                          : 'bg-white/70 border-white/60 shadow-[0_4px_24px_rgba(99,102,241,0.06)]'}`}
+                          : 'bg-white/80 border-slate-200/50 shadow-[0_4px_24px_rgba(99,102,241,0.06)]'}`}
             style={{ animationDelay: '0.3s' }}
           >
             <div className={`px-5 py-4 border-b flex items-center justify-between ${tk.border}`}>
@@ -1209,10 +1298,21 @@ const DashboardPage = () => {
                   <Zap size={13} className="text-cyan-400" />
                 </div>
                 <p className={`text-sm font-bold ${tk.heading}`}>Live Feed</p>
+                {hasRunning && (
+                  <span className="relative flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                  </span>
+                )}
                 {jobs.length > 0 && (
                   <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded
                     ${isDark ? 'bg-white/[0.04] text-slate-500' : 'bg-slate-50 text-slate-400'}`}>
                     {feedGroups.length} {feedGroups.length === 1 ? 'repo' : 'repos'}
+                  </span>
+                )}
+                {agoLabel && (
+                  <span className={`text-[9px] font-medium ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>
+                    · {agoLabel}
                   </span>
                 )}
               </div>
