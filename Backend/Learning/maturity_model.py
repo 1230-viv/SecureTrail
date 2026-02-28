@@ -1,16 +1,20 @@
 """
-Maturity Model — SecureTrail Learning System
-============================================
+Maturity Model — SecureTrail Learning System v3
+================================================
 Security maturity levels and badge system.
 
-Levels map to a health score:
-  Beginner          0 – 30
-  Improving        31 – 50
-  Security-Aware   51 – 70
-  Hardened         71 – 85
-  Secure Architect 86 – 100
+v3 score formula (linear, transparent to developers):
+  score = max(0, 100 − (critical×15) − (high×8) − (medium×3) − (low×1))
 
-Badges are earned based on scan history patterns.
+v3 levels:
+  Critical   0  – 20
+  Beginner  21  – 40
+  Developing 41 – 60
+  Secure    61  – 80
+  Hardened  81  – 100
+
+Each point gained maps directly to fixing a specific finding, making progress
+tangible and understandable.
 """
 
 from __future__ import annotations
@@ -24,64 +28,83 @@ from Learning.learning_engine import (
     extract_severity_counts,
 )
 
+
 # ──────────────────────────────────────────────────────────────────────────────
-# Maturity levels
+# v3 linear score (transparent, directly tied to findings)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def compute_v3_score(sev_counts: dict[str, int]) -> int:
+    """
+    Compute the v3 linear health score.
+    score = max(0, 100 − (critical×15) − (high×8) − (medium×3) − (low×1))
+
+    This formula is transparent: every critical fixed = +15 pts, every high = +8 pts.
+    """
+    c = sev_counts.get("critical", 0)
+    h = sev_counts.get("high",     0)
+    m = sev_counts.get("medium",   0)
+    l = sev_counts.get("low",      0)
+    return max(0, 100 - (c * 15) - (h * 8) - (m * 3) - (l * 1))
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Maturity levels (v3)
 # ──────────────────────────────────────────────────────────────────────────────
 MATURITY_LEVELS: list[dict] = [
     {
+        "id":          "critical",
+        "label":       "Critical",
+        "min_score":   0,
+        "max_score":   20,
+        "color":       "#dc2626",
+        "bg_color":    "#fee2e2",
+        "description": "Critical vulnerabilities dominate the codebase. Immediate remediation of high-impact findings is required.",
+        "icon":        "AlertTriangle",
+        "next_step":   "Resolve all critical-severity findings — each one adds 15 points to your score.",
+    },
+    {
         "id":          "beginner",
         "label":       "Beginner",
-        "min_score":   0,
-        "max_score":   30,
+        "min_score":   21,
+        "max_score":   40,
         "color":       "#ef4444",
-        "bg_color":    "#fee2e2",
-        "description": "Critical vulnerabilities are present. Focus on the highest-severity findings immediately.",
+        "bg_color":    "#fef2f2",
+        "description": "High-severity issues are present. Focus on eliminating high and critical findings to build security momentum.",
         "icon":        "Shield",
-        "next_step":   "Resolve all critical and high-severity findings to advance.",
+        "next_step":   "Fix high-severity findings (each adds 8 points) to advance to Developing.",
     },
     {
-        "id":          "improving",
-        "label":       "Improving",
-        "min_score":   31,
-        "max_score":   50,
+        "id":          "developing",
+        "label":       "Developing",
+        "min_score":   41,
+        "max_score":   60,
         "color":       "#f97316",
-        "bg_color":    "#ffedd5",
-        "description": "You're making progress but medium/high issues remain. Keep building security habits.",
+        "bg_color":    "#fff7ed",
+        "description": "Core security practices are emerging. Medium-severity issues are the main obstacle to advancement.",
         "icon":        "TrendingUp",
-        "next_step":   "Eliminate high-severity findings and address recurring categories.",
+        "next_step":   "Address medium-severity findings (each adds 3 points) to reach the Secure level.",
     },
     {
-        "id":          "security_aware",
-        "label":       "Security-Aware",
-        "min_score":   51,
-        "max_score":   70,
-        "color":       "#eab308",
-        "bg_color":    "#fef9c3",
-        "description": "Core vulnerabilities are addressed. Focus on hardening remaining medium issues.",
-        "icon":        "Eye",
-        "next_step":   "Resolve all medium findings and implement proactive controls.",
+        "id":          "secure",
+        "label":       "Secure",
+        "min_score":   61,
+        "max_score":   80,
+        "color":       "#22c55e",
+        "bg_color":    "#f0fdf4",
+        "description": "Strong security posture. Low-severity findings are the remaining gap. You are close to Hardened status.",
+        "icon":        "ShieldCheck",
+        "next_step":   "Clean up low-severity findings (each adds 1 point) and maintain with regular scans.",
     },
     {
         "id":          "hardened",
         "label":       "Hardened",
-        "min_score":   71,
-        "max_score":   85,
-        "color":       "#22c55e",
-        "bg_color":    "#dcfce7",
-        "description": "Strong security posture. Few low-severity issues remain.",
-        "icon":        "ShieldCheck",
-        "next_step":   "Clean up low findings and maintain with regular scans.",
-    },
-    {
-        "id":          "secure_architect",
-        "label":       "Secure Architect",
-        "min_score":   86,
+        "min_score":   81,
         "max_score":   100,
         "color":       "#6366f1",
         "bg_color":    "#eef2ff",
-        "description": "Exceptional security posture. You are building with security-first principles.",
+        "description": "Exceptional security posture. You are building with security-first principles and minimal residual risk.",
         "icon":        "Star",
-        "next_step":   "Maintain discipline, mentor others, and run threat modelling.",
+        "next_step":   "Maintain discipline, conduct threat modelling, and mentor peers.",
     },
 ]
 
@@ -203,7 +226,7 @@ _BADGE_MAP: dict[str, dict] = {b["id"]: b for b in BADGE_DEFINITIONS}
 # ──────────────────────────────────────────────────────────────────────────────
 def _score_for_job(job: dict) -> int:
     r = job.get("result_json") or {}
-    return compute_health_score(r, extract_severity_counts(r))
+    return compute_v3_score(extract_severity_counts(r))
 
 
 def _total_vulns(job: dict) -> int:
@@ -273,8 +296,8 @@ def compute_badges(sorted_jobs: list[dict]) -> list[dict[str, Any]]:
     if len(sorted_jobs) >= 5:
         earned_ids.add("five_scans")
 
-    # secure_architect
-    if latest_score >= 86:
+    # secure_architect (now maps to Hardened level, score >= 81)
+    if latest_score >= 81:
         earned_ids.add("secure_architect")
 
     # dependency_clean
@@ -333,7 +356,7 @@ def get_maturity_report(sorted_jobs: list[dict]) -> dict[str, Any]:
 
     latest = sorted_jobs[-1]
     r      = latest.get("result_json") or {}
-    score  = compute_health_score(r, extract_severity_counts(r))
+    score  = compute_v3_score(extract_severity_counts(r))
     level  = get_maturity_level(score)
     badges = compute_badges(sorted_jobs)
     earned = sum(1 for b in badges if b["earned"])
@@ -355,6 +378,7 @@ def get_maturity_report(sorted_jobs: list[dict]) -> dict[str, Any]:
 
     return {
         "score":              score,
+        "score_formula":      "100 - (critical×15) - (high×8) - (medium×3) - (low×1)",
         "level":              level,
         "progress_pct":       maturity_progress_pct(score),
         "badges":             badges,
@@ -440,7 +464,7 @@ def get_transparent_maturity_explanation(
     # ── Build to_advance (HOW to reach next level) ────────────────────────────
     to_advance: list[str] = []
 
-    if score >= 86:
+    if score >= 81:
         to_advance = [
             "Maintain zero critical/high findings across all scans",
             "Conduct regular threat modelling sessions",
@@ -478,25 +502,27 @@ def get_transparent_maturity_explanation(
 
     # ── Encouragement ─────────────────────────────────────────────────────────
     encouragement_map = {
+        "critical": (
+            "Your first priority is resolving critical findings — each one removed adds 15 points. "
+            f"Start with the top finding and build momentum."
+        ),
         "beginner": (
-            "Every expert was once a beginner — your first scan is the hardest step. "
-            f"Tackle the critical issues first and watch your score climb."
+            f"You're making progress! Fix the remaining high-severity issues "
+            f"(+8 pts each) and you'll reach '{next_level['label']}' in this scan cycle."
         ),
-        "improving": (
-            f"You're already making progress! {score_gap} more points and you reach "
-            f"'{next_level['label']}'. Keep going — each fix compounds."
+        "developing": (
+            "You've tackled the severe issues — well done. "
+            f"You're {score_gap} points from '{next_level['label']}'. "
+            "Medium findings (+3 pts each) are your path forward."
         ),
-        "security_aware": (
-            "You've built solid security awareness. "
-            f"You're {score_gap} points away from '{next_level['label']}' — the home stretch."
+        "secure": (
+            "Strong security posture achieved. "
+            f"You need just {score_gap} more points to reach Hardened. "
+            "Each low-severity fix adds 1 point — a clean weekend sprint could do it."
         ),
         "hardened": (
-            "You're in the top tier of secure developers. "
-            "A few more clean scans and you'll reach Secure Architect status."
-        ),
-        "secure_architect": (
-            "Exceptional work — you've reached the highest maturity level. "
-            "Your codebase is a model for secure development. Keep it up!"
+            "Exceptional work — you've reached the Hardened level. "
+            "Your codebase is a model for security-first development. Keep it up!"
         ),
     }
     encouragement = encouragement_map.get(level["id"], level["description"])

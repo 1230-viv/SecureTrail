@@ -1,19 +1,18 @@
 """
-AI Mentor Module — SecureTrail Learning System
-===============================================
-Integrates with AWS Bedrock Claude Sonnet to produce AI-powered, personalised
-learning insights for every scan.
+AI Mentor Module — SecureTrail Learning System v3
+==================================================
+Integrates with AWS Bedrock (Amazon Nova Pro) to produce personalised,
+longitudinal security mentoring insights for every scan.
 
-New in v2:
-  - Full structured prompt: scan_summary, category distribution, previous scan
-    delta, recurring patterns, behavioural signals, maturity context
-  - Complete 7-key JSON schema: learning_summary, behavioral_insights,
-    recurring_patterns, priority_roadmap, exploit_simulations, deep_dive,
-    maturity_explanation
-  - Exploit simulation for top 3 critical/high findings
-  - 4096 max_tokens, temperature 0.15 for deterministic yet natural output
-  - Tight schema validation — falls back gracefully on any schema mismatch
-  - Caching keyed on full context hash (not just findings)
+v3 changes:
+  - Structured JSON context input (project_name, findings enriched with
+    file/line/code_snippet/CWE/CVSS/is_recurring, historical_summary)
+  - New output schema: deep_dive items include secure_example_before,
+    secure_example_after, learning_takeaway; risk_momentum_explanation field
+  - temperature=0.2, max_tokens=3000 for focused, deterministic output
+  - Safe educational language only (no "exploit", "attacker", "attack",
+    "penetration" — uses misuse risk / unauthorized access / security weakness)
+  - Enriched finding fingerprints in cache key
 """
 
 from __future__ import annotations
@@ -41,10 +40,10 @@ AI_ENABLED: bool = os.getenv("AI_ENABLED", "false").lower() == "true"
 _CACHE_DIR         = Path(__file__).parent / ".ai_cache"
 _CACHE_TTL_SECONDS = 60 * 60 * 24       # 24 hours
 _TOP_N_FINDINGS    = 5                  # findings sent to AI
-_TOP_N_EXPLOITS    = 3                  # findings that get full exploit simulation
-_MAX_MSG_CHARS     = 300                # truncate finding messages
-_AI_MAX_TOKENS     = int(os.getenv("BEDROCK_MAX_TOKENS", "4096"))
-_AI_TEMPERATURE    = 0.15
+_MAX_MSG_CHARS     = 200                # truncate finding messages
+_MAX_CODE_CHARS    = 300                # truncate code snippets
+_AI_MAX_TOKENS     = 3000              # v3: focused output
+_AI_TEMPERATURE    = 0.2               # v3: deterministic but natural
 
 # In-memory cache: {cache_key: (timestamp, response_dict)}
 _MEM_CACHE: dict[str, tuple[float, dict]] = {}
@@ -100,6 +99,7 @@ def _build_fallback(
     recurring_patterns: list[dict] | None = None,
     behavioral_hints:   list[dict] | None = None,
     maturity_level:     str = "beginner",
+    risk_momentum:      str = "stable",
 ) -> dict:
     """
     Rich, deterministic mentorship response using the static category_knowledge
@@ -108,7 +108,6 @@ def _build_fallback(
     recurring_patterns = recurring_patterns or []
     behavioral_hints   = behavioral_hints   or []
     priority_roadmap: list[dict] = []
-    exploit_simulations: list[dict] = []
     deep_dive: list[dict] = []
 
     score_delta = (health_score - prev_score) if prev_score is not None else None
@@ -121,37 +120,31 @@ def _build_fallback(
     for rank, finding in enumerate(top_findings, 1):
         cat       = classify_finding(finding)
         knowledge = get_knowledge(cat)
-        vid       = finding.get("rule_id") or finding.get("id") or "unknown"
+        vid       = finding.get("rule_id") or finding.get("id") or f"finding-{rank}"
         sev       = (finding.get("severity") or "info").lower()
+        file_path = (finding.get("file") or finding.get("path") or "").replace("\\", "/")
+        short_path = "/".join(file_path.split("/")[-3:]) if file_path else "unknown location"
+        line_no    = finding.get("line") or finding.get("start_line") or "?"
 
         priority_roadmap.append({
-            "rank":     rank,
-            "category": cat,
-            "reason":   f"Severity: {sev}. {knowledge['plain_explanation'][:150]}",
-            "action":   (knowledge.get("checklist") or ["Follow secure coding practices"])[0],
+            "rank":              rank,
+            "category":          cat,
+            "reason":            f"Severity: {sev}. {knowledge['plain_explanation'][:150]}",
+            "action":            (knowledge.get("checklist") or ["Follow secure coding practices"])[0],
+            "estimated_time":    "1–4 hours",
+            "score_improvement": {"critical": 15, "high": 8, "medium": 3, "low": 1}.get(sev, 0),
         })
 
-        if rank <= _TOP_N_EXPLOITS:
-            exploit_simulations.append({
-                "vuln_id":          vid,
-                "attacker_goal":    f"Exploit {knowledge['label']} vulnerability in your application",
-                "attack_steps":     knowledge.get("attacker_path") or [
-                    "Attacker identifies the vulnerable endpoint",
-                    "Crafts a malicious payload targeting this weakness",
-                    "Exfiltrates data or escalates privileges",
-                ],
-                "realistic_impact": knowledge["why_it_matters"],
-                "estimated_damage": "Potential data exposure, service disruption, or account compromise",
-            })
-
         deep_dive.append({
-            "vuln_id":        vid,
-            "what_happened":  knowledge["plain_explanation"],
-            "business_impact": knowledge["why_it_matters"],
-            "secure_pattern": knowledge["secure_pattern"],
-            "takeaway": (
-                f"Fix this {sev}-severity {knowledge['label']} issue by following "
-                "the provided checklist. See: " + ", ".join(knowledge.get("cwe_refs", []))
+            "finding_id":           vid,
+            "what_happened":        knowledge["plain_explanation"],
+            "why_it_matters":       knowledge["why_it_matters"],
+            "business_impact":      f"This {sev}-severity {knowledge['label']} weakness in {short_path} (line {line_no}) could allow unauthorized access or data exposure if left unaddressed.",
+            "secure_example_before": f"# Insecure pattern detected at {short_path}:{line_no}\n# See finding {vid} for details",
+            "secure_example_after":  knowledge["secure_pattern"],
+            "learning_takeaway":     (
+                f"Fix this {sev}-severity {knowledge['label']} issue using the secure pattern above. "
+                "Reference: " + ", ".join(knowledge.get("cwe_refs", []))
             ),
         })
 
@@ -168,8 +161,8 @@ def _build_fallback(
     # Build recurring patterns summary
     rp_list = [
         {
-            "category":             r.get("category", ""),
-            "observation":          r.get("message", ""),
+            "category":              r.get("category", ""),
+            "observation":           r.get("message", ""),
             "root_cause_hypothesis": r.get("suggestion", ""),
         }
         for r in recurring_patterns[:3]
@@ -187,27 +180,35 @@ def _build_fallback(
         f"Your repository is at {health_score}/100 security health ({trend_word})."
         f"{delta_phrase} "
         f"Focus on the {len(top_findings)} top findings below. "
-        "Each deep-dive shows you the exact exploit path and a concrete fix."
+        "Each deep-dive shows you the exact security weakness and a concrete fix."
     )
 
+    # Risk momentum explanation
+    momentum_map = {
+        "increasing":  "Your risk profile is increasing — new or recurring high-severity issues are introducing more exposure. Prioritise immediate remediation.",
+        "decreasing":  "Your risk profile is improving — resolved findings have reduced the overall exposure surface. Keep this momentum going.",
+        "stable":      "Your risk profile is stable. No significant new security weaknesses were introduced since the last scan.",
+    }
+
     return {
-        "learning_summary":   headline,
+        "learning_summary":    headline,
         "behavioral_insights": bi_list,
-        "recurring_patterns": rp_list,
-        "priority_roadmap":   priority_roadmap,
-        "exploit_simulations": exploit_simulations,
-        "deep_dive":          deep_dive,
+        "recurring_patterns":  rp_list,
+        "priority_roadmap":    priority_roadmap,
+        "exploit_simulations": [],  # removed from v3 AI; kept for API compat
+        "deep_dive":           deep_dive,
         "maturity_explanation": {
             "current_level":  maturity_level,
             "reasons":        ["Determined by your current health score and finding distribution"],
             "to_advance":     ["Resolve critical and high findings to raise your score"],
             "encouragement":  "Every fix counts. Keep scanning regularly to track your progress.",
         },
+        "risk_momentum_explanation": momentum_map.get(risk_momentum, momentum_map["stable"]),
         "source": "deterministic",
     }
 
 
-# ── Prompt builder ────────────────────────────────────────────────────────────
+# ── Prompt builder (v3) ───────────────────────────────────────────────────────
 def _build_prompt(
     top_findings:        list[dict],
     health_score:        int,
@@ -217,124 +218,149 @@ def _build_prompt(
     recurring_signals:   list[dict],
     behavioral_signals:  list[dict],
     maturity_level:      str,
+    risk_momentum:       str = "stable",
+    historical_summary:  dict | None = None,
+    project_name:        str = "",
 ) -> str:
-    """Compose the full structured prompt for Claude Sonnet."""
-    score_delta  = (health_score - prev_score) if prev_score is not None else None
-    trend_phrase = (
-        f"improved by {score_delta} points from {prev_score}" if (score_delta or 0) > 0
-        else f"declined by {abs(score_delta or 0)} points from {prev_score}"  if (score_delta or 0) < 0
-        else f"unchanged from previous scan ({prev_score})" if prev_score is not None
-        else "first scan (no comparison available)"
-    )
+    """
+    Compose the v3 structured JSON prompt for Nova Pro.
+    Uses safe educational language — no 'exploit', 'attacker', 'attack steps',
+    'penetration', or 'weaponize' vocabulary.
+    """
+    # ── Enrich findings with file/line/code/CWE/recurring data ────────────────
+    enriched_findings = []
+    for i, f in enumerate(top_findings):
+        cat      = classify_finding(f)
+        knowledge = get_knowledge(cat)
+        sev       = (f.get("severity") or "info").lower()
+        file_path = (f.get("file") or f.get("path") or "").replace("\\", "/")
+        short_path = "/".join(file_path.split("/")[-3:]) if file_path else ""
+        line_no   = f.get("line") or f.get("start_line") or ""
+        code_raw  = f.get("code") or f.get("code_snippet") or f.get("lines") or ""
+        code_snip = str(code_raw)[:_MAX_CODE_CHARS] if code_raw else ""
+        cwe_list  = knowledge.get("cwe_refs", [])
+        # Check if this category is recurring
+        is_recurring_cat = any(r.get("category") == cat for r in recurring_signals)
 
-    # Findings block — top 5 for analysis
-    findings_block = json.dumps(
-        [
-            {
-                "rank":     i + 1,
-                "id":       f.get("rule_id") or f.get("id") or "unknown",
-                "title":    f.get("title") or f.get("rule_id") or "Unknown finding",
-                "severity": (f.get("severity") or "info").lower(),
-                "category": classify_finding(f),
-                "message":  (f.get("message") or f.get("description") or "")[:_MAX_MSG_CHARS],
-                "file":     "/".join(
-                    ((f.get("file") or f.get("path") or "").replace("\\","/").split("/"))[-3:]
-                ),
-            }
-            for i, f in enumerate(top_findings)
-        ],
-        indent=2,
-    )
+        enriched_findings.append({
+            "id":          f.get("rule_id") or f.get("check_id") or f.get("id") or f"finding-{i+1}",
+            "category":    cat,
+            "severity":    sev,
+            "file":        short_path,
+            "line":        str(line_no),
+            "code_snippet": code_snip,
+            "cwe":         cwe_list[0] if cwe_list else "",
+            "is_recurring": is_recurring_cat,
+            "message":     (f.get("message") or f.get("description") or "")[:_MAX_MSG_CHARS],
+        })
 
-    cat_top = sorted(category_counts.items(), key=lambda x: x[1], reverse=True)[:6]
-    cat_block = ", ".join(f"{cat}:{cnt}" for cat, cnt in cat_top)
+    # ── Historical summary block ───────────────────────────────────────────────
+    hist = historical_summary or {}
+    hist_block = {
+        "previous_health_score":  prev_score,
+        "score_delta":            (health_score - prev_score) if prev_score is not None else None,
+        "risk_momentum":          risk_momentum,
+        "resolved_categories":    hist.get("resolved_categories", []),
+        "new_categories":         hist.get("new_categories", []),
+        "recurring_categories":   hist.get("recurring_categories", []),
+    }
 
-    rec_block = json.dumps(
-        [{"category": r.get("category"), "message": r.get("message"), "streak": r.get("consecutive_streak", 0)}
-         for r in recurring_signals[:3]],
-        indent=2,
-    ) if recurring_signals else "[]"
+    # ── Behavioural signals block ─────────────────────────────────────────────
+    beh_block = [
+        {"pattern": b.get("pattern_name", b.get("pattern", "")), "habit": b.get("habit", "")}
+        for b in behavioral_signals[:4]
+    ]
 
-    beh_block = json.dumps(
-        [{"pattern": b.get("pattern_name", b.get("pattern", "")), "habit": b.get("habit")}
-         for b in behavioral_signals[:4]],
-        indent=2,
-    ) if behavioral_signals else "[]"
+    # ── Full structured context JSON ──────────────────────────────────────────
+    context = {
+        "project_name":      project_name or "your repository",
+        "current_health_score": health_score,
+        "maturity_level":    maturity_level,
+        "severity_counts":   {
+            "critical": sev_counts.get("critical", 0),
+            "high":     sev_counts.get("high", 0),
+            "medium":   sev_counts.get("medium", 0),
+            "low":      sev_counts.get("low", 0),
+        },
+        "findings":          enriched_findings,
+        "historical_summary": hist_block,
+        "behavioral_signals": beh_block,
+    }
+    context_json = json.dumps(context, indent=2)
 
+    # ── Output schema ──────────────────────────────────────────────────────────
     schema = """{
-  "learning_summary": "<2-3 sentences: personal assessment of THIS developer's security posture, score context, and what to focus on. Use 'you' / 'your' voice. Mention the score and trend.>",
+  "learning_summary": "<2-3 sentences: personal assessment of THIS developer's security posture and what to focus on. Use 'you'/'your'. Mention score and trend. No offensive terminology.>",
   "behavioral_insights": [
     {
-      "pattern":        "<short pattern label>",
-      "habit":          "<the developer habit or gap causing this>",
-      "recommendation": "<specific, concrete action they can take today>"
+      "pattern":        "<short label, e.g. 'Hardcoded Secrets'>",
+      "habit":          "<the developer habit or systemic gap causing this pattern>",
+      "recommendation": "<specific concrete action they can take today>"
     }
   ],
   "recurring_patterns": [
     {
-      "category":               "<slug>",
-      "observation":            "<what keeps happening>",
+      "category":               "<category slug>",
+      "observation":            "<what keeps appearing across scans>",
       "root_cause_hypothesis":  "<WHY this pattern persists — systemic guess>"
     }
   ],
   "priority_roadmap": [
     {
-      "rank":     1,
-      "category": "<slug>",
-      "reason":   "<why this is #1 priority right now>",
-      "action":   "<the exact next thing to do>"
+      "rank":              1,
+      "category":          "<category slug>",
+      "reason":            "<why this is #1 priority right now, referencing severity and file if known>",
+      "action":            "<the single most important next step>",
+      "estimated_time":    "<e.g. '2 hours' or '1 day'>",
+      "score_improvement": <integer points gained if this category is fully resolved>
     }
   ],
   "deep_dive": [
     {
-      "vuln_id":         "<rule_id from findings>",
-      "what_happened":   "<plain explanation of the security flaw and why it exists>",
-      "business_impact": "<1-sentence business risk if this is not fixed>",
-      "secure_pattern":  "<concrete code pattern or configuration change that fixes it>",
-      "takeaway":        "<1-sentence memorable educational lesson>"
+      "finding_id":            "<id from findings input>",
+      "what_happened":         "<plain explanation of the security weakness and why it exists in this code>",
+      "why_it_matters":        "<the security consequence if this weakness is present>",
+      "business_impact":       "<1-sentence business risk if unresolved — use: data exposure, unauthorized access, service disruption>",
+      "secure_example_before": "<short pseudocode or pattern showing the insecure pattern>",
+      "secure_example_after":  "<short pseudocode or pattern showing the correct, secure replacement>",
+      "learning_takeaway":     "<1-sentence memorable educational lesson the developer should internalise>"
     }
   ],
   "maturity_explanation": {
-    "current_level":  "<level id>",
-    "reasons":        ["<reason 1 why developer is at this level>", "<reason 2>"],
-    "to_advance":     ["<action 1 to reach next level>", "<action 2>"],
-    "encouragement":  "<1 motivating sentence personalised to where they are>"
-  }
+    "current_level":  "<must match the maturity_level in the input context>",
+    "reasons":        ["<reason 1 why the developer is at this level>", "<reason 2>"],
+    "to_advance":     ["<concrete action 1 to reach next level>", "<concrete action 2>"],
+    "encouragement":  "<1 sentence of genuine encouragement personalised to where they are>"
+  },
+  "risk_momentum_explanation": "<1-2 sentences explaining whether risk is increasing, decreasing, or stable, and why, based on the historical_summary data>"
 }"""
 
-    return f"""You are an expert application security educator and developer coach embedded in SecureTrail, a developer security learning platform.
+    return f"""You are a senior application security educator embedded in SecureTrail, a developer security learning platform.
 
-Your role is to help developers understand their security weaknesses and learn how to write more secure code. Speak directly to the developer using "you" and "your". Be encouraging but precise. Use clear, educational, developer-friendly language.
+Your role: Help developers understand their security weaknesses and learn to write more secure code.
+Speak directly as "you" / "your". Be encouraging, precise, and constructive.
+Use ONLY educational, professional language. Do NOT use the words: exploit, attacker, attack steps, penetration, weaponize.
+Instead use: misuse risk, unauthorized access, exposure risk, unintended access path, security weakness.
 
-━━━ SCAN CONTEXT ━━━
-Health Score    : {health_score}/100  ({trend_phrase})
-Severity Counts : critical={sev_counts.get('critical',0)} high={sev_counts.get('high',0)} medium={sev_counts.get('medium',0)} low={sev_counts.get('low',0)}
-Category Distribution : {cat_block}
-Current Maturity Level: {maturity_level}
-
-━━━ TOP {len(top_findings)} SECURITY FINDINGS ━━━
-{findings_block}
-
-━━━ RECURRING PATTERNS (from scan history) ━━━
-{rec_block}
-
-━━━ BEHAVIOURAL SIGNALS (deterministic pre-analysis) ━━━
-{beh_block}
+━━━ SCAN CONTEXT (JSON) ━━━
+{context_json}
 
 ━━━ YOUR TASK ━━━
-Respond with ONLY a valid JSON object matching this exact schema — no markdown, no preamble, no explanations outside the JSON:
+Analyse the JSON context above and respond with ONLY a valid JSON object matching this exact schema.
+No markdown, no preamble, no explanations outside the JSON:
 
 {schema}
 
 Rules:
-- learning_summary: must reference the actual score ({health_score}) and trend
-- deep_dive: include one entry per finding, in rank order
-- priority_roadmap: exactly {min(len(top_findings), 5)} entries, ranked #1 most critical first
-- behavioral_insights: 2-4 entries based on category distribution and behavioural signals; derive from categories if no signals provided
-- recurring_patterns: include only if there are actual recurring signals; use empty array otherwise
+- learning_summary must reference the actual score ({health_score}) and trend (risk_momentum: {risk_momentum})
+- deep_dive: one entry per finding in the input (maintain same id)
+- priority_roadmap: exactly {min(len(top_findings), 5)} entries, rank #1 = highest priority
+- behavioral_insights: 2-4 entries derived from behavioral_signals and category distribution
+- recurring_patterns: include only if historical_summary shows recurring categories; empty array otherwise
 - maturity_explanation.current_level must be exactly: "{maturity_level}"
-- All text must be educational, developer-friendly and actionable
-- Raw JSON only — the response will be parsed directly by JSON.parse()"""
+- score_improvement in roadmap must equal the linear pts gained: critical=15, high=8, medium=3, low=1
+- All language must be educational, developer-friendly, and free of offensive security terminology
+- Output raw JSON only — it will be parsed directly"""
 
 
 # ── Bedrock integration ───────────────────────────────────────────────────────
@@ -384,6 +410,7 @@ def _call_bedrock_claude(prompt: str) -> dict:
     required_keys = {
         "learning_summary", "behavioral_insights", "recurring_patterns",
         "priority_roadmap", "deep_dive", "maturity_explanation",
+        "risk_momentum_explanation",
     }
     missing = required_keys - set(parsed.keys())
     if missing:
@@ -397,8 +424,19 @@ def _call_bedrock_claude(prompt: str) -> dict:
     if not isinstance(parsed.get("maturity_explanation"), dict):
         parsed["maturity_explanation"] = {}
 
-    # exploit_simulations is built deterministically — not requested from AI
+    # Normalise deep_dive items to v3 schema (backward compat with partial responses)
+    for item in parsed.get("deep_dive", []):
+        item.setdefault("finding_id",            item.pop("vuln_id", ""))
+        item.setdefault("why_it_matters",         item.pop("business_impact", ""))
+        item.setdefault("secure_example_before",  item.pop("secure_pattern", ""))
+        item.setdefault("secure_example_after",   "")
+        item.setdefault("learning_takeaway",       item.pop("takeaway", ""))
+        item.setdefault("business_impact",         "")
+
+    # exploit_simulations not requested from AI — kept in response for API compat
     parsed.setdefault("exploit_simulations", [])
+    if not isinstance(parsed.get("risk_momentum_explanation"), str):
+        parsed["risk_momentum_explanation"] = ""
     parsed["source"] = "ai"
     return parsed
 
@@ -413,9 +451,12 @@ def get_ai_insights(
     health_score:        int            = 0,
     score_delta:         int | None     = None,
     force_refresh:       bool           = False,
+    risk_momentum:       str            = "stable",
+    historical_summary:  dict | None    = None,
+    project_name:        str            = "",
 ) -> dict:
     """
-    Return AI mentor insights for a scan result.
+    Return v3 AI mentor insights for a scan result.
 
     Parameters
     ----------
@@ -427,10 +468,13 @@ def get_ai_insights(
     health_score         : computed from learning_engine.compute_health_score()
     score_delta          : health_score - prev_health_score
     force_refresh        : bypass cache
+    risk_momentum        : "increasing" | "decreasing" | "stable" from historical_comparison
+    historical_summary   : {resolved_categories, new_categories, recurring_categories}
+    project_name         : repository/project name for personalised output
 
     Returns
     -------
-    dict with full v2 schema + 'source' + 'cached' fields
+    dict with full v3 schema + 'source' + 'cached' fields
     """
     recurring_patterns = recurring_patterns or []
     behavioral_hints   = behavioral_hints   or []
@@ -451,11 +495,12 @@ def get_ai_insights(
             "exploit_simulations": [],
             "deep_dive":          [],
             "maturity_explanation": {
-                "current_level":  "secure_architect",
+                "current_level":  "hardened",
                 "reasons":        ["No vulnerabilities detected in this scan"],
                 "to_advance":     ["Maintain clean scans and conduct regular threat modelling"],
                 "encouragement":  "Outstanding — you're setting the gold standard for secure development!",
             },
+            "risk_momentum_explanation": "Your risk profile is at its lowest — no security weaknesses were detected.",
             "source": "clean",
             "cached": False,
         }
@@ -492,7 +537,7 @@ def get_ai_insights(
         logger.debug("AI disabled — deterministic fallback for job %s", job_id)
         result = _build_fallback(
             top_findings, health_score, prev_score,
-            recurring_patterns, behavioral_hints, maturity_level,
+            recurring_patterns, behavioral_hints, maturity_level, risk_momentum,
         )
         _write_cache(cache_key, result)
         return {**result, "cached": False}
@@ -508,17 +553,20 @@ def get_ai_insights(
             recurring_signals   = recurring_patterns,
             behavioral_signals  = behavioral_hints,
             maturity_level      = maturity_level,
+            risk_momentum       = risk_momentum,
+            historical_summary  = historical_summary,
+            project_name        = project_name,
         )
         result = _call_bedrock_claude(prompt)
         _write_cache(cache_key, result)
-        logger.info("Claude Sonnet insights generated for job %s (cache_key=%s)", job_id, cache_key)
+        logger.info("Nova Pro insights generated for job %s (cache_key=%s)", job_id, cache_key)
         return {**result, "cached": False}
 
     except Exception as exc:
         logger.warning("AI call failed for job %s (%s) — deterministic fallback", job_id, exc)
         result = _build_fallback(
             top_findings, health_score, prev_score,
-            recurring_patterns, behavioral_hints, maturity_level,
+            recurring_patterns, behavioral_hints, maturity_level, risk_momentum,
         )
         result["ai_error"] = str(exc)
         # Do NOT cache error results — next request will retry Bedrock

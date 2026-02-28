@@ -1,27 +1,35 @@
 """
-Behavioral Insights Engine — SecureTrail Learning System
-=========================================================
+Behavioral Insights Engine — SecureTrail Learning System v3
+============================================================
 Fully DETERMINISTIC. Zero AI dependency.
 
 Maps recurring security categories to real developer habits, diagnosing
 *why* an issue keeps appearing rather than just *what* the issue is.
 
 Each rule describes:
-    trigger        - category slug or recurring slug that activates this rule
-    habit          - the developer habit or systemic gap behind the issue
-    pattern_name   - short label for the card title
-    recommendation - concrete, actionable fix
-    priority       - high / medium / low
-    effort         - "5 min" / "1 day" / "1 sprint" etc.
-    tags           - helpful categorisation (tooling / process / design / testing)
+    trigger_category - category slug that activates this rule
+    pattern_name     - short label for the card title
+    habit            - the developer habit or systemic gap behind the issue
+    recommendation   - concrete, actionable fix
+    fix_now          - the single most important first action (1 sentence)
+    priority         - high / medium / low
+    effort           - "5 min" / "1 day" / "1 sprint" etc.
+    tags             - helpful categorisation (tooling / process / design / testing)
+
+v3 additions:
+    evidence[]  - populated per-insight from actual scan findings
+    fix_now     - immediate first action per habit
 """
 
 from __future__ import annotations
 
 from typing import Any
 
+from Learning.learning_engine import _get_findings, extract_categories_from_result
+from Learning.category_knowledge import classify_finding
+
 # ─────────────────────────────────────────────────────────────────────────────
-# Rule table
+# Rule table (v3 — includes fix_now per rule)
 # ─────────────────────────────────────────────────────────────────────────────
 
 BEHAVIORAL_RULES: list[dict[str, Any]] = [
@@ -30,6 +38,7 @@ BEHAVIORAL_RULES: list[dict[str, Any]] = [
         "trigger_category": "secret_management",
         "pattern_name":     "Hardcoded Credentials",
         "habit":            "Secrets are typed directly into source files instead of being loaded from environment variables or a secrets manager.",
+        "fix_now":          "Run `grep -rn 'password\\|secret\\|api_key' --include='*.py' .` and move every hit to a .env file immediately.",
         "recommendation":   "Install Gitleaks as a pre-commit hook (`pre-commit install`) and move all secrets to a .env file or AWS Secrets Manager. Run `gitleaks detect` in CI to block merges.",
         "priority":         "high",
         "effort":           "1–2 hours",
@@ -40,6 +49,7 @@ BEHAVIORAL_RULES: list[dict[str, Any]] = [
         "trigger_category": "idor",
         "pattern_name":     "Missing Object-Level Authorization",
         "habit":            "Authorization is checked at login/session but not re-validated when accessing individual records, trusting the ID supplied by the caller.",
+        "fix_now":          "Add an ownership assertion (`assert obj.owner_id == current_user.id`) to the first flagged endpoint right now.",
         "recommendation":   "Add an ownership-check helper (e.g. `get_or_404_owned(Model, id, owner=request.user)`) and call it on every resource fetch. Write a cross-user access integration test for each sensitive endpoint.",
         "priority":         "high",
         "effort":           "1 sprint",
@@ -50,6 +60,7 @@ BEHAVIORAL_RULES: list[dict[str, Any]] = [
         "trigger_category": "access_control",
         "pattern_name":     "Decentralised Permission Checks",
         "habit":            "Role and permission checks are scattered across individual view functions instead of being enforced at a central layer that is impossible to forget.",
+        "fix_now":          "Create a `require_permission(role)` decorator and apply it to the first unprotected route found in this scan.",
         "recommendation":   "Implement a centralized `require_permission(role)` decorator or middleware. Annotate every route; use a route registry scan in your test suite to assert no route is unannotated.",
         "priority":         "high",
         "effort":           "1 day",
@@ -60,6 +71,7 @@ BEHAVIORAL_RULES: list[dict[str, Any]] = [
         "trigger_category": "injection",
         "pattern_name":     "String Concatenation for Queries",
         "habit":            "SQL or command strings are built by concatenating user-controlled values, bypassing the database's own parameterisation mechanism.",
+        "fix_now":          "Replace the first raw string-formatted SQL query in the flagged file with a parameterised ORM call.",
         "recommendation":   "Enforce ORM usage or parameterised query helpers across the codebase. Add a linter rule (bandit/semgrep) that rejects raw SQL string formatting. Treat any finding as a P0 bug.",
         "priority":         "high",
         "effort":           "1–2 days",
@@ -70,6 +82,7 @@ BEHAVIORAL_RULES: list[dict[str, Any]] = [
         "trigger_category": "dependency",
         "pattern_name":     "Manual Dependency Management",
         "habit":            "Dependencies are updated only when developers remember, leaving known CVEs open for extended periods.",
+        "fix_now":          "Run `pip-audit` or `npm audit` right now and create a ticket for every high/critical CVE found.",
         "recommendation":   "Enable Dependabot or Renovate with a policy file: auto-merge patch updates, review minor/major. Add `pip-audit` or `npm audit --audit-level=high` as a CI gate.",
         "priority":         "medium",
         "effort":           "2–3 hours",
@@ -80,6 +93,7 @@ BEHAVIORAL_RULES: list[dict[str, Any]] = [
         "trigger_category": "jwt",
         "pattern_name":     "Fragmented Token Validation",
         "habit":            "JWT decode and validation logic is duplicated across multiple routes or modules, making it easy to miss a check or use the wrong algorithm.",
+        "fix_now":          "Add `algorithms=['RS256']` to every `jwt.decode()` call in the flagged file to prevent algorithm confusion.",
         "recommendation":   "Centralise all JWT logic in one `auth_utils.py` module and expose a single `validate_token()` function. Enforce `alg: RS256` or `ES256`—never `none`. Write unit tests for tampered tokens.",
         "priority":         "high",
         "effort":           "1 day",
@@ -90,6 +104,7 @@ BEHAVIORAL_RULES: list[dict[str, Any]] = [
         "trigger_category": "cors",
         "pattern_name":     "Overly Permissive CORS",
         "habit":            "CORS is set to `*` for convenience during development and never tightened before production.",
+        "fix_now":          "Replace `allow_origins=['*']` with an explicit list of your production domains in the flagged configuration file.",
         "recommendation":   "Define `ALLOWED_ORIGINS` as an environment variable containing only production domains. Add a CI check that asserts CORS is not `*` in non-local environments.",
         "priority":         "medium",
         "effort":           "30 minutes",
@@ -99,7 +114,8 @@ BEHAVIORAL_RULES: list[dict[str, Any]] = [
     {
         "trigger_category": "rate_limiting",
         "pattern_name":     "Unthrottled Sensitive Endpoints",
-        "habit":            "Rate limiting is either absent entirely or applied only globally, leaving login, registration, and password-reset endpoints vulnerable to brute-force attacks.",
+        "habit":            "Rate limiting is either absent entirely or applied only globally, leaving login, registration, and password-reset endpoints vulnerable to brute-force conditions.",
+        "fix_now":          "Add `@limiter.limit('10/minute')` to the login endpoint found in this scan.",
         "recommendation":   "Apply per-IP + per-account rate limiting at the sensitive-endpoint level using SlowAPI (FastAPI) or express-rate-limit. Document limits in your OpenAPI spec.",
         "priority":         "high",
         "effort":           "2–4 hours",
@@ -110,6 +126,7 @@ BEHAVIORAL_RULES: list[dict[str, Any]] = [
         "trigger_category": "xss",
         "pattern_name":     "Missing Output Encoding",
         "habit":            "User-supplied data is interpolated into HTML or JavaScript without escaping, typically because auto-escaping is disabled or template literals are used carelessly.",
+        "fix_now":          "Enable template engine auto-escaping globally and add `DOMPurify.sanitize()` around the first `innerHTML` assignment in the flagged file.",
         "recommendation":   "Enable template engine auto-escaping globally. Add a strict Content-Security-Policy header. Conduct a DOMPurify audit on any front-end component that sets `innerHTML`.",
         "priority":         "high",
         "effort":           "1 day",
@@ -120,6 +137,7 @@ BEHAVIORAL_RULES: list[dict[str, Any]] = [
         "trigger_category": "secure_headers",
         "pattern_name":     "Security Headers Not Configured",
         "habit":            "HTTP security headers (CSP, HSTS, X-Frame-Options, etc.) are missing because they are never part of the initial setup checklist.",
+        "fix_now":          "Add `Strict-Transport-Security`, `X-Frame-Options: DENY`, and `X-Content-Type-Options: nosniff` to your app's response middleware today.",
         "recommendation":   "Add `secure-headers` middleware or a one-time configuration block in your app factory that sets all OWASP-recommended headers. Include a header scan (`mozilla/http-observatory`) in CI.",
         "priority":         "medium",
         "effort":           "1–2 hours",
@@ -130,6 +148,7 @@ BEHAVIORAL_RULES: list[dict[str, Any]] = [
         "trigger_category": "cryptography",
         "pattern_name":     "Weak or Deprecated Crypto Primitives",
         "habit":            "MD5, SHA-1, or DES are still used because they were copy-pasted from old examples; proper key sizes and modes are not enforced by any lint rule.",
+        "fix_now":          "Replace every `hashlib.md5()` or `hashlib.sha1()` call in the flagged file with `hashlib.sha256()` or `bcrypt` for passwords.",
         "recommendation":   "Adopt a cryptography helper module wrapping modern primitives (AES-256-GCM, SHA-256, bcrypt/argon2). Add a Semgrep rule banning `md5`, `sha1`, `DES` imports.",
         "priority":         "high",
         "effort":           "1 day",
@@ -140,6 +159,7 @@ BEHAVIORAL_RULES: list[dict[str, Any]] = [
         "trigger_category": "logging",
         "pattern_name":     "Sensitive Data in Logs",
         "habit":            "Debug-level logging captures full request objects or exception traces containing passwords, tokens, or PII without any scrubbing.",
+        "fix_now":          "Search for `logger.debug(request` or `logger.info(password` in the flagged file and replace with redacted log messages.",
         "recommendation":   "Implement a log sanitiser that strips known sensitive keys. Set production log level to INFO. Use structured logging (structlog / AWS CloudWatch Logs Insights) so sensitive fields can be redacted at the formatter level.",
         "priority":         "medium",
         "effort":           "2–4 hours",
@@ -150,6 +170,7 @@ BEHAVIORAL_RULES: list[dict[str, Any]] = [
         "trigger_category": "session_management",
         "pattern_name":     "Long-Lived or Unrevocable Sessions",
         "habit":            "Sessions or tokens are issued without expiry (or very long TTL) and there is no server-side revocation mechanism.",
+        "fix_now":          "Set `exp` (expiry) to `datetime.utcnow() + timedelta(minutes=15)` in your token generation function found in this scan.",
         "recommendation":   "Set access token TTL ≤ 15 min and refresh token TTL ≤ 7 days. Implement a token blocklist (Redis SET) for logout and account-disable flows. Rotate signing secrets on a schedule.",
         "priority":         "high",
         "effort":           "1–2 days",
@@ -160,6 +181,7 @@ BEHAVIORAL_RULES: list[dict[str, Any]] = [
         "trigger_category": "input_validation",
         "pattern_name":     "Absent or Partial Input Validation",
         "habit":            "Validation is added reactively (after a bug report) rather than being the default starting point for every API endpoint.",
+        "fix_now":          "Add a Pydantic model or Joi schema to the first unvalidated endpoint body found in this scan.",
         "recommendation":   "Adopt Pydantic models (FastAPI) or Joi/Zod (Node) as your contract for every request body and query param. Enable strict-mode to reject unknown fields.",
         "priority":         "medium",
         "effort":           "1 sprint",
@@ -170,6 +192,7 @@ BEHAVIORAL_RULES: list[dict[str, Any]] = [
         "trigger_category": "error_handling",
         "pattern_name":     "Stack Traces Exposed to Clients",
         "habit":            "Exceptions are propagated without a catch-all handler, leaking internal paths, library versions, and query structure to end users.",
+        "fix_now":          "Wrap the flagged route in a try/except that returns `{'error': 'Internal server error'}` and logs the full traceback server-side.",
         "recommendation":   "Add a global exception handler that returns a generic error response in production. Log the full trace server-side. Test this path explicitly in your integration test suite.",
         "priority":         "medium",
         "effort":           "2–3 hours",
@@ -190,6 +213,7 @@ _RULE_BY_CATEGORY: dict[str, dict] = {
 def generate_behavioral_insights(
     categories: dict[str, int],
     recurring: list[dict] | None = None,
+    findings: list[dict] | None = None,
 ) -> list[dict]:
     """
     Return a list of behavioral insight dicts for the categories present.
@@ -198,19 +222,56 @@ def generate_behavioral_insights(
     ----------
     categories : {category_slug: count} from learning_engine
     recurring  : recurring_categories list from recurring_weakness (optional)
+    findings   : raw findings list for populating evidence[] (optional)
 
     Returns
     -------
-    list[dict] — each with: pattern_name, habit, recommendation, priority,
-                              effort, tags, category_slug
+    list[dict] — each with: pattern_name, habit, recommendation, fix_now,
+                              priority, effort, tags, category_slug, evidence[]
     """
+    # Build evidence index: category_slug → list of evidence strings
+    evidence_by_cat: dict[str, list[str]] = {}
+    if findings:
+        for f in findings:
+            cat = classify_finding(f)
+            sev = (f.get("severity") or "info").lower()
+            file_path = (f.get("file") or f.get("path") or "").replace("\\", "/")
+            # Use last 3 path segments for brevity
+            short_path = "/".join(file_path.split("/")[-3:]) if file_path else ""
+            line_no = f.get("line") or f.get("start_line") or ""
+            rule_id = f.get("rule_id") or f.get("check_id") or f.get("id") or ""
+            msg = (f.get("message") or f.get("description") or "")[:120]
+
+            evidence_parts = []
+            if short_path:
+                loc = f"{short_path}:{line_no}" if line_no else short_path
+                evidence_parts.append(loc)
+            if rule_id:
+                evidence_parts.append(f"[{rule_id}]")
+            if sev not in ("info", ""):
+                evidence_parts.append(f"({sev})")
+            if msg:
+                evidence_parts.append(f"— {msg}")
+
+            ev_str = " ".join(evidence_parts)
+            if ev_str:
+                evidence_by_cat.setdefault(cat, [])
+                if len(evidence_by_cat[cat]) < 3:  # cap at 3 evidence items per category
+                    evidence_by_cat[cat].append(ev_str)
+
     insights: dict[str, dict] = {}
 
     # Activate rules based on categories found in current scan
     for cat_slug, count in categories.items():
         if count > 0 and cat_slug in _RULE_BY_CATEGORY:
             rule = _RULE_BY_CATEGORY[cat_slug]
-            insight = {**rule, "category_slug": cat_slug, "finding_count": count, "is_recurring": False}
+            insight = {
+                **rule,
+                "category_slug": cat_slug,
+                "finding_count": count,
+                "is_recurring": False,
+                "evidence": evidence_by_cat.get(cat_slug, []),
+            }
             insights[cat_slug] = insight
 
     # Mark rules that are also in the recurring list
@@ -226,11 +287,12 @@ def generate_behavioral_insights(
                 rule = _RULE_BY_CATEGORY[cat_slug]
                 insights[cat_slug] = {
                     **rule,
-                    "category_slug":   cat_slug,
-                    "finding_count":   0,
-                    "is_recurring":    True,
+                    "category_slug":    cat_slug,
+                    "finding_count":    0,
+                    "is_recurring":     True,
                     "recurring_streak": rec.get("consecutive_streak", 0),
                     "recurring_total":  rec.get("total_appearances", 0),
+                    "evidence":         evidence_by_cat.get(cat_slug, []),
                 }
 
     # Sort: recurring-high first, then by priority rank, then finding count

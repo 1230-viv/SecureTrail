@@ -1,11 +1,17 @@
 """
-Learning Routes — SecureTrail Learning System
-=============================================
+Learning Routes — SecureTrail Learning System v3
+=================================================
 Endpoints:
   GET /api/learning/summary/{job_id}   — single-scan learning summary
   GET /api/learning/progress/{repo}    — cross-scan progress + trend
   GET /api/learning/insights/{job_id}  — AI mentor panel (cached)
   GET /api/learning/maturity           — current maturity level + badges
+
+v3 additions:
+  - historical_comparison (resolved/new/recurring counts + risk momentum)
+  - xp_engine (XP gained per scan, level progress)
+  - behavioral evidence[] + fix_now fields
+  - v3 linear maturity score formula
 """
 
 from __future__ import annotations
@@ -28,12 +34,19 @@ from Learning.learning_engine import (
     compute_health_score,
     extract_severity_counts,
     extract_categories_from_result,
+    _get_findings,
 )
 from Learning.ai_mentor import get_ai_insights
-from Learning.maturity_model import get_maturity_report, get_transparent_maturity_explanation
+from Learning.maturity_model import (
+    get_maturity_report,
+    get_transparent_maturity_explanation,
+    compute_v3_score,
+)
 from Learning.category_knowledge import get_all_categories
 from Learning.recurring_weakness import get_recurring_weakness_report
 from Learning.behavioral_insights import generate_behavioral_insights, get_behavioral_signal_for_ai
+from Learning.historical_comparison import compare_scans
+from Learning.xp_engine import compute_xp_data
 
 router = APIRouter()
 
@@ -142,9 +155,11 @@ async def get_learning_summary(
     # ── Behavioral insights from current scan categories
     cur_result = cur_dict.get("result_json") or {}
     cur_cats   = extract_categories_from_result(cur_result)
+    cur_sevs   = extract_severity_counts(cur_result)
     behavioral = generate_behavioral_insights(
         categories = cur_cats,
         recurring  = recurring_report.get("recurring_categories", []),
+        findings   = _get_findings(cur_result),
     )
 
     summary  = compute_learning_summary(cur_dict, prev_dict)
@@ -199,6 +214,7 @@ async def get_learning_insights(
     """
     AI mentor insights for the top findings in a scan.
     Returns deterministic fallback if AI is disabled or unavailable.
+    v3: includes risk_momentum, xp_data, historical comparison, evidence[].
     """
     job      = await _get_completed_job(db, job_id)
     job_dict = _job_to_dict(job)
@@ -216,33 +232,65 @@ async def get_learning_insights(
         .order_by(desc(ScanJob.created_at))
         .limit(1)
     )
-    prev_res    = await db.execute(stmt)
-    prev_db     = prev_res.scalar_one_or_none()
-    prev_dict   = _job_to_dict(prev_db) if prev_db else None
+    prev_res  = await db.execute(stmt)
+    prev_db   = prev_res.scalar_one_or_none()
+    prev_dict = _job_to_dict(prev_db) if prev_db else None
 
     # ── Recurring patterns from full repo history
     all_repo_jobs  = await _jobs_for_repo(db, repo_name)
     all_repo_dicts = [_job_to_dict(j) for j in all_repo_jobs]
     recurring_report = get_recurring_weakness_report(all_repo_dicts)
 
-    # ── Behavioral insights
-    cur_result = job_dict.get("result_json") or {}
-    cur_cats   = extract_categories_from_result(cur_result)
-    cur_sevs   = extract_severity_counts(cur_result)
-    cur_score  = compute_health_score(cur_result, cur_sevs)
+    # ── Current scan data
+    cur_result  = job_dict.get("result_json") or {}
+    cur_cats    = extract_categories_from_result(cur_result)
+    cur_sevs    = extract_severity_counts(cur_result)
+    cur_score   = compute_v3_score(cur_sevs)
+    cur_findings = _get_findings(cur_result)
 
+    # ── Historical comparison (v3)
+    prev_result = (prev_dict or {}).get("result_json") or {} if prev_dict else {}
+    comparison  = compare_scans(cur_result, prev_result if prev_result else None)
+    risk_momentum = comparison.get("risk_momentum", "stable")
+    prev_score    = comparison.get("previous_score")
+    score_delta   = comparison.get("score_delta")
+
+    historical_summary = {
+        "previous_health_score":  prev_score,
+        "resolved_categories":    comparison.get("resolved_categories", []),
+        "new_categories":         comparison.get("new_categories", []),
+        "recurring_categories":   comparison.get("recurring_categories", []),
+    }
+
+    # ── XP calculation (v3)
+    resolved_sevs = comparison.get("resolved_severities", {})
+    xp_data = compute_xp_data(
+        repo_name           = repo_name,
+        resolved_severities = resolved_sevs,
+        scan_id             = job_id,
+        persist             = True,
+    )
+
+    # ── Behavioral insights (v3 — with evidence[])
     behavioral_full = generate_behavioral_insights(
         categories = cur_cats,
         recurring  = recurring_report.get("recurring_categories", []),
+        findings   = cur_findings,
     )
     behavioral_signals = get_behavioral_signal_for_ai(behavioral_full)
 
-    # ── Score delta
-    prev_result = (prev_dict or {}).get("result_json") or {} if prev_dict else {}
-    prev_sevs   = extract_severity_counts(prev_result) if prev_result else {}
-    prev_score  = compute_health_score(prev_result, prev_sevs) if prev_result else None
-    score_delta = (cur_score - prev_score) if prev_score is not None else None
+    # ── Priority roadmap with priority_score = severity_weight × recurrence_multiplier
+    roadmap_raw = build_priority_roadmap(cur_result)
+    for item in roadmap_raw:
+        cat = item.get("category", "")
+        # Recurrence multiplier: 1.5× if category is recurring
+        is_rec = any(r.get("category") == cat for r in recurring_report.get("recurring_categories", []))
+        item["recurrence_multiplier"] = 1.5 if is_rec else 1.0
+        item["priority_score_v3"] = round(item.get("priority_score", 0) * item["recurrence_multiplier"], 3)
+        item["is_recurring"] = is_rec
+    roadmap_raw.sort(key=lambda x: x["priority_score_v3"], reverse=True)
 
+    # ── AI insights
     insights = get_ai_insights(
         job_id               = job_id,
         result_json          = cur_result,
@@ -252,14 +300,23 @@ async def get_learning_insights(
         health_score         = cur_score,
         score_delta          = score_delta,
         force_refresh        = force_refresh,
+        risk_momentum        = risk_momentum,
+        historical_summary   = historical_summary,
+        project_name         = repo_name,
     )
+
     return {
-        "job_id":             job_id,
-        "repository_name":    repo_name,
-        "health_score":       cur_score,
-        "score_delta":        score_delta,
-        "recurring_report":   recurring_report,
-        "behavioral_insights_full": behavioral_full,
+        "job_id":                    job_id,
+        "repository_name":           repo_name,
+        "health_score":              cur_score,
+        "score_formula":             "100 - (critical×15) - (high×8) - (medium×3) - (low×1)",
+        "score_delta":               score_delta,
+        "risk_momentum":             risk_momentum,
+        "historical_comparison":     comparison,
+        "xp_data":                   xp_data,
+        "recurring_report":          recurring_report,
+        "behavioral_insights_full":  behavioral_full,
+        "priority_roadmap_v3":       roadmap_raw,
         **insights,
     }
 
@@ -294,7 +351,7 @@ async def get_maturity(
         latest = job_dicts[-1]
         cur_result = latest.get("result_json") or {}
         cur_sevs   = extract_severity_counts(cur_result)
-        cur_score  = compute_health_score(cur_result, cur_sevs)
+        cur_score  = compute_v3_score(cur_sevs)
         cur_cats   = extract_categories_from_result(cur_result)
         transparent = get_transparent_maturity_explanation(
             score      = cur_score,
@@ -304,6 +361,7 @@ async def get_maturity(
             scan_count = len(job_dicts),
         )
         report["transparent"] = transparent
+        report["score"] = cur_score  # override with v3 score
 
     return {
         "repository_name": repo_name,
