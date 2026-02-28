@@ -76,6 +76,43 @@ export const uploadAPI = {
   },
 };
 
+// ── Learning System ─────────────────────────────────────────────────────────
+export const learningAPI = {
+  /**
+   * Learning summary for a single scan (with comparison to previous scan).
+   * Returns { health_score, score_delta, categories, improved/worsened/new/resolved, roadmap, ... }
+   */
+  getSummary: (jobId) => api.get(`/api/learning/summary/${jobId}`),
+
+  /**
+   * Cross-scan progress for a repository.
+   * Returns { score_history, trend, improvement_pct, category_trends, ... }
+   */
+  getProgress: (repoName) =>
+    api.get(`/api/learning/progress/${encodeURIComponent(repoName)}`),
+
+  /**
+   * AI mentor deep-dive insights for a scan's top findings.
+   * Returns { learning_summary, priority_order, deep_dive, source, cached }
+   */
+  getInsights: (jobId, forceRefresh = false) =>
+    api.get(`/api/learning/insights/${jobId}`, {
+      params: forceRefresh ? { force_refresh: true } : {},
+    }),
+
+  /**
+   * Current security maturity level + badge status.
+   * Optional repoName scopes to that repository.
+   */
+  getMaturity: (repoName) =>
+    api.get('/api/learning/maturity', {
+      params: repoName ? { repo_name: repoName } : {},
+    }),
+
+  /** All known vulnerability categories with label, color, icon. */
+  getCategories: () => api.get('/api/learning/categories'),
+};
+
 // ── Scan (polling + results) ───────────────────────────────────────────────────
 export const scanAPI = {
   /**

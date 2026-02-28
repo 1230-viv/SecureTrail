@@ -43,6 +43,7 @@ _PERMANENT_ERROR_CODES = {
 # Configuration — no hardcoded values
 # ──────────────────────────────────────────────────────────────────────────────
 AWS_REGION        = os.getenv("AWS_REGION", "us-east-1")
+BEDROCK_REGION    = os.getenv("BEDROCK_REGION", AWS_REGION)  # dedicated region for Bedrock (may differ from S3/default)
 BEDROCK_MODEL_ID  = os.getenv("BEDROCK_MODEL_ID", "meta.llama3-70b-instruct-v1:0")
 MAX_TOKENS        = int(os.getenv("BEDROCK_MAX_TOKENS", "1400"))
 TEMPERATURE       = float(os.getenv("BEDROCK_TEMPERATURE", "0.15"))  # low temp = less hallucination
@@ -59,7 +60,7 @@ def _get_client() -> Any:
     global _client_instance
     if _client_instance is None:
         config = Config(
-            region_name=AWS_REGION,
+            region_name=BEDROCK_REGION,
             connect_timeout=CONNECT_TIMEOUT,
             read_timeout=READ_TIMEOUT,
             retries={"max_attempts": 2, "mode": "standard"},
@@ -69,7 +70,13 @@ def _get_client() -> Any:
 
 
 def _is_claude(model_id: str) -> bool:
-    return model_id.startswith("anthropic.")
+    # Handles direct IDs (anthropic.*), cross-region (us./eu./ap./apac. prefixes), and full ARNs
+    return "anthropic." in model_id
+
+
+def _is_nova(model_id: str) -> bool:
+    # Amazon Nova models (direct IDs and inference profile ARNs)
+    return "amazon.nova" in model_id
 
 
 def _build_body(
@@ -90,6 +97,17 @@ def _build_body(
             "temperature": _temp,
             "system": system_prompt,
             "messages": [{"role": "user", "content": user_message}],
+        }
+    elif _is_nova(BEDROCK_MODEL_ID):
+        # Amazon Nova Converse-style body
+        return {
+            "messages": [{"role": "user", "content": [{"text": user_message}]}],
+            "system": [{"text": system_prompt}],
+            "inferenceConfig": {
+                "maxTokens": _max,
+                "temperature": _temp,
+                "topP": TOP_P,
+            },
         }
     else:
         # Llama 3 Instruct format
@@ -114,6 +132,19 @@ def _parse_response(result: Dict[str, Any]) -> str:
         if content and isinstance(content, list):
             return content[0].get("text", "")
         return ""
+    elif _is_nova(BEDROCK_MODEL_ID):
+        # Nova response: {"output": {"message": {"content": [{"text": "..."}]}}}
+        # Content may contain multiple items (e.g. reasoning + text); find the text block.
+        try:
+            content = result["output"]["message"]["content"]
+            for item in content:
+                if "text" in item:
+                    return item["text"]
+            logger.warning("Nova: no text block found in content: %s", content)
+            return ""
+        except (KeyError, IndexError, TypeError) as exc:
+            logger.warning("Nova parse error: %s | raw result keys: %s", exc, list(result.keys()))
+            return ""
     else:
         # Llama response
         return result.get("generation", "")
@@ -146,6 +177,10 @@ def invoke_claude(
         )
         result = json.loads(response["body"].read())
         text = _parse_response(result)
+        if not text:
+            raise RuntimeError(
+                f"Bedrock returned empty response text. Raw keys: {list(result.keys())}"
+            )
         elapsed = (time.monotonic() - t0) * 1000
         logger.info(
             f"Bedrock OK — model={BEDROCK_MODEL_ID}, "
