@@ -96,6 +96,7 @@ class AIExplanation(BaseModel):
     confidence_level: str = ""
     validated_root_cause: str = ""
     evidence_from_code: str = ""
+    is_inferred_or_explicit: str = ""
 
     # ── Layer 2 fields (Exploit & Risk Model) ─────────────────────────────
     severity_justification: str = ""
@@ -112,6 +113,7 @@ class AIExplanation(BaseModel):
     core_security_principle: str = ""
     common_student_mistake: str = ""
     learning_takeaways: List[str] = Field(default_factory=list)
+    self_validation_check: str = ""
 
     # ── Professional Mode fields (cross-mapped for Pro toggle) ────────────
     root_cause: str = ""

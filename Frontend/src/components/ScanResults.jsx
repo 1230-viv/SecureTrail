@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import {
   ShieldAlert, Bug, Search, SlidersHorizontal,
   ChevronDown, Download, RotateCcw, CheckCircle2, XCircle, AlertTriangle,
+  Brain, Loader2,
 } from 'lucide-react';
 import VulnerabilityCard from './VulnerabilityCard';
 import { useTheme } from '../context/ThemeContext';
@@ -154,8 +155,24 @@ const ScanResults = ({ report, onNewScan }) => {
 
   if (!report) return null;
 
+  const aiPending = !!report.ai_pending;
+
   return (
     <div className="space-y-6">
+      {/* ── AI Analysis banner ─────────────────────────────────────────── */}
+      {aiPending && (
+        <div className={`rounded-xl shadow-sm px-5 py-3 flex items-center gap-3 animate-pulse
+          ${isDark
+            ? 'bg-indigo-500/10 border border-indigo-500/20'
+            : 'bg-indigo-50 border border-indigo-100'}`}>
+          <Brain size={18} className={isDark ? 'text-indigo-400' : 'text-indigo-600'} />
+          <Loader2 size={16} className={`animate-spin ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`} />
+          <span className={`text-sm font-medium ${isDark ? 'text-indigo-300' : 'text-indigo-700'}`}>
+            AI analysis in progress — explanations will appear on each card as they complete
+          </span>
+        </div>
+      )}
+
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <div className={`rounded-xl shadow-sm p-6
         ${isDark ? 'bg-[#161929] border border-white/5' : 'bg-white'}`}>
@@ -335,7 +352,7 @@ const ScanResults = ({ report, onNewScan }) => {
           </div>
         ) : (
           filtered.map(vuln => (
-            <VulnerabilityCard key={vuln.id} vuln={vuln} />
+            <VulnerabilityCard key={vuln.id} vuln={vuln} aiPending={aiPending} />
           ))
         )}
       </div>

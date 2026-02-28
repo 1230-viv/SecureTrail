@@ -38,6 +38,9 @@ class ScanJob:
     stage: str = "queued"
     result: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
+    ai_status: str = "not_started"   # "not_started" | "in_progress" | "complete"
+    ai_total: int = 0                # total vulns queued for AI
+    ai_done: int = 0                 # vulns with AI explanation done
     created_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
     completed_at: Optional[float] = None
@@ -52,6 +55,9 @@ class ScanJob:
             "stage": self.stage,
             "result": self.result,
             "error": self.error,
+            "ai_status": self.ai_status,
+            "ai_total": self.ai_total,
+            "ai_done": self.ai_done,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "completed_at": self.completed_at,
@@ -84,6 +90,9 @@ class JobManager:
         stage: Optional[str] = None,
         result: Optional[Dict[str, Any]] = None,
         error: Optional[str] = None,
+        ai_status: Optional[str] = None,
+        ai_total: Optional[int] = None,
+        ai_done: Optional[int] = None,
     ) -> None:
         job = self._jobs.get(job_id)
         if not job:
@@ -97,6 +106,12 @@ class JobManager:
             job.progress = progress
         if stage is not None:
             job.stage = stage
+        if ai_status is not None:
+            job.ai_status = ai_status
+        if ai_total is not None:
+            job.ai_total = ai_total
+        if ai_done is not None:
+            job.ai_done = ai_done
         if result is not None:
             job.result = result
         if error is not None:

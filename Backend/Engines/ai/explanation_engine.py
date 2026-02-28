@@ -1,30 +1,21 @@
 """
-AI Explanation Engine -- SecureTrail  (4-Layer Chain Architecture)
+AI Explanation Engine -- SecureTrail  (Unified Single-Call Architecture)
 Production-grade orchestrator for AWS Bedrock (Llama 3 70B Instruct).
 
 Architecture
 ------------
-Each vulnerability is processed through a 4-layer sequential chain:
-  Layer 1: Technical Root Cause Analyzer  (temp 0.10, 500 tokens)
-  Layer 2: Security Exploit & Risk Modeler (temp 0.15, 600 tokens)
-  Layer 3: Student Mentor Translator       (temp 0.25, 900 tokens)
-  Layer 4: AI Self-Critic / Quality Review (temp 0.10, 900 tokens)
-
-Graceful degradation:
-  - L1 fails -> full deterministic fallback
-  - L2 fails -> build from L1 only
-  - L3 fails -> build from L1 + L2
-  - L4 fails -> use L3 uncorrected
+Each vulnerability is processed through a single comprehensive AI call that
+combines root-cause analysis, exploit modeling, educational content, and
+self-validation in one prompt.
 
 Features
 --------
 * Async with configurable concurrency semaphore
 * Circuit breaker (3 consecutive Bedrock failures disables AI)
-* Per-layer temperature and max_tokens via prompt_builder.LAYER_CONFIG
-* Strict JSON validation per layer
+* Strict JSON validation
 * Secrets masked before sending to the model
 * Code snippets capped at 20 lines
-* Per-call latency and per-layer metrics logged
+* Per-call latency and success metrics logged
 * Never crashes the pipeline -- every error path returns gracefully
 """
 
@@ -40,15 +31,8 @@ from typing import Any, Dict, List, Optional
 from Engines.ai.bedrock_client import invoke_claude, BedrockPermanentError
 from Engines.ai.prompt_builder import (
     SYSTEM_PROMPT,
-    LAYER_CONFIG,
-    L1_SYSTEM_PROMPT,
-    L2_SYSTEM_PROMPT,
-    L3_SYSTEM_PROMPT,
-    L4_SYSTEM_PROMPT,
-    build_layer1_prompt,
-    build_layer2_prompt,
-    build_layer3_prompt,
-    build_layer4_prompt,
+    SUMMARY_SYSTEM_PROMPT,
+    build_single_vuln_prompt,
     build_batch_summary_prompt,
 )
 from Engines.business_impact.impact_engine import build_ai_prompt_payload
@@ -71,7 +55,7 @@ MAX_RETRY             = 1
 _SECRET_PATTERNS = [
     re.compile(
         r'((?:api[_-]?key|secret|password|token|auth|credential|aws_secret)'
-        r'["\'\s:=]+)\S+',
+        r'["\'\'\s:=]+)\S+',
         re.IGNORECASE,
     ),
     re.compile(r'(AKIA[0-9A-Z]{16})'),
@@ -99,12 +83,12 @@ def _trim_snippet(snippet: Optional[str]) -> Optional[str]:
     """Keep at most MAX_SNIPPET_LINES of code and mask any secrets."""
     if not snippet:
         return snippet
-    lines = snippet.splitlines()
-    if len(lines) > MAX_SNIPPET_LINES:
-        lines = lines[:MAX_SNIPPET_LINES] + [
-            f"... ({len(lines) - MAX_SNIPPET_LINES} more lines)"
+    lines_ = snippet.splitlines()
+    if len(lines_) > MAX_SNIPPET_LINES:
+        lines_ = lines_[:MAX_SNIPPET_LINES] + [
+            f"... ({len(lines_) - MAX_SNIPPET_LINES} more lines)"
         ]
-    return _mask_secrets("\n".join(lines))
+    return _mask_secrets("\n".join(lines_))
 
 
 def _estimate_tokens(text: str) -> int:
@@ -131,7 +115,7 @@ def _fallback_explanation(vuln: NormalizedVulnerability) -> AIExplanation:
     line_ref = f" at line {vuln.line}" if vuln.line else ""
 
     return AIExplanation(
-        # Layer 1 fields
+        # Unified fields
         code_behavior_summary=(
             f"The code{file_ref}{line_ref} contains a pattern flagged as {cat}."
         ),
@@ -145,10 +129,7 @@ def _fallback_explanation(vuln: NormalizedVulnerability) -> AIExplanation:
             f"The code{file_ref}{line_ref} lacks proper input validation or "
             f"security controls for this {cat} pattern."
         ),
-        # Layer 2 fields
-        severity_justification=(
-            f"Rated {sev} based on the {cat} category and potential for exploitation."
-        ),
+        is_inferred_or_explicit="Inferred due to missing visible protection",
         attacker_realistic_path=[
             f"Attacker maps the application and discovers the endpoint{file_ref}.",
             "Studies the request/response pattern to understand the weakness.",
@@ -163,7 +144,7 @@ def _fallback_explanation(vuln: NormalizedVulnerability) -> AIExplanation:
             f"In your project, this {cat} issue{file_ref} could allow an "
             f"attacker to bypass intended security controls."
         ),
-        # Layer 3 fields
+        # Student mode fields
         clear_student_explanation=(
             f"Your code has a {sev}-severity {cat} issue{file_ref}. "
             f"This means there is a gap that could let someone do something "
@@ -191,15 +172,14 @@ def _fallback_explanation(vuln: NormalizedVulnerability) -> AIExplanation:
             "Defense in Depth -- never rely on a single security control. "
             "Validate inputs, sanitize outputs, and enforce least privilege at every layer."
         ),
-        common_student_mistake=(
-            f"Beginners often skip {cat} protections because the code 'works' "
-            f"during development. Security gaps only become visible under attack."
-        ),
         learning_takeaways=[
             "Always validate and sanitize user input before processing.",
             "Use security linting tools in your IDE and CI/CD pipeline.",
             "Follow the OWASP Top 10 as a checklist for every project.",
         ],
+        self_validation_check=(
+            "This is a deterministic fallback; AI analysis was not available."
+        ),
         # Professional mode
         root_cause=(
             f"This {sev} {cat} vulnerability{file_ref} occurs when "
@@ -233,57 +213,59 @@ def _fallback_explanation(vuln: NormalizedVulnerability) -> AIExplanation:
     )
 
 
-# -- Layer Output Merging --------------------------------------------------
+# -- AI Response Mapping ---------------------------------------------------
 
-def _build_from_layers(
-    l1: Optional[Dict[str, Any]],
-    l2: Optional[Dict[str, Any]],
-    l3: Optional[Dict[str, Any]],
+def _build_from_ai(
+    data: Dict[str, Any],
     vuln: NormalizedVulnerability,
 ) -> Optional[AIExplanation]:
     """
-    Merge outputs from available layers into a single AIExplanation.
-    Missing layers are filled with empty defaults.
-    Returns None only if L1 is also missing.
+    Map the unified AI JSON response to an AIExplanation object.
+    Supports both the new strict schema (confidence, code_summary, evidence,
+    secure_fix, self_check) and the legacy schema for backward compatibility.
+    Returns None if the response is generic filler.
     """
-    if not l1:
+    if not data:
         return None
 
-    l1 = l1 or {}
-    l2 = l2 or {}
-    l3 = l3 or {}
+    # Extract fields — new schema keys first, fall back to legacy
+    confidence = str(
+        data.get("confidence") or data.get("confidence_level") or ""
+    )
+    code_summary = str(
+        data.get("code_summary") or data.get("code_behavior_summary") or ""
+    )
+    root_cause = str(data.get("validated_root_cause", ""))
+    evidence = str(
+        data.get("evidence")
+        or data.get("evidence_from_snippet")
+        or data.get("evidence_from_code")
+        or ""
+    )
+    is_inferred = str(
+        data.get("is_explicit_or_inferred")
+        or data.get("is_inferred_or_explicit")
+        or ""
+    )
+    attack_flow = _to_list(data.get("realistic_attack_flow", []))
+    tech_impact = str(data.get("technical_impact", ""))
+    project_risk = str(data.get("project_specific_risk", ""))
+    secure_fix = str(
+        data.get("secure_fix") or ""
+    )
+    # Also support legacy list format
+    fix_steps = _to_list(data.get("secure_fix_steps", []))
+    if not fix_steps and secure_fix:
+        fix_steps = [secure_fix]
+    secure_code = str(data.get("secure_code_example", ""))
+    defense = _to_list(data.get("defense_in_depth", []))
+    principle = str(data.get("core_security_principle", ""))
+    takeaways = _to_list(data.get("learning_takeaways", []))
+    self_check = str(
+        data.get("self_check") or data.get("self_validation_check") or ""
+    )
 
-    # -- Layer 1 extraction --
-    code_behavior = str(l1.get("code_behavior_summary", ""))
-    confidence = str(l1.get("confidence_level", ""))
-    root_cause = str(l1.get("root_cause_precise", ""))
-    evidence = str(l1.get("explicit_evidence", ""))
-    vuln_type = str(l1.get("validated_vulnerability_type", ""))
-
-    # -- Layer 2 extraction --
-    attack_flow = _to_list(l2.get("realistic_attack_flow", []))
-    secondary_flow = _to_list(l2.get("secondary_attack_flow", []))
-    if secondary_flow:
-        attack_flow = attack_flow + ["--- Secondary Attack Vector ---"] + secondary_flow
-    evidence_basis = str(l2.get("evidence_basis", ""))
-    tech_impact = str(l2.get("technical_impact", ""))
-    biz_impact = str(l2.get("business_impact_realistic", ""))
-    sev_just = str(l2.get("severity_justification", ""))
-    if evidence_basis:
-        sev_just = f"[{evidence_basis}] {sev_just}"
-
-    # -- Layer 3 extraction (may be L4-corrected) --
-    student_expl = str(l3.get("clear_student_explanation", ""))
-    why_matters = str(l3.get("why_this_matters_in_this_file", ""))
-    attack_sim = _to_list(l3.get("step_by_step_attack_simulation", []))
-    fix_steps = _to_list(l3.get("secure_fix_steps", []))
-    secure_code = str(l3.get("secure_code_example", ""))
-    defense = _to_list(l3.get("defense_in_depth", []))
-    principle = str(l3.get("core_security_principle", ""))
-    mistake = str(l3.get("common_student_mistake", ""))
-    takeaways = _to_list(l3.get("learning_takeaways", []))
-
-    # -- Quality check: reject if root cause is generic filler --
+    # Quality check: reject if root cause is generic filler
     _GENERIC_PHRASES = [
         "this type of vulnerability",
         "in real-world attacks",
@@ -293,43 +275,39 @@ def _build_from_layers(
         if phrase.lower() in root_cause.lower():
             return None
 
-    # -- Cross-map to professional fields --
-    pro_root = root_cause or student_expl
-    pro_exploit = tech_impact or biz_impact
-    pro_fix = "; ".join(fix_steps) if fix_steps else ""
-    pro_patch = secure_code
-    pro_bp = principle
+    # Cross-map to professional fields
+    pro_root = root_cause or code_summary
+    pro_fix = secure_fix or ("; ".join(fix_steps) if fix_steps else "")
 
     try:
         return AIExplanation(
-            # Layer 1
-            code_behavior_summary=code_behavior,
+            # Unified fields
+            code_behavior_summary=code_summary,
             confidence_level=confidence,
-            validated_root_cause=root_cause or pro_root,
+            validated_root_cause=root_cause,
             evidence_from_code=evidence,
-            # Layer 2
-            severity_justification=sev_just,
-            attacker_realistic_path=attack_flow or attack_sim,
-            technical_impact=tech_impact or biz_impact,
-            project_specific_risk=why_matters or biz_impact,
-            # Layer 3
-            clear_student_explanation=student_expl or root_cause,
-            step_by_step_attack_simulation=attack_sim or attack_flow,
+            is_inferred_or_explicit=is_inferred,
+            attacker_realistic_path=attack_flow,
+            technical_impact=tech_impact,
+            project_specific_risk=project_risk,
+            # Student mode
+            clear_student_explanation=code_summary,
+            step_by_step_attack_simulation=attack_flow,
             secure_fix_steps=fix_steps,
             secure_code_example=secure_code,
             defense_in_depth=defense,
             core_security_principle=principle,
-            common_student_mistake=mistake,
             learning_takeaways=takeaways,
-            # Professional mode
+            self_validation_check=self_check,
+            # Professional mode (cross-mapped)
             root_cause=pro_root,
-            exploit_scenario=pro_exploit,
-            step_by_step_exploit=attack_flow or attack_sim,
+            exploit_scenario=tech_impact,
+            step_by_step_exploit=attack_flow,
             secure_fix=pro_fix,
-            code_patch_example=pro_patch,
-            best_practice=pro_bp,
+            code_patch_example=secure_code,
+            best_practice=principle,
             minimal_patch=pro_fix,
-            secure_practice=pro_bp,
+            secure_practice=principle,
             references=[
                 "https://owasp.org/www-project-top-ten/",
                 f"https://cwe.mitre.org/data/definitions/{vuln.cwe_id or '1000'}.html",
@@ -349,8 +327,8 @@ def _safe_json_parse(text: str) -> Optional[Dict[str, Any]]:
 
     # Strip markdown code fences
     if text.startswith("```"):
-        lines = text.splitlines()
-        text = "\n".join(l for l in lines if not l.strip().startswith("```"))
+        lines_ = text.splitlines()
+        text = "\n".join(l for l in lines_ if not l.strip().startswith("```"))
 
     # Direct parse
     try:
@@ -388,7 +366,7 @@ async def explain_vulnerabilities(
     job_id: str,
 ) -> tuple[List[NormalizedVulnerability], Optional[Dict[str, Any]]]:
     """
-    For each vulnerability with score >= threshold, run the 4-layer AI chain.
+    For each vulnerability with score >= threshold, run the unified AI call.
     Returns (mutated vulns, executive_summary).
     """
     log = JobLogger(job_id, "ai_engine")
@@ -408,7 +386,7 @@ async def explain_vulnerabilities(
 
     log.info(
         f"AI analysis: {len(priority_vulns)}/{len(vulns)} findings qualify "
-        f"for 4-layer AI chain (score >= {AI_SCORE_THRESHOLD}), "
+        f"for unified AI call (score >= {AI_SCORE_THRESHOLD}), "
         f"{len(below_threshold)} get deterministic fallback"
     )
 
@@ -428,92 +406,14 @@ async def explain_vulnerabilities(
     total_input_tokens = 0
     total_output_tokens = 0
     total_latency_ms = 0.0
-    layer_stats = {"L1": 0, "L2": 0, "L3": 0, "L4": 0}
-    layer_fail = {"L1": 0, "L2": 0, "L3": 0, "L4": 0}
-    corrections_count = 0
 
     semaphore = asyncio.Semaphore(AI_MAX_CONCURRENT)
     loop = asyncio.get_event_loop()
 
-    async def _invoke_layer(
-        layer_name: str,
-        system_prompt: str,
-        user_prompt: str,
-        log_id: str,
-    ) -> Optional[Dict[str, Any]]:
-        """Invoke a single layer with its configured temperature & max_tokens."""
-        nonlocal total_calls, total_input_tokens, total_output_tokens
-        nonlocal total_latency_ms, consecutive_failures, circuit_open
-
-        cfg = LAYER_CONFIG[layer_name]
-        input_tokens = _estimate_tokens(system_prompt + user_prompt)
-        total_input_tokens += input_tokens
-        total_calls += 1
-        layer_stats[layer_name] += 1
-
-        t0 = time.monotonic()
-        try:
-            raw = await loop.run_in_executor(
-                None,
-                invoke_claude,
-                system_prompt,
-                user_prompt,
-                cfg["temperature"],
-                cfg["max_tokens"],
-            )
-            elapsed_ms = (time.monotonic() - t0) * 1000
-            total_latency_ms += elapsed_ms
-            output_tokens = _estimate_tokens(raw)
-            total_output_tokens += output_tokens
-
-            log.debug(
-                f"{layer_name} {log_id} -- "
-                f"{elapsed_ms:.0f}ms, ~{input_tokens}+{output_tokens} tok"
-            )
-
-            data = _safe_json_parse(raw)
-            if data:
-                consecutive_failures = 0
-                return data
-            else:
-                layer_fail[layer_name] += 1
-                log.warning(f"{layer_name} {log_id} -- malformed JSON")
-                return None
-
-        except BedrockPermanentError as e:
-            elapsed_ms = (time.monotonic() - t0) * 1000
-            total_latency_ms += elapsed_ms
-            consecutive_failures += 1
-            layer_fail[layer_name] += 1
-            log.error(
-                f"{layer_name} {log_id} -- permanent error "
-                f"({consecutive_failures}/{CIRCUIT_BREAKER_LIMIT}): {e}"
-            )
-            if consecutive_failures >= CIRCUIT_BREAKER_LIMIT:
-                circuit_open = True
-                log.error(
-                    "CIRCUIT BREAKER OPEN -- AI disabled for remaining findings."
-                )
-            raise  # propagate so _analyze_one can handle
-
-        except Exception as e:
-            elapsed_ms = (time.monotonic() - t0) * 1000
-            total_latency_ms += elapsed_ms
-            consecutive_failures += 1
-            layer_fail[layer_name] += 1
-            log.warning(
-                f"{layer_name} {log_id} -- error "
-                f"({consecutive_failures}/{CIRCUIT_BREAKER_LIMIT}): {e}"
-            )
-            if consecutive_failures >= CIRCUIT_BREAKER_LIMIT:
-                circuit_open = True
-                log.error(
-                    "CIRCUIT BREAKER OPEN -- AI disabled for remaining findings."
-                )
-            return None
-
     async def _analyze_one(vuln: NormalizedVulnerability) -> None:
-        nonlocal total_success, total_fallback, corrections_count
+        nonlocal total_calls, total_success, total_fallback
+        nonlocal total_input_tokens, total_output_tokens, total_latency_ms
+        nonlocal consecutive_failures, circuit_open
 
         if circuit_open:
             vuln.ai_explanation = _fallback_explanation(vuln)
@@ -528,111 +428,86 @@ async def explain_vulnerabilities(
 
             log_id = vuln.id[:8]
             payload = _sanitize_payload(vuln)
+            user_prompt = build_single_vuln_prompt(payload)
 
-            # ---- LAYER 1: Technical Root Cause ----
-            l1_prompt = build_layer1_prompt(payload)
-            l1_data = None
+            input_tokens = _estimate_tokens(SYSTEM_PROMPT + user_prompt)
+            total_input_tokens += input_tokens
+
             for attempt in range(1 + MAX_RETRY):
+                total_calls += 1
+                t0 = time.monotonic()
                 try:
-                    l1_data = await _invoke_layer(
-                        "L1", L1_SYSTEM_PROMPT, l1_prompt, log_id
+                    raw = await loop.run_in_executor(
+                        None,
+                        invoke_claude,
+                        SYSTEM_PROMPT,
+                        user_prompt,
                     )
-                    if l1_data:
-                        break
+                    elapsed_ms = (time.monotonic() - t0) * 1000
+                    total_latency_ms += elapsed_ms
+                    output_tokens = _estimate_tokens(raw)
+                    total_output_tokens += output_tokens
+
+                    log.debug(
+                        f"{log_id} -- {elapsed_ms:.0f}ms, "
+                        f"~{input_tokens}+{output_tokens} tok"
+                    )
+
+                    data = _safe_json_parse(raw)
+                    if data:
+                        result = _build_from_ai(data, vuln)
+                        if result:
+                            vuln.ai_explanation = result
+                            total_success += 1
+                            consecutive_failures = 0
+                            return
+                        else:
+                            log.warning(
+                                f"{log_id} -- AI returned generic filler, "
+                                f"attempt {attempt + 1}"
+                            )
+                    else:
+                        log.warning(
+                            f"{log_id} -- malformed JSON, "
+                            f"attempt {attempt + 1}"
+                        )
+
+                except BedrockPermanentError as e:
+                    elapsed_ms = (time.monotonic() - t0) * 1000
+                    total_latency_ms += elapsed_ms
+                    consecutive_failures += 1
+                    log.error(
+                        f"{log_id} -- permanent error "
+                        f"({consecutive_failures}/{CIRCUIT_BREAKER_LIMIT}): {e}"
+                    )
+                    if consecutive_failures >= CIRCUIT_BREAKER_LIMIT:
+                        circuit_open = True
+                        log.error(
+                            "CIRCUIT BREAKER OPEN -- AI disabled for remaining findings."
+                        )
+                    break  # no retry on permanent errors
+
+                except Exception as e:
+                    elapsed_ms = (time.monotonic() - t0) * 1000
+                    total_latency_ms += elapsed_ms
+                    consecutive_failures += 1
+                    log.warning(
+                        f"{log_id} -- error "
+                        f"({consecutive_failures}/{CIRCUIT_BREAKER_LIMIT}): {e}"
+                    )
+                    if consecutive_failures >= CIRCUIT_BREAKER_LIMIT:
+                        circuit_open = True
+                        log.error(
+                            "CIRCUIT BREAKER OPEN -- AI disabled for remaining findings."
+                        )
                     if attempt < MAX_RETRY:
-                        log.debug(f"L1 {log_id} retry {attempt + 1}")
-                except BedrockPermanentError:
-                    vuln.ai_explanation = _fallback_explanation(vuln)
-                    total_fallback += 1
-                    return
+                        log.debug(f"{log_id} retry {attempt + 1}")
+                        continue
+                    break
 
-            if not l1_data:
-                log.warning(f"{log_id} -- L1 failed, full fallback")
-                vuln.ai_explanation = _fallback_explanation(vuln)
-                total_fallback += 1
-                return
-
-            if circuit_open:
-                vuln.ai_explanation = (
-                    _build_from_layers(l1_data, None, None, vuln)
-                    or _fallback_explanation(vuln)
-                )
-                total_fallback += 1
-                return
-
-            # ---- LAYER 2: Exploit & Risk Model ----
-            l2_prompt = build_layer2_prompt(l1_data)
-            try:
-                l2_data = await _invoke_layer(
-                    "L2", L2_SYSTEM_PROMPT, l2_prompt, log_id
-                )
-            except BedrockPermanentError:
-                l2_data = None
-
-            if not l2_data:
-                log.info(f"{log_id} -- L2 failed, building from L1 only")
-                result = _build_from_layers(l1_data, None, None, vuln)
-                vuln.ai_explanation = result or _fallback_explanation(vuln)
-                total_success += 1 if result else 0
-                total_fallback += 0 if result else 1
-                return
-
-            if circuit_open:
-                result = _build_from_layers(l1_data, l2_data, None, vuln)
-                vuln.ai_explanation = result or _fallback_explanation(vuln)
-                total_fallback += 1
-                return
-
-            # ---- LAYER 3: Student Mentor ----
-            l3_prompt = build_layer3_prompt(l1_data, l2_data, payload)
-            try:
-                l3_data = await _invoke_layer(
-                    "L3", L3_SYSTEM_PROMPT, l3_prompt, log_id
-                )
-            except BedrockPermanentError:
-                l3_data = None
-
-            if not l3_data:
-                log.info(f"{log_id} -- L3 failed, building from L1+L2")
-                result = _build_from_layers(l1_data, l2_data, None, vuln)
-                vuln.ai_explanation = result or _fallback_explanation(vuln)
-                total_success += 1 if result else 0
-                total_fallback += 0 if result else 1
-                return
-
-            if circuit_open:
-                result = _build_from_layers(l1_data, l2_data, l3_data, vuln)
-                vuln.ai_explanation = result or _fallback_explanation(vuln)
-                total_fallback += 1
-                return
-
-            # ---- LAYER 4: Self-Critic ----
-            l4_prompt = build_layer4_prompt(l3_data)
-            try:
-                l4_data = await _invoke_layer(
-                    "L4", L4_SYSTEM_PROMPT, l4_prompt, log_id
-                )
-            except BedrockPermanentError:
-                l4_data = None
-
-            # Determine final L3 output (corrected or original)
-            final_l3 = l3_data  # default: use original
-            if l4_data:
-                if l4_data.get("corrections_made") in (True, "true", "True"):
-                    corrections_count += 1
-                    summary = l4_data.get("corrections_summary", "")
-                    log.info(f"{log_id} -- L4 corrected: {summary[:80]}")
-                    final_l3 = l4_data
-                else:
-                    log.debug(f"{log_id} -- L4 approved (no corrections)")
-
-            # ---- MERGE ALL LAYERS ----
-            result = _build_from_layers(l1_data, l2_data, final_l3, vuln)
-            if result:
-                vuln.ai_explanation = result
-                total_success += 1
-            else:
-                log.warning(f"{log_id} -- merged result invalid, fallback")
+            # All attempts exhausted -- fallback
+            if vuln.ai_explanation is None:
+                log.warning(f"{log_id} -- all attempts failed, fallback")
                 vuln.ai_explanation = _fallback_explanation(vuln)
                 total_fallback += 1
 
@@ -642,14 +517,10 @@ async def explain_vulnerabilities(
     # -- Metrics summary --
     avg_latency = total_latency_ms / max(total_calls, 1)
     log.info(
-        f"4-Layer AI chain complete -- "
+        f"Unified AI analysis complete -- "
         f"calls={total_calls}, success={total_success}, fallback={total_fallback}, "
-        f"circuit_open={circuit_open}, corrections={corrections_count}, "
+        f"circuit_open={circuit_open}, "
         f"avg_latency={avg_latency:.0f}ms, "
-        f"L1={layer_stats['L1']}(fail={layer_fail['L1']}), "
-        f"L2={layer_stats['L2']}(fail={layer_fail['L2']}), "
-        f"L3={layer_stats['L3']}(fail={layer_fail['L3']}), "
-        f"L4={layer_stats['L4']}(fail={layer_fail['L4']}), "
         f"tokens_in~{total_input_tokens}, tokens_out~{total_output_tokens}"
     )
 
@@ -660,7 +531,7 @@ async def explain_vulnerabilities(
             summary_prompt = build_batch_summary_prompt(vulns, repo_name)
             t0 = time.monotonic()
             raw_summary = await loop.run_in_executor(
-                None, invoke_claude, SYSTEM_PROMPT, summary_prompt
+                None, invoke_claude, SUMMARY_SYSTEM_PROMPT, summary_prompt
             )
             elapsed = (time.monotonic() - t0) * 1000
             executive_summary = _safe_json_parse(raw_summary)
@@ -680,3 +551,4 @@ async def explain_vulnerabilities(
         )
 
     return vulns, executive_summary
+
