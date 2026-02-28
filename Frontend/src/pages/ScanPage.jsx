@@ -1,10 +1,16 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Shield, Fingerprint, Eye, Lock, Zap, ArrowRight } from 'lucide-react';
+import {
+  ChevronLeft, Shield, Fingerprint, Eye, Lock, Zap, ArrowRight,
+  Sparkles, ShieldCheck,
+} from 'lucide-react';
 import RepositoryUpload from '../components/RepositoryUpload';
 import { useScan } from '../context/ScanContext';
 import { useTheme } from '../context/ThemeContext';
 
+/* ═══════════════════════════════════════════════════════
+   ENGINE MANIFEST
+   ═══════════════════════════════════════════════════════ */
 const ENGINES = [
   {
     icon: Shield,
@@ -66,6 +72,9 @@ const ICON_CLS = {
   },
 };
 
+/* ═══════════════════════════════════════════════════════
+   SCAN PAGE
+   ═══════════════════════════════════════════════════════ */
 const ScanPage = () => {
   const navigate      = useNavigate();
   const { startScan } = useScan();
@@ -73,10 +82,28 @@ const ScanPage = () => {
   const mode = isDark ? 'dark' : 'light';
 
   return (
-    <div className={`min-h-screen ${isDark ? 'bg-[#0d0f17]' : 'bg-[#f8f9fb]'}`}>
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+    <div className={`min-h-screen relative overflow-hidden
+      ${isDark ? 'bg-[#0d0f17]' : 'bg-[#f4f6fb]'}`}>
 
-        {/* ── Back ─── */}
+      {/* ── Ambient orbs (matches Dashboard) ── */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none z-0" aria-hidden="true">
+        <div
+          className="absolute -top-32 -right-32 w-[500px] h-[500px] rounded-full opacity-[0.06] animate-float blur-3xl"
+          style={{ background: 'radial-gradient(circle, #6366f1, transparent 70%)' }}
+        />
+        <div
+          className="absolute top-1/2 -left-48 w-[400px] h-[400px] rounded-full opacity-[0.04] animate-float-delayed blur-3xl"
+          style={{ background: 'radial-gradient(circle, #3b82f6, transparent 70%)' }}
+        />
+        <div
+          className="absolute -bottom-20 right-1/4 w-80 h-80 rounded-full opacity-[0.03] animate-float blur-3xl"
+          style={{ background: 'radial-gradient(circle, #8b5cf6, transparent 70%)', animationDelay: '8s' }}
+        />
+      </div>
+
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 relative z-10">
+
+        {/* ── Back ── */}
         <button
           onClick={() => navigate('/dashboard')}
           className={`group inline-flex items-center gap-1.5 text-xs font-medium mb-10
@@ -87,16 +114,16 @@ const ScanPage = () => {
           Dashboard
         </button>
 
-        {/* ── Two-column layout ─── */}
+        {/* ── Two-column layout ── */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start animate-fade-in-up">
 
-          {/* ──────────── Left — upload ──────────────────────────────── */}
+          {/* ──────── Left — upload ──────── */}
           <div className="lg:col-span-7">
             {/* Hero heading */}
             <div className="mb-8">
               <div className="flex items-center gap-2.5 mb-3">
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center
-                  ${isDark ? 'bg-blue-500/15' : 'bg-blue-100'}`}>
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center backdrop-blur-xl
+                  ${isDark ? 'bg-blue-500/15 shadow-lg shadow-blue-500/10' : 'bg-blue-100 shadow-md shadow-blue-200/40'}`}>
                   <Zap size={16} className={isDark ? 'text-blue-400' : 'text-blue-600'} />
                 </div>
                 <p className={`text-[10px] font-bold uppercase tracking-[0.15em]
@@ -119,14 +146,18 @@ const ScanPage = () => {
             <RepositoryUpload onScanStarted={startScan} />
           </div>
 
-          {/* ──────────── Right — engine manifest ───────────────────── */}
+          {/* ──────── Right — engine manifest ──────── */}
           <div className="lg:col-span-5">
             <p className={`text-[10px] font-bold uppercase tracking-[0.15em] mb-4
               ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
               Scan Engines
             </p>
-            <div className={`rounded-2xl overflow-hidden border
-              ${isDark ? 'border-white/[0.06] bg-[#161929]' : 'border-slate-100 bg-white shadow-sm'}`}>
+
+            {/* Glass card */}
+            <div className={`rounded-2xl overflow-hidden border backdrop-blur-xl
+              ${isDark
+                ? 'bg-white/[0.03] border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.3)]'
+                : 'bg-white/70 border-white/60 shadow-[0_8px_32px_rgba(99,102,241,0.08)]'}`}>
               <div className="stagger-children">
                 {ENGINES.map((item, i) => {
                   const Icon = item.icon;
@@ -134,12 +165,13 @@ const ScanPage = () => {
                     <div
                       key={item.engine}
                       className={`px-5 py-[18px] flex items-start gap-4 group transition-colors
-                        ${isDark ? 'hover:bg-white/[0.02]' : 'hover:bg-slate-50/70'}
+                        ${isDark ? 'hover:bg-white/[0.03]' : 'hover:bg-white/40'}
                         ${i !== ENGINES.length - 1
-                          ? isDark ? 'border-b border-white/[0.04]' : 'border-b border-slate-50'
+                          ? isDark ? 'border-b border-white/[0.04]' : 'border-b border-white/30'
                           : ''}`}
                     >
                       <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5
+                        transition-transform duration-300 group-hover:scale-110
                         ${ICON_CLS[mode][item.color]}`}>
                         <Icon size={16} />
                       </div>
@@ -169,15 +201,31 @@ const ScanPage = () => {
               </div>
             </div>
 
-            {/* Trust / security note */}
-            <div className={`mt-5 rounded-xl px-4 py-3 flex items-start gap-3
-              ${isDark ? 'bg-white/[0.02] border border-white/[0.04]' : 'bg-slate-50 border border-slate-100'}`}>
-              <Shield size={14} className={`mt-0.5 flex-shrink-0 ${isDark ? 'text-emerald-500/60' : 'text-emerald-600/60'}`} />
+            {/* Trust note — glass style */}
+            <div className={`mt-5 rounded-xl px-4 py-3 flex items-start gap-3 backdrop-blur-xl
+              ${isDark
+                ? 'bg-white/[0.03] border border-white/[0.06] shadow-lg shadow-black/10'
+                : 'bg-white/50 border border-white/60 shadow-md shadow-emerald-500/5'}`}>
+              <ShieldCheck size={14} className={`mt-0.5 flex-shrink-0 ${isDark ? 'text-emerald-500/60' : 'text-emerald-600/60'}`} />
               <p className={`text-[11px] leading-relaxed
                 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
                 Scans run server-side in an isolated environment.
                 ZIP files are archived to S3 after processing.
                 No source code is stored long-term.
+              </p>
+            </div>
+
+            {/* Pro tip — glass card */}
+            <div className={`mt-3 rounded-xl px-4 py-3 flex items-start gap-3 backdrop-blur-xl
+              ${isDark
+                ? 'bg-indigo-500/[0.05] border border-indigo-500/10'
+                : 'bg-indigo-50/50 border border-indigo-100/60'}`}>
+              <Sparkles size={14} className={`mt-0.5 flex-shrink-0
+                ${isDark ? 'text-indigo-400/60' : 'text-indigo-500/60'}`} />
+              <p className={`text-[11px] leading-relaxed
+                ${isDark ? 'text-indigo-300/60' : 'text-indigo-600/60'}`}>
+                <span className="font-semibold">Pro tip:</span> Each finding gets an AI-generated
+                explanation with recommended fixes — powered by Amazon Bedrock.
               </p>
             </div>
           </div>
