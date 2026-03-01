@@ -111,6 +111,73 @@ export const learningAPI = {
 
   /** All known vulnerability categories with label, color, icon. */
   getCategories: () => api.get('/api/learning/categories'),
+
+  /**
+   * AI-powered vulnerability learning guide for a specific category.
+   * Returns affected findings (file, line, severity, snippet) + AI lesson + fix guide.
+   * @param {string} jobId         Scan job ID
+   * @param {string} category      Category slug (e.g. 'injection', 'access_control')
+   * @param {boolean} forceRefresh Skip cache and regenerate AI guide
+   */
+  getVulnGuide: (jobId, category, forceRefresh = false) =>
+    api.get(`/api/learning/vuln-guide/${jobId}/${encodeURIComponent(category)}`, {
+      params: forceRefresh ? { refresh: '1' } : {},
+    }),
+
+  /**
+   * Multi-turn security mentor chat backed by Llama 4 Maverick.
+   * @param {Array<{role:string,content:string}>} messages  Full conversation history
+   * @param {string|null} jobId    Optional scan job ID for contextual answers
+   * @param {string|null} repoName Optional repo name for context
+   * @returns Promise<{role:"assistant", content:string}>
+   */
+  chat: (messages, jobId = null, repoName = null) =>
+    api.post('/api/learning/chat', {
+      messages,
+      job_id:    jobId,
+      repo_name: repoName,
+    }),
+
+  /**
+   * Submit a code fix for static+AI evaluation.
+   * Returns { is_secure, improvement_score, missing_checks, explanation, next_step,
+   *           lifecycle_state, xp_awarded, new_badges }
+   */
+  verifyFix: (jobId, category, payload) =>
+    api.post(`/api/learning/verify-fix/${jobId}/${encodeURIComponent(category)}`, payload),
+
+  /**
+   * Get vulnerability lifecycle states for all findings in a scan.
+   * Returns { findings: [{rule_id, state, ...}], summary: {detected, verified, ...} }
+   */
+  getLifecycle: (jobId) => api.get(`/api/learning/lifecycle/${jobId}`),
+
+  /**
+   * Get all earned progress badges for a repository.
+   * Returns { earned: [...], catalog: [...] }
+   */
+  getBadges: (repoName) =>
+    api.get(`/api/learning/badges/${encodeURIComponent(repoName)}`),
+
+  /**
+   * Get the skill tree (6 domain XP) for a repository.
+   * Returns { domains: [{id, label, xp, level, ...}], total_xp }
+   */
+  getSkillTree: (repoName) =>
+    api.get(`/api/learning/skill-tree/${encodeURIComponent(repoName)}`),
+
+  /**
+   * Get habit confidence scores for a repository.
+   * Returns { habits: [{pattern_name, confidence_score, trend, ...}] }
+   */
+  getHabits: (repoName) =>
+    api.get(`/api/learning/habits/${encodeURIComponent(repoName)}`),
+
+  /**
+   * Get longitudinal behavioral analysis using last 3 scans.
+   * Returns { behavioral_summary, security_drift, thirty_day_advice, focus_domain, ... }
+   */
+  getLongitudinal: (jobId) => api.get(`/api/learning/longitudinal/${jobId}`),
 };
 
 // ── Scan (polling + results) ───────────────────────────────────────────────────

@@ -43,11 +43,12 @@ _PERMANENT_ERROR_CODES = {
 # Configuration — no hardcoded values
 # ──────────────────────────────────────────────────────────────────────────────
 AWS_REGION        = os.getenv("AWS_REGION", "us-east-1")
-BEDROCK_REGION    = os.getenv("BEDROCK_REGION", AWS_REGION)  # dedicated region for Bedrock (may differ from S3/default)
-BEDROCK_MODEL_ID  = os.getenv("BEDROCK_MODEL_ID", "meta.llama3-70b-instruct-v1:0")
-MAX_TOKENS        = int(os.getenv("BEDROCK_MAX_TOKENS", "1400"))
-TEMPERATURE       = float(os.getenv("BEDROCK_TEMPERATURE", "0.15"))  # low temp = less hallucination
-TOP_P             = float(os.getenv("BEDROCK_TOP_P", "0.85"))
+BEDROCK_REGION    = os.getenv("BEDROCK_REGION", AWS_REGION)
+BEDROCK_MODEL_ID  = os.getenv("BEDROCK_MODEL_ID", "us.meta.llama4-maverick-17b-instruct-v1:0")
+MAX_TOKENS        = int(os.getenv("BEDROCK_MAX_TOKENS", "4096"))
+CHAT_MAX_TOKENS   = int(os.getenv("BEDROCK_CHAT_MAX_TOKENS", "2048"))
+TEMPERATURE       = float(os.getenv("BEDROCK_TEMPERATURE", "0.6"))
+TOP_P             = float(os.getenv("BEDROCK_TOP_P", "0.9"))
 CONNECT_TIMEOUT   = int(os.getenv("BEDROCK_CONNECT_TIMEOUT", "10"))
 READ_TIMEOUT      = int(os.getenv("BEDROCK_READ_TIMEOUT", "60"))
 
@@ -77,6 +78,11 @@ def _is_claude(model_id: str) -> bool:
 def _is_nova(model_id: str) -> bool:
     # Amazon Nova models (direct IDs and inference profile ARNs)
     return "amazon.nova" in model_id
+
+
+def _is_llama4(model_id: str) -> bool:
+    # Meta Llama 4 models — use Converse API (not legacy invoke_model format)
+    return "meta.llama4" in model_id
 
 
 def _build_body(
@@ -157,13 +163,21 @@ def invoke_claude(
     max_tokens: int | None = None,
 ) -> str:
     """
-    Invoke a model via AWS Bedrock (supports Claude and Llama).
-    Optional temperature / max_tokens override the global defaults
-    to allow per-layer tuning in the 4-layer chain.
+    Invoke a model via AWS Bedrock (supports Claude, Nova, Llama 3/4).
+    Llama 4 routes through the Converse API automatically.
+    Optional temperature / max_tokens override the global defaults.
     Returns the response text content.
     Raises BedrockPermanentError on non-retryable failures.
     Raises RuntimeError on transient API failures.
     """
+    # Llama 4: always use the Converse API (better multi-turn + format handling)
+    if _is_llama4(BEDROCK_MODEL_ID):
+        return invoke_chat(
+            messages=[{"role": "user", "content": user_message}],
+            system_prompt=system_prompt,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
     client = _get_client()
     body = _build_body(system_prompt, user_message, temperature, max_tokens)
 
@@ -202,4 +216,65 @@ def invoke_claude(
     except Exception as e:
         elapsed = (time.monotonic() - t0) * 1000
         logger.error(f"Unexpected Bedrock error after {elapsed:.0f}ms: {e}")
+        raise RuntimeError(f"AI service unavailable: {e}") from e
+
+
+def invoke_chat(
+    messages: list[Dict[str, str]],
+    system_prompt: str = "",
+    temperature: float | None = None,
+    max_tokens: int | None = None,
+) -> str:
+    """
+    Multi-turn conversation via Bedrock Converse API.
+
+    Works with all Converse-compatible models: Llama 4, Claude 3.x+, Nova, Mistral.
+    ``messages`` is a list of ``{"role": "user"|"assistant", "content": "..."}}``.
+    The last message must have role ``"user"``.
+
+    Returns the assistant reply as a plain string.
+    Raises BedrockPermanentError / RuntimeError on failure.
+    """
+    client = _get_client()
+    _temp = temperature if temperature is not None else TEMPERATURE
+    _max  = max_tokens  if max_tokens  is not None else CHAT_MAX_TOKENS
+
+    # Build Converse-format message list
+    converse_msgs = [
+        {"role": m["role"], "content": [{"text": m["content"]}]}
+        for m in messages
+    ]
+
+    kwargs: Dict[str, Any] = dict(
+        modelId=BEDROCK_MODEL_ID,
+        messages=converse_msgs,
+        inferenceConfig={"maxTokens": _max, "temperature": _temp, "topP": TOP_P},
+    )
+    if system_prompt:
+        kwargs["system"] = [{"text": system_prompt}]
+
+    t0 = time.monotonic()
+    try:
+        response = client.converse(**kwargs)
+        text = response["output"]["message"]["content"][0]["text"]
+        if not text:
+            raise RuntimeError("Bedrock Converse returned empty response text")
+        elapsed = (time.monotonic() - t0) * 1000
+        logger.info(
+            f"Bedrock Converse OK — model={BEDROCK_MODEL_ID}, "
+            f"latency={elapsed:.0f}ms, response_len={len(text)}"
+        )
+        return text
+    except ClientError as e:
+        elapsed = (time.monotonic() - t0) * 1000
+        error_code = e.response["Error"]["Code"]
+        logger.error(f"Bedrock Converse ClientError [{error_code}] after {elapsed:.0f}ms: {e}")
+        if error_code in _PERMANENT_ERROR_CODES:
+            raise BedrockPermanentError(
+                f"Bedrock permanent error [{error_code}]: {e}"
+            ) from e
+        raise RuntimeError(f"Bedrock Converse API error: {error_code}") from e
+    except Exception as e:
+        elapsed = (time.monotonic() - t0) * 1000
+        logger.error(f"Unexpected Bedrock Converse error after {elapsed:.0f}ms: {e}")
         raise RuntimeError(f"AI service unavailable: {e}") from e
