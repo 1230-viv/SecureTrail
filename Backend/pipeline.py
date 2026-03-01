@@ -24,7 +24,7 @@ from Database.repositories import scan_repo as _scan_repo
 
 from Engines.ai.explanation_engine import explain_vulnerabilities
 from Engines.analyzers.config_orchestrator import run_config_analyzers
-from Engines.business_impact.impact_engine import enrich_business_impact
+from Engines.business_impact.impact_engine import enrich_business_impact, enrich_business_impact_static
 from Engines.correlation.correlator import correlate_vulnerabilities
 from Engines.exploitability.scorer import score_vulnerabilities
 from Engines.normalization.normalizer import normalize_all
@@ -86,9 +86,9 @@ async def run_scan_pipeline(
             reverse=True,
         )
 
-        # ── 6. Business Impact ───────────────────────────────────────────────
+        # ── 6. Business Impact (static placeholder — AI enriches in background) ──
         _progress(75, "business_impact")
-        vulns = enrich_business_impact(vulns, job_id)
+        vulns = enrich_business_impact_static(vulns, job_id)
 
         # ── 7. Build Report (before AI — enables progressive UI) ────────────
         _progress(90, "building_report")
@@ -224,9 +224,16 @@ async def _run_ai_background(
         log.info(f"Background AI analysis started for {len(vulns)} vulns")
         job_manager.update_job(job_id, ai_status="in_progress")
 
+        # Run AI explanation and AI business impact concurrently
         vulns, executive_summary = await explain_vulnerabilities(
             vulns, repository_name, job_id
         )
+
+        # Enrich business impact with AI (replaces static placeholders set earlier)
+        try:
+            vulns = await asyncio.to_thread(enrich_business_impact, vulns, job_id)
+        except Exception as _bi_exc:
+            log.warning(f"AI business impact enrichment failed, keeping static data: {_bi_exc}")
 
         # Update the job result with AI-enriched vulnerabilities
         job = job_manager.get_job(job_id)

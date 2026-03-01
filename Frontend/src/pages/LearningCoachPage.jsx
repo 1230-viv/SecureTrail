@@ -14,6 +14,12 @@
  */
 
 import React, { useEffect, useState, useCallback } from 'react';
+import SkillTree            from '../components/SkillTree';
+import HabitConfidencePanel from '../components/HabitConfidencePanel';
+import BadgeGrid            from '../components/BadgeGrid';
+import LongitudinalPanel    from '../components/LongitudinalPanel';
+import FixSubmitter         from '../components/FixSubmitter';
+import { LifecycleBadge }   from '../components/LifecycleBadge';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine,
@@ -61,25 +67,25 @@ const SEV_COLORS = {
 };
 
 const LEVEL_COLORS = {
-  critical:   { bg: '#fef2f2', border: '#ef4444', text: '#dc2626' },
-  beginner:   { bg: '#fef2f2', border: '#f87171', text: '#ef4444' },
-  developing: { bg: '#fff7ed', border: '#fb923c', text: '#f97316' },
-  secure:     { bg: '#f0fdf4', border: '#4ade80', text: '#16a34a' },
-  hardened:   { bg: '#eef2ff', border: '#818cf8', text: '#6366f1' },
+  critical:   { bg: 'rgba(239,68,68,0.15)',  border: '#ef4444', text: '#f87171' },
+  beginner:   { bg: 'rgba(239,68,68,0.12)',  border: '#f87171', text: '#fca5a5' },
+  developing: { bg: 'rgba(249,115,22,0.15)', border: '#fb923c', text: '#fdba74' },
+  secure:     { bg: 'rgba(34,197,94,0.12)',  border: '#4ade80', text: '#86efac' },
+  hardened:   { bg: 'rgba(99,102,241,0.15)', border: '#818cf8', text: '#a5b4fc' },
 };
 
 // ── Shared UI atoms ───────────────────────────────────────────────────────────
 const Chip = ({ label, color = '#6366f1', bg }) => (
   <span className="inline-block px-2 py-0.5 rounded-full text-xs font-semibold"
-    style={{ color, background: bg || `${color}20` }}>{label}</span>
+    style={{ color, background: bg || `${color}22` }}>{label}</span>
 );
 
 const Skeleton = ({ h = 'h-4', w = 'w-full', className = '' }) => (
-  <div className={`${h} ${w} ${className} rounded animate-pulse bg-gray-200 dark:bg-gray-700`} />
+  <div className={`${h} ${w} ${className} rounded animate-pulse bg-slate-200 dark:bg-white/8`} />
 );
 
 const Card = ({ children, className = '' }) => (
-  <div className={`bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5 ${className}`}>
+  <div className={`bg-white dark:bg-[#1a1d27] border border-slate-200 dark:border-white/10 rounded-xl p-5 ${className}`}>
     {children}
   </div>
 );
@@ -572,7 +578,7 @@ function BadgesSection({ maturity, loading }) {
 
 // ── Score Trend Chart ─────────────────────────────────────────────────────────
 function ScoreTrendChart({ progress, loading }) {
-  const { theme } = useTheme();
+  const { isDark } = useTheme();
   if (loading) return <Skeleton h="h-48" />;
   if (!progress?.score_history?.length) return (
     <p className="text-sm text-gray-400 italic">No trend data yet. Run more scans on this repository.</p>
@@ -581,7 +587,7 @@ function ScoreTrendChart({ progress, loading }) {
     date: s.scan_date ? s.scan_date.split('T')[0] : '',
     score: s.score,
   }));
-  const textColor = theme === 'dark' ? '#9ca3af' : '#6b7280';
+  const textColor = isDark ? '#9ca3af' : '#6b7280';
   return (
     <ResponsiveContainer width="100%" height={180}>
       <AreaChart data={data} margin={{ top: 5, right: 10, bottom: 5, left: -15 }}>
@@ -591,11 +597,11 @@ function ScoreTrendChart({ progress, loading }) {
             <stop offset="95%" stopColor="#6366f1" stopOpacity={0}   />
           </linearGradient>
         </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? '#374151' : '#e5e7eb'} />
+        <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#374151' : '#e5e7eb'} />
         <XAxis dataKey="date" tick={{ fontSize: 10, fill: textColor }} tickLine={false} />
         <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: textColor }} tickLine={false} />
         <Tooltip contentStyle={{
-          background: theme === 'dark' ? '#1f2937' : '#fff',
+          background: isDark ? '#1f2937' : '#fff',
           border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 12,
         }} />
         <ReferenceLine y={60} stroke="#22c55e" strokeDasharray="4 4" strokeOpacity={0.5} />
@@ -623,11 +629,851 @@ function TabBar({ tabs, active, onChange }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Markdown renderer (lightweight — handles ```, **, `inline`, - lists, ##)
+// ─────────────────────────────────────────────────────────────────────────────
+function renderMarkdown(text) {
+  if (!text) return null;
+  const parts = [];
+  // Split out fenced code blocks first
+  const codeRe = /```(\w*)\n([\s\S]*?)```/g;
+  let last = 0;
+  let m;
+  while ((m = codeRe.exec(text)) !== null) {
+    if (m.index > last) {
+      parts.push({ type: 'text', content: text.slice(last, m.index) });
+    }
+    parts.push({ type: 'code', lang: m[1] || 'text', content: m[2] });
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parts.push({ type: 'text', content: text.slice(last) });
+
+  return parts.map((p, pi) => {
+    if (p.type === 'code') return <CodeBlock key={pi} lang={p.lang} code={p.content} />;
+    // Inline rendering: bold, inline-code, bullet lines
+    const lines = p.content.split('\n');
+    return (
+      <span key={pi}>
+        {lines.map((line, li) => {
+          const isBullet = /^[-*]\s/.test(line.trimStart());
+          const rendered = inlineRender(isBullet ? line.replace(/^[-*]\s/, '') : line);
+          if (isBullet) {
+            return (
+              <div key={li} className="flex items-start gap-2 my-0.5">
+                <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-indigo-400 mt-2" />
+                <span>{rendered}</span>
+              </div>
+            );
+          }
+          return (
+            <span key={li}>
+              {rendered}
+              {li < lines.length - 1 && line.trim() === '' ? (
+                <div className="h-2" />
+              ) : li < lines.length - 1 ? (
+                <br />
+              ) : null}
+            </span>
+          );
+        })}
+      </span>
+    );
+  });
+}
+
+function inlineRender(text) {
+  const parts = [];
+  const re = /(\*\*(.+?)\*\*|`([^`]+)`)/g;
+  let last = 0;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) parts.push(<span key={last}>{text.slice(last, m.index)}</span>);
+    if (m[0].startsWith('**')) {
+      parts.push(<strong key={m.index} className="font-semibold">{m[2]}</strong>);
+    } else {
+      parts.push(
+        <code key={m.index}
+          className="px-1 py-0.5 mx-0.5 rounded text-xs font-mono bg-gray-200 dark:bg-gray-700 text-indigo-600 dark:text-indigo-300">
+          {m[3]}
+        </code>
+      );
+    }
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parts.push(<span key={last}>{text.slice(last)}</span>);
+  return parts;
+}
+
+function CodeBlock({ lang, code }) {
+  const [copied, setCopied] = React.useState(false);
+  const copy = () => {
+    navigator.clipboard.writeText(code).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <div className="my-2 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700">
+      <div className="flex items-center justify-between px-3 py-1.5 bg-gray-100 dark:bg-gray-800">
+        <span className="text-xs font-mono font-semibold text-gray-500 dark:text-gray-400">
+          {lang || 'code'}
+        </span>
+        <button onClick={copy}
+          className="text-xs text-gray-400 hover:text-indigo-500 transition-colors flex items-center gap-1">
+          <Icon d={copied ? IC.check : IC.code} size={12} />
+          {copied ? 'Copied!' : 'Copy'}
+        </button>
+      </div>
+      <pre className="p-3 text-xs font-mono text-gray-800 dark:text-gray-200 bg-gray-50 dark:bg-gray-900 overflow-x-auto whitespace-pre leading-relaxed">
+        {code}
+      </pre>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Typing indicator
+// ─────────────────────────────────────────────────────────────────────────────
+function TypingDots() {
+  return (
+    <div className="flex items-center gap-1 px-1 py-2">
+      {[0, 1, 2].map(i => (
+        <span key={i} className="w-2 h-2 rounded-full bg-indigo-400 inline-block"
+          style={{ animation: `bounce 1.2s ${i * 0.2}s infinite` }} />
+      ))}
+      <style>{`@keyframes bounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-6px)}}`}</style>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Severity sort order
+// ─────────────────────────────────────────────────────────────────────────────
+const SEV_ORDER = ['critical', 'high', 'medium', 'low', 'info'];
+const SEV_WEIGHT = { critical: 5, high: 4, medium: 3, low: 2, info: 1 };
+function categoryScore(sevCounts) {
+  return Object.entries(sevCounts).reduce(
+    (acc, [s, c]) => acc + (SEV_WEIGHT[s] || 0) * c, 0
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CategoryCard — one tile in the hub grid
+// ─────────────────────────────────────────────────────────────────────────────
+function CategoryCard({ catSlug, catData, onSelect, learned }) {
+  const knowledge = catData?.knowledge || {};
+  const label  = knowledge.label || catSlug.replace(/_/g, ' ');
+  const color  = knowledge.color || '#6366f1';
+  const count  = catData?.count || 0;
+  const sevCounts = catData?.sev_counts || {};
+  const fileCount = catData?.file_count || 0;
+  const isLearned = !!learned;
+
+  // top severity badge
+  const topSev = SEV_ORDER.find(s => (sevCounts[s] || 0) > 0);
+
+  return (
+    <button onClick={onSelect}
+      className="group relative text-left w-full rounded-2xl border transition-all duration-200 overflow-hidden
+        bg-white dark:bg-[#1a1d27] hover:bg-slate-50 dark:hover:bg-[#1e2130] hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0"
+      style={{ borderColor: isLearned ? '#22c55e' : `${color}35` }}>
+
+      {/* Color accent bar */}
+      <div className="h-1 w-full" style={{ background: color }} />
+
+      <div className="p-5">
+        {/* Icon + count row */}
+        <div className="flex items-start justify-between mb-3">
+          <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
+            style={{ background: `${color}18` }}>
+            <Icon d={IC.shield} size={22} color={color} />
+          </div>
+          <div className="flex flex-col items-end gap-1">
+            <span className="text-2xl font-black leading-none" style={{ color }}>{count}</span>
+            <span className="text-xs text-slate-400 dark:text-slate-500">findings</span>
+          </div>
+        </div>
+
+        {/* Name */}
+        <h3 className="font-bold text-sm text-slate-900 dark:text-white mb-2 leading-snug">{label}</h3>
+
+        {/* Severity chips */}
+        <div className="flex flex-wrap gap-1 mb-3">
+          {SEV_ORDER.filter(s => sevCounts[s] > 0).map(s => (
+            <span key={s} className="text-xs px-1.5 py-0.5 rounded font-semibold"
+              style={{ background: `${SEV_COLORS[s]}20`, color: SEV_COLORS[s] }}>
+              {sevCounts[s]} {s}
+            </span>
+          ))}
+        </div>
+
+        {/* Footer row */}
+        <div className="flex items-center justify-between">
+          {fileCount > 0
+            ? <span className="text-xs text-slate-400 dark:text-slate-500">{fileCount} file{fileCount !== 1 ? 's' : ''} affected</span>
+            : <span />}
+          {isLearned
+            ? <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                <Icon d={IC.check} size={12} color="#34d399" />Reviewed
+              </span>
+            : <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 group-hover:text-indigo-500 dark:group-hover:text-indigo-300 group-hover:underline">
+                Start Learning →
+              </span>}
+        </div>
+      </div>
+    </button>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FindingRow — one affected file in the detail view
+// ─────────────────────────────────────────────────────────────────────────────
+function FindingRow({ finding, idx, jobId, category, onVerified }) {
+  const [open, setOpen] = useState(false);
+  const { file, line, severity, title, message, code_snippet, rule_id } = finding;
+  const sev = severity || 'info';
+  return (
+    <div className="border border-slate-200 dark:border-white/10 rounded-xl overflow-hidden bg-white dark:bg-[#1a1d27]">
+      <button onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
+        <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black text-white"
+          style={{ background: SEV_COLORS[sev] || '#6366f1' }}>
+          {idx + 1}
+        </span>
+        {finding.lifecycle_state && (
+          <LifecycleBadge state={finding.lifecycle_state} />
+        )}
+        <span className="px-1.5 py-0.5 rounded text-xs font-bold mr-1 flex-shrink-0"
+          style={{ background: `${SEV_COLORS[sev]}20`, color: SEV_COLORS[sev] }}>
+          {sev.toUpperCase()}
+        </span>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-mono text-xs text-indigo-600 dark:text-indigo-400 truncate">
+              {file || 'unknown file'}
+            </span>
+            {line && <span className="text-xs text-slate-400 dark:text-slate-500">:{line}</span>}
+          </div>
+          {title && title !== (rule_id || '') && (
+            <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">{title}</p>
+          )}
+        </div>
+        <Icon d={open ? IC.chevUp : IC.chevDn} size={15} className="flex-shrink-0 text-slate-400 dark:text-slate-500 ml-1" />
+      </button>
+      {open && (
+        <div className="px-4 pb-4 border-t border-slate-100 dark:border-white/8 space-y-2 pt-3">
+          {message && <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">{message}</p>}
+          {code_snippet && (
+            <div>
+              <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Code snippet</span>
+              <pre className="mt-1.5 p-3 rounded-lg bg-slate-100 dark:bg-[#0d0f17] text-slate-700 dark:text-slate-200 text-xs font-mono overflow-x-auto whitespace-pre-wrap leading-relaxed border border-slate-200 dark:border-white/8">
+                {code_snippet}
+              </pre>
+            </div>
+          )}
+          {rule_id && (
+            <p className="text-xs text-slate-400 dark:text-slate-500">Rule: <code className="font-mono text-indigo-600 dark:text-indigo-400">{rule_id}</code></p>
+          )}
+          {jobId && category && (
+            <FixSubmitter
+              jobId={jobId}
+              category={category}
+              ruleId={rule_id || ''}
+              filePath={file || ''}
+              severity={sev}
+              label={title || rule_id || category}
+              originalIssue={message || ''}
+              onVerified={onVerified}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// StaticGuide — fallback educational content from category_knowledge
+// ─────────────────────────────────────────────────────────────────────────────
+function StaticGuide({ guide }) {
+  const { plain_what, plain_why, plain_fix, code_example, checklist, cwe_refs } = guide;
+  return (
+    <div className="space-y-5">
+      {plain_what && (
+        <section>
+          <h4 className="font-bold text-slate-900 dark:text-white text-sm mb-2 flex items-center gap-2">
+            <Icon d={IC.info} size={15} color="#6366f1" />What is this vulnerability?
+          </h4>
+          <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">{plain_what}</p>
+        </section>
+      )}
+      {plain_why && (
+        <section>
+          <h4 className="font-bold text-slate-900 dark:text-white text-sm mb-2 flex items-center gap-2">
+            <Icon d={IC.flame} size={15} color="#f97316" />Why it matters
+          </h4>
+          <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">{plain_why}</p>
+        </section>
+      )}
+      {plain_fix && (
+        <section>
+          <h4 className="font-bold text-slate-900 dark:text-white text-sm mb-2 flex items-center gap-2">
+            <Icon d={IC.wrench} size={15} color="#22c55e" />How to fix it
+          </h4>
+          <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">{plain_fix}</p>
+        </section>
+      )}
+      {(code_example?.bad || code_example?.good) && (
+        <section>
+          <h4 className="font-bold text-slate-900 dark:text-white text-sm mb-3 flex items-center gap-2">
+            <Icon d={IC.code} size={15} color="#6366f1" />Code example
+          </h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {code_example.bad && (
+              <div>
+                <span className="text-xs font-bold text-red-400 uppercase tracking-wide block mb-1.5">❌ Insecure</span>
+                <pre className="text-xs p-3 rounded-xl bg-red-950/30 border border-red-900/50 text-red-300 font-mono overflow-x-auto whitespace-pre-wrap">{code_example.bad}</pre>
+              </div>
+            )}
+            {code_example.good && (
+              <div>
+                <span className="text-xs font-bold text-emerald-400 uppercase tracking-wide block mb-1.5">✅ Secure</span>
+                <pre className="text-xs p-3 rounded-xl bg-emerald-950/30 border border-emerald-900/50 text-emerald-300 font-mono overflow-x-auto whitespace-pre-wrap">{code_example.good}</pre>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+      {checklist?.length > 0 && (
+        <section>
+          <h4 className="font-bold text-slate-900 dark:text-white text-sm mb-2 flex items-center gap-2">
+            <Icon d={IC.check} size={15} color="#22c55e" />Quick checklist
+          </h4>
+          <ul className="space-y-1.5">
+            {checklist.map((item, i) => (
+              <li key={i} className="flex items-start gap-2 text-sm text-slate-600 dark:text-slate-300">
+                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-50 dark:bg-emerald-900/40 border border-emerald-200 dark:border-emerald-700/40 flex items-center justify-center mt-0.5">
+                  <Icon d={IC.check} size={10} color="#34d399" />
+                </span>
+                {item}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {cwe_refs?.length > 0 && (
+        <div className="flex flex-wrap gap-2 pt-1">
+          {cwe_refs.map(ref => (
+            <a key={ref} href={`https://cwe.mitre.org/data/definitions/${ref.replace('CWE-','')}.html`}
+              target="_blank" rel="noopener noreferrer"
+              className="text-xs px-2 py-1 rounded-lg bg-slate-100 dark:bg-white/8 text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors font-mono border border-slate-200 dark:border-white/10">
+              {ref} ↗
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CategoryDetailView — the full lesson page
+// ─────────────────────────────────────────────────────────────────────────────
+function CategoryDetailView({ guide, loading, onBack, onMarkLearned, isLearned, jobId, category, onVerified }) {
+  const [guideTab, setGuideTab] = useState('learn'); // 'files' | 'learn' | 'fix'
+
+  if (loading) return (
+    <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4 max-w-3xl mx-auto w-full">
+      <Skeleton h="h-8" w="w-48" />
+      <Skeleton h="h-24" />
+      <Skeleton h="h-48" />
+      <Skeleton h="h-32" />
+    </div>
+  );
+  if (!guide) return null;
+
+  const { label, color, total, sev_counts = {}, findings = [], source,
+          ai_guide = {}, plain_what, plain_why, plain_fix, code_example,
+          checklist, cwe_refs } = guide;
+
+  const filesTabLabel = `Affected Files (${findings.length}${total > findings.length ? ` of ${total}` : ''})`;
+
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl mx-auto px-4 py-5 pb-10 space-y-6">
+
+          {/* Back button */}
+          <button onClick={onBack}
+            className="flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
+            <Icon d={IC.arrowDn} size={14} className="rotate-90" />Back to Learning Hub
+          </button>
+
+          {/* Hero */}
+          <div className="rounded-2xl p-6 flex items-start gap-5"
+            style={{ background: `${color}12`, border: `1.5px solid ${color}30` }}>
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0"
+              style={{ background: `${color}20` }}>
+              <Icon d={IC.shield} size={28} color={color} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h2 className="text-xl font-black text-slate-900 dark:text-white mb-1">{label}</h2>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-bold text-2xl" style={{ color }}>{total}</span>
+                <span className="text-sm text-slate-500 dark:text-slate-400">finding{total !== 1 ? 's' : ''} in your code</span>
+                {SEV_ORDER.filter(s => (sev_counts[s] || 0) > 0).map(s => (
+                  <span key={s} className="text-xs px-2 py-0.5 rounded-full font-bold"
+                    style={{ background: `${SEV_COLORS[s]}20`, color: SEV_COLORS[s] }}>
+                    {sev_counts[s]} {s}
+                  </span>
+                ))}
+                {source === 'ai' && (
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 border border-violet-300 dark:border-violet-700/40 font-semibold flex items-center gap-1">
+                    <Icon d={IC.brain} size={11} />AI personalised
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Tab bar */}
+          <div className="flex gap-1 p-1 bg-slate-100 dark:bg-white/8 rounded-xl">
+            {[
+              { id: 'learn', label: 'Learn & Fix', icon: IC.book },
+              { id: 'files', label: filesTabLabel, icon: IC.list },
+              { id: 'fix',   label: 'Submit Fix',  icon: IC.wrench },
+            ].map(t => (
+              <button key={t.id} onClick={() => setGuideTab(t.id)}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all flex-1 justify-center
+                  ${guideTab === t.id
+                    ? 'bg-white dark:bg-[#1a1d27] text-slate-900 dark:text-white shadow-sm'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}>
+                <Icon d={t.icon} size={14} />{t.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Learn & Fix tab */}
+          {guideTab === 'learn' && (
+            <div className="bg-slate-50 dark:bg-[#1a1d27] rounded-2xl border border-slate-200 dark:border-white/10 p-6">
+              {ai_guide?.full_guide
+                ? <div className="prose-sm text-sm text-slate-600 dark:text-slate-300 leading-relaxed space-y-1">
+                    {renderMarkdown(ai_guide.full_guide)}
+                  </div>
+                : <StaticGuide guide={{ plain_what, plain_why, plain_fix, code_example, checklist, cwe_refs }} />
+              }
+            </div>
+          )}
+
+          {/* Affected Files tab */}
+          {guideTab === 'files' && (
+            <div className="space-y-2">
+              {findings.length === 0
+                ? <p className="text-sm text-slate-400 italic text-center py-8">No file-level data available.</p>
+                : findings.map((f, i) => (
+                    <FindingRow key={i} finding={f} idx={i}
+                      jobId={jobId} category={category}
+                      onVerified={onVerified}
+                    />
+                  ))
+              }
+            </div>
+          )}
+
+          {/* Submit Fix tab */}
+          {guideTab === 'fix' && (
+            <div className="bg-slate-50 dark:bg-[#1a1d27] rounded-2xl border border-slate-200 dark:border-white/10 p-6">
+              {findings.length === 0 ? (
+                <p className="text-sm text-slate-500 dark:text-slate-400 italic">No findings to submit a fix for.</p>
+              ) : (
+                <div className="space-y-4">
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    Paste your corrected code below to get AI-evaluated feedback and earn XP.
+                  </p>
+                  {findings.slice(0, 5).map((f, i) => (
+                    <div key={i} className="rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden">
+                      <div className="px-4 py-2 flex items-center gap-2 bg-slate-50 dark:bg-white/5">
+                        <span className="text-xs font-mono text-indigo-600 dark:text-indigo-400 truncate flex-1">{f.file || `Finding ${i+1}`}</span>
+                        {f.severity && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded"
+                            style={{ background: `${SEV_COLORS[f.severity]}20`, color: SEV_COLORS[f.severity] }}>
+                            {f.severity.toUpperCase()}
+                          </span>
+                        )}
+                      </div>
+                      <div className="p-4">
+                        <FixSubmitter
+                          jobId={jobId}
+                          category={category || ''}
+                          ruleId={f.rule_id || ''}
+                          filePath={f.file || ''}
+                          severity={f.severity || 'info'}
+                          label={f.title || f.rule_id || label}
+                          originalIssue={f.message || ''}
+                          onVerified={onVerified}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                  {findings.length > 5 && (
+                    <p className="text-xs text-slate-500 text-center">Showing top 5 findings for fix submission.</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Mark as learned */}
+          <div className="flex justify-center pt-2">
+            <button onClick={onMarkLearned}
+              className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-bold text-sm transition-all
+                ${isLearned
+                  ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-700/40'
+                  : 'bg-indigo-600 text-white hover:bg-indigo-500'}`}>
+              <Icon d={IC.check} size={16} color={isLearned ? '#34d399' : 'white'} />
+              {isLearned ? 'Marked as Reviewed ✓' : 'Mark as Reviewed'}
+            </button>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// VulnHubView — two-panel: left repo list + right category grid
+// ─────────────────────────────────────────────────────────────────────────────
+function VulnHubView({ summary, loadingSummary, healthScore, maturityLevel, onSelectCategory, learned, repoName, jobId, jobs, onSelectJob }) {
+  const categories = summary?.categories || {};
+
+  // ─ Group jobs by repository_name ─
+  const repoGroups = React.useMemo(() => {
+    const groups = {};
+    (jobs || []).forEach(j => {
+      const name = j.repository_name || 'Unknown';
+      if (!groups[name]) groups[name] = [];
+      groups[name].push(j);
+    });
+    // Sort each group newest-first
+    Object.values(groups).forEach(arr => arr.sort((a, b) => {
+      const da = a.updated_at || a.completed_at || a.created_at || '';
+      const db = b.updated_at || b.completed_at || b.created_at || '';
+      return db.localeCompare(da);
+    }));
+    return groups;
+  }, [jobs]);
+  const repoNames = Object.keys(repoGroups).sort();
+
+  // Build sorted category list
+  const catList = React.useMemo(() => {
+    return Object.entries(categories)
+      .map(([slug, val]) => {
+        const cnt = typeof val === 'number' ? val : (val?.count ?? 0);
+        const knowledge = (typeof val === 'object' && val !== null) ? (val?.knowledge || {}) : {};
+        const sevCounts = {};
+        if (summary?.findings_by_category?.[slug]) {
+          summary.findings_by_category[slug].forEach(f => {
+            const s = (f.severity || 'info').toLowerCase();
+            sevCounts[s] = (sevCounts[s] || 0) + 1;
+          });
+        }
+        return { slug, count: cnt, knowledge, sevCounts };
+      })
+      .filter(c => c.count > 0)
+      .sort((a, b) => categoryScore(b.sevCounts) - categoryScore(a.sevCounts) || b.count - a.count);
+  }, [categories, summary]);
+
+  const learnedCount = catList.filter(c => learned[c.slug]).length;
+
+  return (
+    <div className="flex-1 flex overflow-hidden">
+
+      {/* ── Left: Repository List ── */}
+      <div className="w-56 flex-shrink-0 border-r border-slate-200 dark:border-white/8 flex flex-col overflow-hidden">
+        <div className="px-3 py-2.5 border-b border-slate-200 dark:border-white/8 flex-shrink-0">
+          <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Repositories</p>
+        </div>
+        <div className="flex-1 overflow-y-auto py-1">
+          {repoNames.length === 0 && (
+            <p className="text-xs text-slate-400 dark:text-slate-500 px-3 py-4 italic">No repositories found</p>
+          )}
+          {repoNames.map(name => {
+            const repoJobs = repoGroups[name];
+            const latestJob = repoJobs[0];
+            const latestScore = latestJob?.health_score ?? null;
+            const latestVulns = latestJob?.total_vulnerabilities ?? 0;
+            const latestDate  = (latestJob?.updated_at || latestJob?.completed_at || '').split('T')[0] || '';
+            const isActive    = repoNames.length === 1 ? true : repoName === name;
+            const scoreColor  = latestScore == null ? '#64748b' : latestScore >= 70 ? '#34d399' : latestScore >= 40 ? '#f59e0b' : '#f87171';
+            return (
+              <button
+                key={name}
+                onClick={() => onSelectJob(latestJob?.job_id || latestJob?.id || '')}
+                className={`w-full text-left px-3 py-2.5 transition-colors group ${
+                  isActive ? 'bg-indigo-600/20 border-r-2 border-indigo-500' : 'hover:bg-slate-50 dark:hover:bg-white/5 border-r-2 border-transparent'
+                }`}
+              >
+                <p className={`text-xs font-semibold truncate leading-snug ${
+                  isActive ? 'text-indigo-600 dark:text-indigo-300' : 'text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white'
+                }`}>{name}</p>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className="text-[10px] font-bold" style={{ color: scoreColor }}>
+                    {latestScore != null ? `${latestScore}/100` : '–'}
+                  </span>
+                  <span className="text-[9px] text-slate-400 dark:text-slate-600">{latestVulns} issues</span>
+                </div>
+                {latestDate && <p className="text-[9px] text-slate-400 dark:text-slate-600 mt-0.5">{latestDate}</p>}
+
+                {/* Scan picker for active repo */}
+                {isActive && repoJobs.length > 1 && (
+                  <select
+                    className="mt-1.5 w-full text-[10px] bg-slate-50 dark:bg-white/8 border border-slate-200 dark:border-white/15 rounded text-slate-600 dark:text-slate-300 px-1.5 py-1 outline-none focus:ring-1 focus:ring-indigo-500"
+                    value={jobId}
+                    onClick={e => e.stopPropagation()}
+                    onChange={e => { e.stopPropagation(); onSelectJob(e.target.value); }}
+                  >
+                    {repoJobs.map(j => {
+                      const jid  = j.job_id || j.id || '';
+                      const date = (j.updated_at || j.completed_at || j.created_at || '').split('T')[0];
+                      return <option key={jid} value={jid}>{date || jid.slice(0, 8)} ({j.total_vulnerabilities || 0})</option>;
+                    })}
+                  </select>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Right: Category Grid + Behavioral Panels ── */}
+      <div className="flex-1 overflow-y-auto">
+        {loadingSummary ? (
+          <div className="px-5 py-6">
+            <Skeleton h="h-7" w="w-48" className="mb-2" />
+            <Skeleton h="h-4" w="w-72" className="mb-6" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+              {[1,2,3,4,5,6].map(i => <Skeleton key={i} h="h-44" className="rounded-2xl" />)}
+            </div>
+          </div>
+        ) : !catList.length ? (
+          <div className="flex-1 flex items-center justify-center h-full">
+            <div className="text-center px-4">
+              <div className="w-16 h-16 rounded-2xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700/25 flex items-center justify-center mx-auto mb-4">
+                <Icon d={IC.check} size={30} color="#34d399" />
+              </div>
+              <h3 className="text-lg font-black text-slate-900 dark:text-white mb-2">No findings detected</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {repoName ? `${repoName} looks clean.` : 'Select a repository to view findings.'}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="px-5 py-5">
+
+            {/* Hub header */}
+            <div className="mb-5 flex items-center justify-between flex-wrap gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="inline-block w-2 h-2 rounded-full bg-indigo-500" />
+                  <h2 className="text-base font-black text-slate-900 dark:text-white">
+                    {repoName || 'Security Learning Hub'}
+                  </h2>
+                </div>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                  {catList.length} vuln type{catList.length !== 1 ? 's' : ''}
+                  {healthScore > 0 && ` · Score: `}
+                  {healthScore > 0 && <span style={{ color: healthScore >= 70 ? '#34d399' : healthScore >= 40 ? '#f59e0b' : '#f87171' }}>{healthScore}/100</span>}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {learnedCount > 0 && (
+                  <span className="flex items-center gap-1 text-xs font-bold text-emerald-400 px-2 py-1 bg-emerald-900/25 border border-emerald-700/30 rounded-lg">
+                    <Icon d={IC.check} size={11} color="#34d399" />{learnedCount}/{catList.length}
+                  </span>
+                )}
+                {healthScore > 0 && maturityLevel && (
+                  <span className="text-xs font-bold px-2 py-1 rounded-lg border"
+                    style={{ color: maturityLevel.text || '#a5b4fc', borderColor: `${maturityLevel.border || '#818cf8'}40`, background: `${maturityLevel.border || '#818cf8'}12` }}>
+                    {maturityLevel.label}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Category grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+              {catList.map(c => (
+                <CategoryCard
+                  key={c.slug}
+                  catSlug={c.slug}
+                  catData={{ count: c.count, knowledge: c.knowledge, sev_counts: c.sevCounts }}
+                  onSelect={() => onSelectCategory(c.slug)}
+                  learned={learned[c.slug]}
+                />
+              ))}
+            </div>
+
+            {/* Behavioral Insights */}
+            <div className="mt-8 space-y-5">
+              {jobId && <LongitudinalPanel jobId={jobId} />}
+              {repoName && (
+                <div className="space-y-2">
+                  <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                    <Icon d={IC.star} size={12} color="#f59e0b" />Skill Tree
+                  </p>
+                  <SkillTree repoName={repoName} />
+                </div>
+              )}
+              {repoName && <HabitConfidencePanel repoName={repoName} />}
+              {repoName && <BadgeGrid repoName={repoName} />}
+            </div>
+
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Report View — existing v3 analysis panels (unchanged, in separate tab)
+// ─────────────────────────────────────────────────────────────────────────────
+function ReportView({
+  summary, insights, progress, maturity,
+  loadingSummary, loadingInsights, loadingProgress, loadingMaturity,
+  healthScore, scoreDelta, maturityLevel, riskMomentum, riskMomExpl,
+  xpData, comparison, behavioralFull, aiDeepDive, aiRoadmap, recurringReport,
+  fetchInsights,
+}) {
+  const [activeTab, setActiveTab] = useState('coach');
+  const TABS = [
+    { id: 'coach',    label: 'AI Coach',  icon: IC.brain   },
+    { id: 'summary',  label: 'Summary',   icon: IC.shield  },
+    { id: 'maturity', label: 'Maturity',  icon: IC.award   },
+    { id: 'trend',    label: 'Trend',     icon: IC.trendUp },
+  ];
+  return (
+    <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+      {/* Score + XP row */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card className="flex flex-col items-center justify-center">
+          {(loadingInsights || loadingSummary)
+            ? <Skeleton h="h-28" w="w-28" className="rounded-full" />
+            : <ScoreRing score={healthScore} delta={scoreDelta} level={maturityLevel} />}
+          <p className="text-xs text-slate-500 mt-2 text-center">100 − (CRIT×15) − (HIGH×8) − (MED×3) − (LOW×1)</p>
+        </Card>
+        <div className="md:col-span-2">
+          {xpData ? <XPBar xpData={xpData} /> : loadingInsights ? <Skeleton h="h-full" /> : (
+            <Card className="h-full flex items-center justify-center">
+              <p className="text-sm text-slate-500 italic">Complete a scan to earn XP</p>
+            </Card>
+          )}
+        </div>
+      </div>
+      <Card>
+        <h3 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2 mb-3">
+          <Icon d={IC.flame} size={15} color="#f97316" />Risk Momentum &amp; Scan Comparison
+        </h3>
+        <div className="space-y-3">
+          <RiskMomentumBadge momentum={riskMomentum} explanation={riskMomExpl} />
+          {comparison && <HistoricalComparisonPanel comparison={comparison} />}
+        </div>
+      </Card>
+      {recurringReport?.has_recurring_patterns && <RecurringWeaknessAlert report={recurringReport} />}
+      <TabBar tabs={TABS} active={activeTab} onChange={setActiveTab} />
+      {activeTab === 'coach' && (
+        <div className="space-y-4">
+          <Card>
+            <h3 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2 mb-3">
+              <Icon d={IC.brain} size={15} color="#6366f1" />AI Security Assessment
+            </h3>
+            <AIMentorBanner summary={insights?.learning_summary} source={insights?.source}
+              cached={insights?.cached} aiError={insights?.ai_error} loading={loadingInsights} />
+          </Card>
+          <Card>
+            <h3 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2 mb-3">
+              <Icon d={IC.wrench} size={15} color="#f97316" />Detected Developer Habits
+              {behavioralFull.length > 0 && <span className="ml-auto text-xs text-slate-400 dark:text-slate-500">{behavioralFull.length} patterns</span>}
+            </h3>
+            <HabitEvidenceCards habits={behavioralFull} loading={loadingInsights} />
+          </Card>
+          <Card>
+            <h3 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2 mb-3">
+              <Icon d={IC.target} size={15} color="#6366f1" />Deep Dive Analysis
+              {aiDeepDive.length > 0 && <span className="ml-auto text-xs text-slate-400 dark:text-slate-500">{aiDeepDive.length} findings</span>}
+            </h3>
+            <DeepDiveV3 deepDive={aiDeepDive} loading={loadingInsights} />
+          </Card>
+          <Card>
+            <h3 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2 mb-3">
+              <Icon d={IC.list} size={15} color="#22c55e" />Priority Fix Roadmap
+            </h3>
+            <PriorityRoadmapV3 roadmap={aiRoadmap} loading={loadingInsights} />
+          </Card>
+        </div>
+      )}
+      {activeTab === 'summary' && (
+        <div className="space-y-4">
+          <Card>
+            <h3 className="font-bold text-sm text-slate-900 dark:text-white mb-3">Severity Breakdown</h3>
+            {loadingSummary ? <Skeleton h="h-20" /> : (
+              <div className="grid grid-cols-5 gap-2">
+                {['critical','high','medium','low','info'].map(sev => {
+                  const count = summary?.sev_counts?.[sev] ?? 0;
+                  return (
+                    <div key={sev} className="text-center p-2 rounded-lg border"
+                      style={{ borderColor: `${SEV_COLORS[sev]}40`, background: `${SEV_COLORS[sev]}10` }}>
+                      <div className="text-2xl font-black" style={{ color: SEV_COLORS[sev] }}>{count}</div>
+                      <div className="text-xs font-medium capitalize text-slate-400">{sev}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Card>
+        </div>
+      )}
+      {activeTab === 'maturity' && (
+        <div className="space-y-4">
+          <Card>
+            <div className="flex items-center gap-3 mb-4">
+              <ScoreRing score={maturity?.score ?? healthScore} delta={null} level={maturityLevel} />
+              <div>
+                <h3 className="font-black text-lg text-slate-900 dark:text-white">{maturityLevel?.label || 'Loading...'}</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400">{maturityLevel?.description}</p>
+              </div>
+            </div>
+            <TransparentMaturityCard maturity={maturity} loading={loadingMaturity} />
+          </Card>
+          <Card>
+            <h3 className="font-bold text-sm text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+              <Icon d={IC.award} size={15} color="#f59e0b" />Achievement Badges
+            </h3>
+            <BadgesSection maturity={maturity} loading={loadingMaturity} />
+          </Card>
+        </div>
+      )}
+      {activeTab === 'trend' && (
+        <div className="space-y-4">
+          <Card>
+            <h3 className="font-bold text-sm text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+              <Icon d={IC.trendUp} size={15} color="#6366f1" />Security Score History
+            </h3>
+            <ScoreTrendChart progress={progress} loading={loadingProgress} />
+          </Card>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Main Page
 // ─────────────────────────────────────────────────────────────────────────────
 export default function LearningCoachPage({ jobId: propJobId, repoName: propRepoName }) {
-  const { theme } = useTheme();
-  const [activeTab, setActiveTab] = useState('coach');
+  const { isDark } = useTheme();
+  // View: 'hub' | 'detail' | 'report'
+  const [view, setView] = useState('hub');
+  const [selectedCategory, setSelectedCategory] = useState(null);
 
   const [jobs, setJobs]         = useState([]);
   const [jobId, setJobId]       = useState(propJobId || '');
@@ -638,12 +1484,29 @@ export default function LearningCoachPage({ jobId: propJobId, repoName: propRepo
   const [progress, setProgress] = useState(null);
   const [maturity, setMaturity] = useState(null);
 
+  // Vuln guide state
+  const [guide, setGuide]           = useState(null);
+  const [loadingGuide, setLoadingGuide] = useState(false);
+  const [guideError, setGuideError] = useState('');
+
   const [loadingJobs,     setLoadingJobs]     = useState(false);
   const [loadingSummary,  setLoadingSummary]  = useState(false);
   const [loadingInsights, setLoadingInsights] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(false);
   const [loadingMaturity, setLoadingMaturity] = useState(false);
   const [error, setError] = useState('');
+
+  // Learned state persisted in localStorage
+  const [learned, setLearned] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('st_learned') || '{}'); } catch { return {}; }
+  });
+  const markLearned = (cat) => {
+    const key = `${jobId}__${cat}`;
+    const next = { ...learned, [key]: true };
+    setLearned(next);
+    try { localStorage.setItem('st_learned', JSON.stringify(next)); } catch {}
+  };
+  const isLearned = (cat) => !!learned[`${jobId}__${cat}`];
 
   // Load jobs on mount
   useEffect(() => {
@@ -654,7 +1517,7 @@ export default function LearningCoachPage({ jobId: propJobId, repoName: propRepo
         const raw = r?.data ?? r;
         const list = Array.isArray(raw) ? raw : (raw?.jobs || raw?.data || []);
         setJobs(list);
-        if (list.length && !jobId) {
+        if (list.length) {
           setJobId(list[0].job_id || list[0].id || '');
           setRepoName(list[0].repository_name || '');
         }
@@ -705,8 +1568,38 @@ export default function LearningCoachPage({ jobId: propJobId, repoName: propRepo
       .finally(() => setLoadingMaturity(false));
   }, [repoName]);
 
-  useEffect(() => { fetchSummary();  fetchInsights();  }, [fetchSummary,  fetchInsights]);
+  useEffect(() => { fetchSummary(); fetchInsights(); }, [fetchSummary, fetchInsights]);
   useEffect(() => { fetchProgress(); fetchMaturity(); }, [fetchProgress, fetchMaturity]);
+
+  // When scan changes, go back to hub and clear guide
+  useEffect(() => {
+    setView('hub');
+    setGuide(null);
+    setSelectedCategory(null);
+    setGuideError('');
+  }, [jobId]);
+
+  const handleSelectCategory = useCallback(async (catSlug) => {
+    setSelectedCategory(catSlug);
+    setView('detail');
+    setGuide(null);
+    setGuideError('');
+    setLoadingGuide(true);
+    try {
+      const r = await learningAPI.getVulnGuide(jobId, catSlug);
+      setGuide(r?.data ?? r);
+    } catch (e) {
+      setGuideError(e?.response?.data?.detail || e.message || 'Failed to load guide');
+    } finally {
+      setLoadingGuide(false);
+    }
+  }, [jobId]);
+
+  const handleBack = () => {
+    setView('hub');
+    setGuide(null);
+    setSelectedCategory(null);
+  };
 
   // Derived
   const healthScore     = insights?.health_score ?? summary?.health_score ?? 0;
@@ -721,328 +1614,116 @@ export default function LearningCoachPage({ jobId: propJobId, repoName: propRepo
   const recurringReport = insights?.recurring_report || summary?.recurring_report;
   const riskMomExpl     = insights?.risk_momentum_explanation || '';
 
-  const TABS = [
-    { id: 'coach',    label: 'AI Coach',  icon: IC.brain   },
-    { id: 'summary',  label: 'Summary',   icon: IC.shield  },
-    { id: 'maturity', label: 'Maturity',  icon: IC.award   },
-    { id: 'trend',    label: 'Trend',     icon: IC.trendUp },
-  ];
+  // Handle repo/job selection from the left panel
+  const handleSelectJob = useCallback((jid) => {
+    if (!jid || jid === jobId) return;
+    setJobId(jid);
+    const found = jobs.find(j => (j.job_id || j.id) === jid);
+    if (found?.repository_name) setRepoName(found.repository_name);
+  }, [jobId, jobs]);
 
   return (
-    <div className={`min-h-screen ${theme === 'dark' ? 'bg-gray-900 text-gray-100' : 'bg-gray-50 text-gray-900'}`}>
-      <div className="max-w-5xl mx-auto px-4 py-6 space-y-4">
+    <div className={`h-screen flex flex-col overflow-hidden ${isDark ? 'bg-[#0d0f17] text-white' : 'bg-[#f4f6fb] text-slate-900'}`}>
 
-        {/* Header */}
-        <div className="flex items-center justify-between flex-wrap gap-3">
+      {/* ── Header ── */}
+      <div className={`flex-shrink-0 flex items-center gap-3 px-4 py-2.5 border-b ${isDark ? 'border-white/8 bg-[#0d0f17]' : 'border-slate-200 bg-white shadow-sm'}`}>
+
+        {/* Brand */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-sm">
+            <Icon d={IC.shield} size={17} color="white" />
+          </div>
           <div>
-            <h1 className="text-xl font-black text-gray-900 dark:text-white flex items-center gap-2">
-              <Icon d={IC.brain} size={22} color="#6366f1" />
-              Security Learning Coach
-            </h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              Personalised security mentoring for {repoName || 'your repository'}
-            </p>
-          </div>
-          <button
-            onClick={() => fetchInsights(true)}
-            disabled={loadingInsights}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors disabled:opacity-50">
-            <Icon d={IC.refresh} size={14} />
-            {loadingInsights ? 'Refreshing...' : 'Refresh AI'}
-          </button>
-        </div>
-
-        {/* Job Selector */}
-        {!propJobId && jobs.length > 0 && (
-          <Card>
-            <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Select Scan</label>
-            <select value={jobId} onChange={e => setJobId(e.target.value)}
-              className="mt-1 w-full text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 focus:ring-2 focus:ring-indigo-500">
-              {jobs.map(j => {
-                const jid = j.job_id || j.id || '';
-                const date = (j.updated_at || j.completed_at || j.created_at || '').split('T')[0] || 'no date';
-                return (
-                  <option key={jid} value={jid}>
-                    {j.repository_name} — {date} ({j.total_vulnerabilities || 0} findings)
-                  </option>
-                );
-              })}
-            </select>
-          </Card>
-        )}
-
-        {error && (
-          <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-lg text-sm text-red-600 dark:text-red-400">
-            {error}
-          </div>
-        )}
-
-        {/* Score + XP row */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card className="flex flex-col items-center justify-center">
-            {(loadingInsights || loadingSummary)
-              ? <Skeleton h="h-28" w="w-28" className="rounded-full" />
-              : <ScoreRing score={healthScore} delta={scoreDelta} level={maturityLevel} />}
-            <p className="text-xs text-gray-400 mt-2 text-center">100 − (CRIT×15) − (HIGH×8) − (MED×3) − (LOW×1)</p>
-          </Card>
-          <div className="md:col-span-2">
-            {xpData
-              ? <XPBar xpData={xpData} />
-              : loadingInsights
-                ? <Skeleton h="h-full" />
-                : <Card className="h-full flex items-center justify-center">
-                    <p className="text-sm text-gray-400 italic">Complete a scan to earn XP</p>
-                  </Card>
-            }
+            <span className="font-black text-sm leading-none">Security Learning</span>
+            <div className="text-[10px] text-slate-400 dark:text-slate-500 leading-tight mt-0.5">Llama 4 Maverick · AWS Bedrock</div>
           </div>
         </div>
 
-        {/* Risk Momentum */}
-        <Card>
-          <h3 className="font-bold text-sm text-gray-900 dark:text-white flex items-center gap-2 mb-3">
-            <Icon d={IC.flame} size={15} color="#f97316" />
-            Risk Momentum &amp; Scan Comparison
-          </h3>
-          <div className="space-y-3">
-            <RiskMomentumBadge momentum={riskMomentum} explanation={riskMomExpl} />
-            {comparison && <HistoricalComparisonPanel comparison={comparison} />}
-          </div>
-        </Card>
+        {/* Active repo + score */}
+        <div className="flex-1 flex items-center gap-2 min-w-0">
+          {loadingJobs
+            ? <Skeleton h="h-5" w="w-36" />
+            : repoName
+              ? <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 truncate">{repoName}</span>
+              : <span className="text-xs text-slate-400 dark:text-slate-600">No scan selected</span>
+          }
+          {healthScore > 0 && !loadingInsights && (
+            <span className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold"
+              style={{
+                background: healthScore >= 70 ? 'rgba(52,211,153,0.15)' : healthScore >= 40 ? 'rgba(245,158,11,0.15)' : 'rgba(248,113,113,0.15)',
+                color:      healthScore >= 70 ? '#34d399' : healthScore >= 40 ? '#f59e0b' : '#f87171',
+                border:     `1px solid ${healthScore >= 70 ? '#34d39930' : healthScore >= 40 ? '#f59e0b30' : '#f8717130'}`,
+              }}>
+              <Icon d={IC.shield} size={10} />{healthScore}/100
+            </span>
+          )}
+        </div>
 
-        {/* Recurring alert */}
-        {recurringReport?.has_recurring_patterns && (
-          <RecurringWeaknessAlert report={recurringReport} />
-        )}
-
-        {/* Tabs */}
-        <TabBar tabs={TABS} active={activeTab} onChange={setActiveTab} />
-
-        {/* ── AI Coach tab ── */}
-        {activeTab === 'coach' && (
-          <div className="space-y-4">
-            <Card>
-              <h3 className="font-bold text-sm text-gray-900 dark:text-white flex items-center gap-2 mb-3">
-                <Icon d={IC.brain} size={15} color="#6366f1" />AI Security Assessment
-              </h3>
-              <AIMentorBanner
-                summary={insights?.learning_summary}
-                source={insights?.source}
-                cached={insights?.cached}
-                aiError={insights?.ai_error}
-                loading={loadingInsights} />
-            </Card>
-            <Card>
-              <h3 className="font-bold text-sm text-gray-900 dark:text-white flex items-center gap-2 mb-3">
-                <Icon d={IC.wrench} size={15} color="#f97316" />
-                Detected Developer Habits
-                {behavioralFull.length > 0 && <span className="ml-auto text-xs text-gray-400">{behavioralFull.length} patterns</span>}
-              </h3>
-              <HabitEvidenceCards habits={behavioralFull} loading={loadingInsights} />
-            </Card>
-            <Card>
-              <h3 className="font-bold text-sm text-gray-900 dark:text-white flex items-center gap-2 mb-3">
-                <Icon d={IC.target} size={15} color="#6366f1" />
-                Deep Dive Analysis
-                {aiDeepDive.length > 0 && <span className="ml-auto text-xs text-gray-400">{aiDeepDive.length} findings</span>}
-              </h3>
-              <DeepDiveV3 deepDive={aiDeepDive} loading={loadingInsights} />
-            </Card>
-            <Card>
-              <h3 className="font-bold text-sm text-gray-900 dark:text-white flex items-center gap-2 mb-3">
-                <Icon d={IC.list} size={15} color="#22c55e" />Priority Fix Roadmap
-              </h3>
-              <PriorityRoadmapV3 roadmap={aiRoadmap} loading={loadingInsights} />
-            </Card>
-          </div>
-        )}
-
-        {/* ── Summary tab ── */}
-        {activeTab === 'summary' && (
-          <div className="space-y-4">
-            <Card>
-              <h3 className="font-bold text-sm text-gray-900 dark:text-white mb-3">Severity Breakdown</h3>
-              {loadingSummary ? <Skeleton h="h-20" /> : (
-                <div className="grid grid-cols-5 gap-2">
-                  {['critical','high','medium','low','info'].map(sev => {
-                    const count = summary?.sev_counts?.[sev] ?? 0;
-                    return (
-                      <div key={sev} className="text-center p-2 rounded-lg border"
-                        style={{ borderColor: `${SEV_COLORS[sev]}40`, background: `${SEV_COLORS[sev]}10` }}>
-                        <div className="text-2xl font-black" style={{ color: SEV_COLORS[sev] }}>{count}</div>
-                        <div className="text-xs font-medium capitalize text-gray-500 dark:text-gray-400">{sev}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </Card>
-            <Card>
-              <h3 className="font-bold text-sm text-gray-900 dark:text-white mb-3">Vulnerability Categories</h3>
-              {loadingSummary ? <Skeleton h="h-32" /> : (
-                <div className="space-y-2">
-                  {Object.entries(summary?.categories || {})
-                    .sort(([,a],[,b]) => (b?.count||0) - (a?.count||0))
-                    .map(([cat, val]) => {
-                      const count = val?.count ?? val;
-                      const label = val?.knowledge?.label || cat.replace(/_/g,' ');
-                      const color = val?.knowledge?.color || '#6366f1';
-                      return (
-                        <div key={cat} className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} />
-                          <span className="text-xs text-gray-700 dark:text-gray-300 flex-1 capitalize">{label}</span>
-                          <span className="text-xs font-bold" style={{ color }}>{count}</span>
-                        </div>
-                      );
-                    })}
-                </div>
-              )}
-            </Card>
-            {insights?.recurring_patterns?.length > 0 && (
-              <Card>
-                <h3 className="font-bold text-sm text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-                  <Icon d={IC.repeat} size={15} color="#f97316" />AI Recurring Pattern Analysis
-                </h3>
-                <div className="space-y-3">
-                  {insights.recurring_patterns.map((rp, i) => (
-                    <div key={i} className="p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
-                      <span className="font-semibold text-sm text-orange-700 dark:text-orange-400 capitalize">
-                        {(rp.category||'').replace(/_/g,' ')}
-                      </span>
-                      {rp.observation && <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">{rp.observation}</p>}
-                      {rp.root_cause_hypothesis && (
-                        <p className="text-xs italic text-gray-500 dark:text-gray-400 mt-1">Root cause: {rp.root_cause_hypothesis}</p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            )}
-          </div>
-        )}
-
-        {/* ── Maturity tab ── */}
-        {activeTab === 'maturity' && (
-          <div className="space-y-4">
-            <Card>
-              <div className="flex items-center gap-3 mb-4">
-                <ScoreRing score={maturity?.score ?? healthScore} delta={null} level={maturityLevel} />
-                <div>
-                  <h3 className="font-black text-lg text-gray-900 dark:text-white">{maturityLevel?.label || 'Loading...'}</h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">{maturityLevel?.description}</p>
-                </div>
-              </div>
-              <TransparentMaturityCard maturity={maturity} loading={loadingMaturity} />
-            </Card>
-            {insights?.maturity_explanation && (
-              <Card>
-                <h3 className="font-bold text-sm text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-                  <Icon d={IC.brain} size={15} color="#6366f1" />AI Maturity Analysis
-                </h3>
-                <div className="space-y-3">
-                  {insights.maturity_explanation.reasons?.length > 0 && (
-                    <div>
-                      <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">Why at this level</span>
-                      <ul className="mt-2 space-y-1">
-                        {insights.maturity_explanation.reasons.map((r,i) => (
-                          <li key={i} className="text-sm text-gray-600 dark:text-gray-400 flex items-start gap-1.5">
-                            <Icon d={IC.info} size={12} color="#6366f1" className="flex-shrink-0 mt-1" />{r}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {insights.maturity_explanation.to_advance?.length > 0 && (
-                    <div>
-                      <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">To advance</span>
-                      <ul className="mt-2 space-y-1">
-                        {insights.maturity_explanation.to_advance.map((a,i) => (
-                          <li key={i} className="text-sm text-gray-600 dark:text-gray-400 flex items-start gap-1.5">
-                            <Icon d={IC.check} size={12} color="#22c55e" className="flex-shrink-0 mt-1" />{a}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {insights.maturity_explanation.encouragement && (
-                    <p className="text-sm italic text-indigo-600 dark:text-indigo-400 p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg">
-                      ✦ {insights.maturity_explanation.encouragement}
-                    </p>
-                  )}
-                </div>
-              </Card>
-            )}
-            <Card>
-              <h3 className="font-bold text-sm text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-                <Icon d={IC.award} size={15} color="#f59e0b" />
-                Achievement Badges
-                {maturity?.earned_count > 0 && (
-                  <span className="ml-auto text-xs px-2 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded-full font-bold">
-                    {maturity.earned_count} earned
-                  </span>
-                )}
-              </h3>
-              <BadgesSection maturity={maturity} loading={loadingMaturity} />
-            </Card>
-          </div>
-        )}
-
-        {/* ── Trend tab ── */}
-        {activeTab === 'trend' && (
-          <div className="space-y-4">
-            <Card>
-              <h3 className="font-bold text-sm text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-                <Icon d={IC.trendUp} size={15} color="#6366f1" />Security Score History
-              </h3>
-              <ScoreTrendChart progress={progress} loading={loadingProgress} />
-              {progress && (
-                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                  {[
-                    { label: 'Best',   value: progress.best_score, color: '#22c55e' },
-                    { label: 'Latest', value: progress.score_history?.slice(-1)[0]?.score ?? healthScore, color: '#6366f1' },
-                    { label: 'Trend',  value: progress.trend,
-                      color: progress.trend === 'improving' ? '#22c55e' : progress.trend === 'declining' ? '#ef4444' : '#6366f1' },
-                  ].map(s => (
-                    <div key={s.label} className="p-2 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
-                      <div className="font-black text-lg" style={{ color: s.color }}>{s.value}</div>
-                      <div className="text-xs text-gray-400">{s.label}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </Card>
-            {progress?.category_trends && Object.keys(progress.category_trends).length > 0 && (
-              <Card>
-                <h3 className="font-bold text-sm text-gray-900 dark:text-white mb-3">Category Trends</h3>
-                <div className="space-y-2">
-                  {Object.entries(progress.category_trends).slice(0, 8).map(([cat, counts]) => {
-                    const latest = counts[counts.length - 1] ?? 0;
-                    const prev   = counts[counts.length - 2] ?? latest;
-                    const delta  = latest - prev;
-                    return (
-                      <div key={cat} className="flex items-center gap-3">
-                        <span className="text-xs text-gray-600 dark:text-gray-400 w-32 capitalize truncate">{cat.replace(/_/g,' ')}</span>
-                        <div className="flex-1 bg-gray-100 dark:bg-gray-700 rounded-full h-2">
-                          <div className="h-2 rounded-full bg-indigo-500" style={{ width: `${Math.min(100, latest * 5)}%` }} />
-                        </div>
-                        <span className="text-xs font-bold w-6 text-right text-gray-700 dark:text-gray-300">{latest}</span>
-                        {delta !== 0 && (
-                          <span className={`text-xs font-bold ${delta < 0 ? 'text-green-500' : 'text-red-500'}`}>
-                            {delta > 0 ? '+' : ''}{delta}
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </Card>
-            )}
-          </div>
-        )}
-
-        <p className="text-center text-xs text-gray-400 pt-2 pb-4">
-          Learning Coach — AWS Bedrock powered by Amazon Nova Pro · SecureTrail v3
-        </p>
+        {/* View toggle */}
+        <div className="flex-shrink-0 flex items-center gap-1 p-1 bg-slate-100 dark:bg-white/8 rounded-xl">
+          {[
+            { id: 'hub',    label: 'Learn',  icon: IC.book    },
+            { id: 'report', label: 'Report', icon: IC.trendUp },
+          ].map(v => (
+            <button key={v.id} onClick={() => setView(v.id)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all
+                ${view === v.id || (view === 'detail' && v.id === 'hub')
+                  ? 'bg-white dark:bg-[#1a1d27] text-indigo-600 dark:text-white shadow-sm'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'}`}>
+              <Icon d={v.icon} size={13} />{v.label}
+            </button>
+          ))}
+        </div>
       </div>
+
+      {/* ── Error strip ── */}
+      {(error || guideError) && (
+        <div className="flex-shrink-0 mx-4 mt-2 px-3 py-2 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/50 rounded-lg text-xs text-red-600 dark:text-red-400 flex items-center justify-between">
+          <span>{error || guideError}</span>
+          <button onClick={() => { setError(''); setGuideError(''); }} className="ml-2 font-bold hover:text-red-800 dark:hover:text-red-300">✕</button>
+        </div>
+      )}
+
+      {/* ── Main content ── */}
+      {view === 'hub' && (
+        <VulnHubView
+          summary={summary}
+          loadingSummary={loadingSummary}
+          healthScore={healthScore}
+          maturityLevel={maturityLevel}
+          onSelectCategory={handleSelectCategory}
+          learned={{ ...Object.fromEntries(Object.entries(learned).map(([k, v]) => [k.replace(`${jobId}__`, ''), v])) }}
+          repoName={repoName}
+          jobId={jobId}
+          jobs={jobs}
+          onSelectJob={handleSelectJob}
+        />
+      )}
+      {view === 'detail' && (
+        <CategoryDetailView
+          guide={guide}
+          loading={loadingGuide}
+          onBack={handleBack}
+          onMarkLearned={() => selectedCategory && markLearned(selectedCategory)}
+          isLearned={selectedCategory ? isLearned(selectedCategory) : false}
+          jobId={jobId}
+          category={selectedCategory}
+          onVerified={() => { fetchInsights(true); fetchMaturity(); }}
+        />
+      )}
+      {view === 'report' && (
+        <ReportView
+          summary={summary} insights={insights} progress={progress} maturity={maturity}
+          loadingSummary={loadingSummary} loadingInsights={loadingInsights}
+          loadingProgress={loadingProgress} loadingMaturity={loadingMaturity}
+          healthScore={healthScore} scoreDelta={scoreDelta} maturityLevel={maturityLevel}
+          riskMomentum={riskMomentum} riskMomExpl={riskMomExpl}
+          xpData={xpData} comparison={comparison} behavioralFull={behavioralFull}
+          aiDeepDive={aiDeepDive} aiRoadmap={aiRoadmap} recurringReport={recurringReport}
+          fetchInsights={fetchInsights}
+        />
+      )}
     </div>
   );
 }
+
