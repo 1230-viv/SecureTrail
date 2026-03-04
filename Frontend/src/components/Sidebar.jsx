@@ -1,286 +1,464 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, History, BookOpen, Settings, LogOut,
   ShieldCheck, ScanLine, Sun, Moon, GraduationCap, Briefcase,
-  Lock, ChevronRight, Sparkles, Folder,
+  Lock, ChevronRight, Sparkles, Folder, PanelLeftClose, PanelLeftOpen,
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { useSidebar } from '../context/SidebarContext';
 
 const NAV_ITEMS = [
-  { icon: LayoutDashboard, label: 'Dashboard',        path: '/dashboard',     description: 'Overview & stats'     },
-  { icon: ScanLine,        label: 'New Scan',          path: '/scan',          description: 'Start a security scan' },
-  { icon: Folder,          label: 'Repositories',      path: '/repositories',  description: 'Manage repos'          },
-  { icon: History,         label: 'Scan History',      path: '/history',       description: 'Past scan results'     },
-  { icon: BookOpen,        label: 'Learning Insights', path: '/learning',      description: 'AI-powered tips'       },
-  { icon: Sparkles,        label: 'AI Coach',          path: '/coach',         description: 'Ask me anything'       },
-  { icon: Settings,        label: 'Settings',          path: null,             description: 'Preferences'           },
+  { icon: LayoutDashboard, label: 'Dashboard',        path: '/dashboard',    description: 'Overview & Stats'     },
+  { icon: ScanLine,        label: 'New Scan',          path: '/scan',         description: 'Start A Security Scan' },
+  { icon: Folder,          label: 'Repositories',      path: '/repositories', description: 'Manage Repos'          },
+  { icon: History,         label: 'Scan History',      path: '/history',      description: 'Past Scan Results'     },
+  { icon: BookOpen,        label: 'Learning Insights', path: '/learning',     description: 'AI-Powered Tips'       },
+  { icon: Sparkles,        label: 'AI Coach',          path: '/coach',        description: 'Ask Me Anything'       },
+  { icon: Settings,        label: 'Settings',          path: null,            description: 'Preferences'           },
 ];
 
-/** Pill toggle used in the footer */
 const Toggle = ({ checked, color = 'indigo' }) => (
-  <span
-    className={`relative inline-flex w-10 h-[22px] rounded-full flex-shrink-0 transition-all duration-300
-      ${checked ? `bg-${color}-500` : 'bg-slate-300 dark:bg-slate-700'}`}
+  <motion.span
+    className="relative inline-flex w-9 h-[20px] rounded-full flex-shrink-0"
+    style={{
+      background: checked
+        ? color === 'indigo'  ? '#6366f1'
+        : color === 'emerald' ? '#10b981' : '#6366f1'
+        : 'rgba(100,116,139,.3)',
+    }}
+    animate={{ backgroundColor: checked ? (color === 'emerald' ? '#10b981' : '#6366f1') : 'rgba(100,116,139,.3)' }}
+    transition={{ duration: 0.25 }}
   >
-    <span
-      className={`absolute top-[3px] left-[3px] w-4 h-4 rounded-full bg-white shadow
-        transition-transform duration-300 ${checked ? 'translate-x-[18px]' : 'translate-x-0'}`}
+    <motion.span
+      className="absolute top-[2px] left-[2px] w-4 h-4 rounded-full bg-white shadow"
+      animate={{ x: checked ? 17 : 0 }}
+      transition={{ type: 'spring', stiffness: 500, damping: 35 }}
     />
-  </span>
+  </motion.span>
 );
 
-/**
- * Sidebar — protected-area navigation with user profile at the top.
- */
 const Sidebar = () => {
-  const navigate     = useNavigate();
-  const { pathname } = useLocation();
+  const navigate       = useNavigate();
+  const { pathname }   = useLocation();
   const { user, logout } = useAuth();
   const { isDark, toggle, isStudentMode, toggleMode } = useTheme();
+  const { collapsed, setCollapsed } = useSidebar();
+  const [hovered, setHovered] = useState(null);
 
-  const isActive = (item) => {
+  const isActive = item => {
     if (!item.path) return false;
     if (item.path === '/dashboard') return pathname === '/dashboard';
-    if (item.path === '/scan') {
-      return (
-        pathname === '/scan' ||
-        pathname.startsWith('/scanning') ||
-        pathname.startsWith('/results')
-      );
-    }
+    if (item.path === '/scan') return pathname === '/scan' || pathname.startsWith('/scanning') || pathname.startsWith('/results');
     return pathname.startsWith(item.path);
   };
 
-  const handleLogout = async () => {
-    await logout();
-    navigate('/');
-  };
-
+  const handleLogout = async () => { await logout(); navigate('/'); };
   const userInitial = (user?.login || 'U')[0].toUpperCase();
 
+  /* sidebar width */
+  const W      = collapsed ? 72 : 256;
+  const INNER  = collapsed ? 'items-center' : '';
+
   return (
-    <div
-      className={`w-64 h-screen fixed left-0 top-0 flex flex-col transition-colors duration-300 select-none
-        ${isDark
-          ? 'bg-[#0f1120] text-white border-r border-white/[0.06]'
-          : 'bg-white text-slate-900 border-r border-slate-200'}`}
+    <motion.div
+      animate={{ width: W }}
+      transition={{ type: 'spring', stiffness: 320, damping: 32 }}
+      className="fixed left-0 top-0 h-screen flex flex-col z-40 select-none overflow-hidden"
+      style={{
+        background:   isDark ? '#0c0e1a' : '#fff',
+        borderRight:  isDark ? '1px solid rgba(255,255,255,.06)' : '1px solid #e8edf4',
+        boxShadow:    isDark ? '4px 0 28px rgba(0,0,0,.4)' : '4px 0 20px rgba(0,0,0,.05)',
+      }}
     >
-      {/* ── Brand ─────────────────────────────── */}
-      <div className={`px-5 py-4 flex items-center gap-3 border-b
-        ${isDark ? 'border-white/[0.06]' : 'border-slate-100'}`}>
-        <div className="relative flex-shrink-0">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 via-indigo-500 to-cyan-500
-                          flex items-center justify-center shadow-lg shadow-blue-500/30">
-            <ShieldCheck size={17} className="text-white" strokeWidth={2.2} />
+      {/* ── Brand ─────────────────────── */}
+      <div className="flex items-center justify-between px-4 py-4 flex-shrink-0"
+        style={{ borderBottom: isDark ? '1px solid rgba(255,255,255,.06)' : '1px solid #f1f5f9' }}>
+        <AnimatePresence initial={false}>
+          {!collapsed && (
+            <motion.div
+              initial={{ opacity: 0, width: 0 }} animate={{ opacity: 1, width: 'auto' }}
+              exit={{ opacity: 0, width: 0 }} transition={{ duration: 0.2 }}
+              className="flex items-center gap-2.5 overflow-hidden whitespace-nowrap"
+            >
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 via-indigo-500 to-cyan-400
+                flex items-center justify-center flex-shrink-0 shadow-lg shadow-indigo-500/35 relative">
+                <ShieldCheck size={15} className="text-white" strokeWidth={2.5} />
+                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-emerald-400 rounded-full ring-2"
+                  style={{ ringColor: isDark ? '#0c0e1a' : '#fff' }} />
+              </div>
+              <div>
+                <h1 className="text-[14px] font-extrabold tracking-tight leading-none"
+                  style={{ color: isDark ? '#f1f5f9' : '#0f172a' }}>
+                  Secure<span style={{
+                    background: 'linear-gradient(90deg,#22d3ee,#818cf8)',
+                    WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+                  }}>Trail</span>
+                </h1>
+                <p className="text-[10px] font-medium mt-0.5" style={{ color: isDark ? '#334155' : '#94a3b8' }}>
+                  AI Security Platform
+                </p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {collapsed && (
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 via-indigo-500 to-cyan-400
+            flex items-center justify-center shadow-lg shadow-indigo-500/35 mx-auto">
+            <ShieldCheck size={15} className="text-white" strokeWidth={2.5} />
           </div>
-          {/* Live pulse dot */}
-          <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-400 rounded-full
-                           ring-2 ring-[#0f1120] animate-pulse" />
-        </div>
-        <div>
-          <h1 className="text-[15px] font-extrabold tracking-tight leading-none">
-            Secure<span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400">Trail</span>
-          </h1>
-          <p className={`text-[11px] mt-0.5 font-medium ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-            AI Security Platform
-          </p>
-        </div>
+        )}
+
+        {!collapsed && (
+          <motion.button
+            whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
+            onClick={() => setCollapsed(true)}
+            className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+            style={{ color: isDark ? '#334155' : '#94a3b8',
+              background: isDark ? 'rgba(255,255,255,.05)' : '#f8fafc' }}
+          >
+            <PanelLeftClose size={14} />
+          </motion.button>
+        )}
       </div>
 
-      {/* ── User profile card ─────────────────── */}
-      {user && (
-        <div className={`mx-3 my-3 rounded-xl p-3 flex items-center gap-3
-          ${isDark ? 'bg-white/[0.04] ring-1 ring-white/[0.07]' : 'bg-slate-50 ring-1 ring-slate-200'}`}>
-          <div className="relative flex-shrink-0">
+      {/* Expand button when collapsed */}
+      {collapsed && (
+        <motion.button
+          whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
+          onClick={() => setCollapsed(false)}
+          className="mx-auto mt-2 w-8 h-8 rounded-lg flex items-center justify-center"
+          style={{ color: isDark ? '#334155' : '#94a3b8',
+            background: isDark ? 'rgba(255,255,255,.05)' : '#f8fafc' }}
+        >
+          <PanelLeftOpen size={14} />
+        </motion.button>
+      )}
+
+      {/* ── User profile ────────────────── */}
+      <AnimatePresence initial={false}>
+        {!collapsed && user && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }}
+            className="mx-3 mt-3 rounded-2xl p-3 flex items-center gap-2.5 flex-shrink-0"
+            style={{
+              background:  isDark ? 'rgba(255,255,255,.04)' : '#f8fafc',
+              border:      isDark ? '1px solid rgba(255,255,255,.07)' : '1px solid #e8edf4',
+              boxShadow:   '0 2px 8px rgba(0,0,0,.04)',
+            }}
+          >
+            <div className="relative flex-shrink-0">
+              {user.avatar_url
+                ? <img src={user.avatar_url} alt="avatar"
+                    className="w-9 h-9 rounded-full"
+                    style={{ boxShadow: '0 0 0 2px #6366f155' }} />
+                : <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold"
+                    style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)' }}>
+                    {userInitial}
+                  </div>
+              }
+              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-400"
+                style={{ border: `2px solid ${isDark ? '#0c0e1a' : '#f8fafc'}` }} />
+            </div>
+            <div className="overflow-hidden flex-1 min-w-0">
+              <p className="text-[13px] font-semibold truncate leading-tight"
+                style={{ color: isDark ? '#f1f5f9' : '#0f172a' }}>
+                {user.name || user.login}
+              </p>
+              <p className="text-[11px] truncate mt-0.5" style={{ color: isDark ? '#334155' : '#94a3b8' }}>
+                @{user.login}
+              </p>
+            </div>
+            <motion.span
+              whileHover={{ scale: 1.06 }}
+              className="flex-shrink-0 text-[10px] font-extrabold px-2 py-0.5 rounded-lg"
+              style={{
+                background: isStudentMode ? 'rgba(16,185,129,.12)' : 'rgba(99,102,241,.12)',
+                color:      isStudentMode ? '#34d399' : '#818cf8',
+                border:     isStudentMode ? '1px solid rgba(16,185,129,.2)' : '1px solid rgba(99,102,241,.2)',
+              }}
+            >
+              {isStudentMode ? 'STU' : 'PRO'}
+            </motion.span>
+          </motion.div>
+        )}
+        {collapsed && user && (
+          <div className="flex justify-center mt-3">
             {user.avatar_url
-              ? <img
-                  src={user.avatar_url}
-                  alt="avatar"
-                  className="w-9 h-9 rounded-full ring-2 ring-blue-500/40"
-                />
-              : <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600
-                                flex items-center justify-center text-white text-sm font-bold">
+              ? <img src={user.avatar_url} alt="avatar" className="w-9 h-9 rounded-full"
+                  style={{ boxShadow: '0 0 0 2px #6366f155' }} />
+              : <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold"
+                  style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)' }}>
                   {userInitial}
                 </div>
             }
-            {/* Online indicator */}
-            <span className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-400
-              ${isDark ? 'ring-[#0f1120]' : 'ring-slate-50'} ring-2`} />
           </div>
-          <div className="overflow-hidden flex-1">
-            <p className={`text-sm font-semibold truncate leading-tight
-              ${isDark ? 'text-white' : 'text-slate-900'}`}>
-              {user.name || user.login}
-            </p>
-            <p className={`text-xs truncate mt-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-              @{user.login}
-            </p>
-          </div>
-          {/* Mode badge */}
-          <span className={`flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-md
-            ${isStudentMode
-              ? 'bg-emerald-500/15 text-emerald-400'
-              : 'bg-blue-500/15 text-blue-400'}`}>
-            {isStudentMode ? 'STU' : 'PRO'}
-          </span>
-        </div>
-      )}
+        )}
+      </AnimatePresence>
 
-      {/* ── Navigation ────────────────────────── */}
-      <nav className="flex-1 px-3 pb-2 overflow-y-auto">
-        <p className={`text-[10px] font-semibold uppercase tracking-widest px-3 mb-2 mt-1
-          ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>
-          Navigation
-        </p>
-
+      {/* ── Navigation ──────────────────── */}
+      <nav className="flex-1 px-2 pb-2 overflow-y-auto overflow-x-hidden mt-3">
+        {!collapsed && (
+          <p className="px-3 mb-2 text-[10px] font-bold uppercase tracking-widest"
+            style={{ color: isDark ? '#1e293b' : '#cbd5e1' }}>
+            Navigation
+          </p>
+        )}
         <ul className="space-y-0.5">
-          {NAV_ITEMS.map((item) => {
+          {NAV_ITEMS.map(item => {
             const Icon   = item.icon;
             const active = isActive(item);
             const canNav = item.path != null;
 
             return (
               <li key={item.label}>
-                <button
+                <motion.button
                   onClick={() => canNav && navigate(item.path)}
                   disabled={!canNav}
-                  title={!canNav ? 'Coming soon' : undefined}
-                  className={`group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl
-                    text-sm font-medium transition-all duration-200
-                    ${active
-                      ? isDark
-                        ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-lg shadow-indigo-700/30'
-                        : 'bg-indigo-600 text-white shadow-md shadow-indigo-500/25'
+                  title={collapsed ? item.label : (!canNav ? 'Coming Soon' : undefined)}
+                  whileHover={canNav ? { x: collapsed ? 0 : 3 } : {}}
+                  whileTap={canNav ? { scale: 0.98 } : {}}
+                  onHoverStart={() => setHovered(item.label)}
+                  onHoverEnd={() => setHovered(null)}
+                  className="relative w-full flex items-center gap-3 rounded-xl text-[13px] font-medium transition-colors duration-150"
+                  style={{
+                    padding:    collapsed ? '10px' : '10px 12px',
+                    justifyContent: collapsed ? 'center' : 'flex-start',
+                    color: active
+                      ? '#fff'
                       : canNav
-                        ? isDark
-                          ? 'text-slate-400 hover:text-white hover:bg-white/[0.07]'
-                          : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                        : isDark
-                          ? 'text-slate-700 cursor-not-allowed'
-                          : 'text-slate-300 cursor-not-allowed'
-                    }`}
+                        ? isDark ? '#64748b' : '#64748b'
+                        : isDark ? '#1e293b' : '#cbd5e1',
+                    background: active
+                      ? undefined
+                      : (hovered === item.label && canNav)
+                        ? isDark ? 'rgba(255,255,255,.05)' : '#f8fafc'
+                        : 'transparent',
+                    cursor: canNav ? 'pointer' : 'not-allowed',
+                  }}
                 >
-                  {/* Icon container */}
-                  <span className={`flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg transition-all duration-200
-                    ${active
-                      ? 'bg-white/20'
-                      : canNav
-                        ? isDark
-                          ? 'bg-white/[0.05] group-hover:bg-white/10'
-                          : 'bg-slate-100 group-hover:bg-slate-200'
-                        : 'bg-transparent'
-                    }`}>
-                    {!canNav
-                      ? <Lock size={14} className={isDark ? 'text-slate-700' : 'text-slate-300'} />
-                      : <Icon size={15} strokeWidth={active ? 2.5 : 2} />
-                    }
-                  </span>
+                  {/* Active background with glow */}
+                  {active && (
+                    <motion.div
+                      layoutId="activeNav"
+                      className="absolute inset-0 rounded-xl"
+                      style={{
+                        background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
+                        boxShadow:  '0 4px 20px rgba(99,102,241,.4)',
+                      }}
+                      transition={{ type: 'spring', stiffness: 400, damping: 32 }}
+                    />
+                  )}
 
-                  <span className="flex-1 text-left">{item.label}</span>
+                  {/* Left active bar (non-collapsed) */}
+                  {active && !collapsed && (
+                    <motion.div
+                      layoutId="activeBar"
+                      className="absolute left-0 top-2 bottom-2 w-0.5 rounded-full"
+                      style={{ background: 'rgba(255,255,255,.6)' }}
+                    />
+                  )}
+
+                  {/* Icon */}
+                  <motion.span
+                    whileHover={canNav && !active ? { rotate: [0, -8, 8, 0] } : {}}
+                    transition={{ duration: 0.35 }}
+                    className="relative z-10 flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-lg"
+                    style={{
+                      background: active
+                        ? 'rgba(255,255,255,.2)'
+                        : (hovered === item.label && canNav)
+                          ? isDark ? 'rgba(255,255,255,.08)' : '#f1f5f9'
+                          : isDark ? 'rgba(255,255,255,.04)' : '#f8fafc',
+                      color: active ? '#fff' : canNav ? (isDark ? '#94a3b8' : '#64748b') : isDark ? '#1e293b' : '#d1d5db',
+                    }}
+                  >
+                    {!canNav
+                      ? <Lock size={13} />
+                      : <Icon size={14} strokeWidth={active ? 2.5 : 2} />
+                    }
+                  </motion.span>
+
+                  {/* Label */}
+                  <AnimatePresence initial={false}>
+                    {!collapsed && (
+                      <motion.span
+                        initial={{ opacity: 0, width: 0 }} animate={{ opacity: 1, width: 'auto' }}
+                        exit={{ opacity: 0, width: 0 }} transition={{ duration: 0.18 }}
+                        className="relative z-10 flex-1 text-left whitespace-nowrap overflow-hidden"
+                        style={{ color: active ? '#fff' : undefined }}
+                      >
+                        {item.label}
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
 
                   {/* Right indicator */}
-                  {!canNav ? (
-                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-md
-                      ${isDark ? 'bg-slate-800 text-slate-600' : 'bg-slate-100 text-slate-400'}`}>
-                      Soon
-                    </span>
-                  ) : active ? (
-                    <ChevronRight size={14} className="opacity-70" />
-                  ) : null}
-                </button>
+                  <AnimatePresence initial={false}>
+                    {!collapsed && (
+                      <motion.span
+                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                        className="relative z-10 flex-shrink-0"
+                      >
+                        {!canNav ? (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md"
+                            style={{ background: isDark ? 'rgba(255,255,255,.05)' : '#f1f5f9',
+                              color: isDark ? '#334155' : '#cbd5e1' }}>
+                            Soon
+                          </span>
+                        ) : active ? (
+                          <ChevronRight size={13} style={{ opacity: 0.7 }} />
+                        ) : null}
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                </motion.button>
               </li>
             );
           })}
         </ul>
 
-        {/* Decorative AI badge */}
-        <div className={`mt-4 mx-1 rounded-xl p-3 flex items-center gap-2.5
-          ${isDark
-            ? 'bg-gradient-to-br from-indigo-900/40 to-blue-900/20 ring-1 ring-indigo-700/30'
-            : 'bg-gradient-to-br from-indigo-50 to-blue-50 ring-1 ring-indigo-100'}`}>
-          <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0
-            ${isDark ? 'bg-indigo-500/20' : 'bg-indigo-100'}`}>
-            <Sparkles size={13} className={isDark ? 'text-indigo-400' : 'text-indigo-500'} />
-          </div>
-          <div>
-            <p className={`text-[11px] font-semibold leading-tight ${isDark ? 'text-indigo-300' : 'text-indigo-700'}`}>
-              AI-Powered Scanning
-            </p>
-            <p className={`text-[10px] mt-0.5 ${isDark ? 'text-indigo-500' : 'text-indigo-400'}`}>
-              Bedrock + Semgrep
-            </p>
-          </div>
-        </div>
+        {/* AI badge */}
+        <AnimatePresence initial={false}>
+          {!collapsed && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="mt-4 mx-1 rounded-2xl p-3 flex items-center gap-2.5 overflow-hidden"
+              style={{
+                background: isDark
+                  ? 'linear-gradient(135deg,rgba(99,102,241,.1),rgba(139,92,246,.08))'
+                  : 'linear-gradient(135deg,#eef2ff,#f5f3ff)',
+                border: isDark ? '1px solid rgba(99,102,241,.2)' : '1px solid #e0e7ff',
+              }}
+            >
+              <motion.div
+                animate={{ rotate: [0, 8, -8, 0] }}
+                transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+                className="w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0"
+                style={{ background: 'rgba(99,102,241,.2)' }}
+              >
+                <Sparkles size={13} style={{ color: '#818cf8' }} />
+              </motion.div>
+              <div>
+                <p className="text-[11px] font-bold leading-tight" style={{ color: isDark ? '#818cf8' : '#6366f1' }}>
+                  AI-Powered Scanning
+                </p>
+                <p className="text-[10px] mt-0.5" style={{ color: isDark ? '#4338ca' : '#a5b4fc' }}>
+                  Bedrock + Semgrep
+                </p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </nav>
 
-      {/* ── Footer ────────────────────────────── */}
-      <div className={`px-3 pb-4 pt-3 border-t space-y-0.5
-        ${isDark ? 'border-white/[0.06]' : 'border-slate-100'}`}>
+      {/* ── Footer ──────────────────────── */}
+      <div className="px-2 pb-4 pt-2 flex-shrink-0"
+        style={{ borderTop: isDark ? '1px solid rgba(255,255,255,.06)' : '1px solid #f1f5f9' }}>
 
         {/* Theme toggle */}
-        <button
+        <motion.button
+          whileHover={{ x: collapsed ? 0 : 3 }} whileTap={{ scale: 0.98 }}
           onClick={toggle}
-          className={`group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium
-            transition-all duration-200
-            ${isDark
-              ? 'text-slate-400 hover:text-white hover:bg-white/[0.07]'
-              : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'}`}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-colors"
+          style={{
+            justifyContent: collapsed ? 'center' : 'flex-start',
+            color: isDark ? '#64748b' : '#64748b',
+          }}
+          onMouseEnter={e => e.currentTarget.style.background = isDark ? 'rgba(255,255,255,.05)' : '#f8fafc'}
+          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
         >
-          <span className={`flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg transition-all duration-200
-            ${isDark ? 'bg-white/[0.05] group-hover:bg-white/10' : 'bg-slate-100 group-hover:bg-slate-200'}`}>
+          <span className="w-7 h-7 flex items-center justify-center rounded-lg flex-shrink-0"
+            style={{ background: isDark ? 'rgba(255,255,255,.05)' : '#f1f5f9',
+              color: isDark ? '#94a3b8' : '#64748b' }}>
             {isDark ? <Sun size={14} /> : <Moon size={14} />}
           </span>
-          <span className="flex-1 text-left">{isDark ? 'Light Mode' : 'Dark Mode'}</span>
-          <Toggle checked={isDark} color="indigo" />
-        </button>
+          <AnimatePresence initial={false}>
+            {!collapsed && (
+              <motion.span
+                initial={{ opacity: 0, width: 0 }} animate={{ opacity: 1, width: 'auto' }}
+                exit={{ opacity: 0, width: 0 }} className="flex-1 text-left whitespace-nowrap">
+                {isDark ? 'Light Mode' : 'Dark Mode'}
+              </motion.span>
+            )}
+          </AnimatePresence>
+          {!collapsed && <Toggle checked={isDark} color="indigo" />}
+        </motion.button>
 
-        {/* Student / Pro mode toggle */}
-        <button
+        {/* Student/Pro toggle */}
+        <motion.button
+          whileHover={{ x: collapsed ? 0 : 3 }} whileTap={{ scale: 0.98 }}
           onClick={toggleMode}
-          className={`group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium
-            transition-all duration-200
-            ${isDark
-              ? 'text-slate-400 hover:text-white hover:bg-white/[0.07]'
-              : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'}`}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-colors"
+          style={{
+            justifyContent: collapsed ? 'center' : 'flex-start',
+            color: isDark ? '#64748b' : '#64748b',
+          }}
+          onMouseEnter={e => e.currentTarget.style.background = isDark ? 'rgba(255,255,255,.05)' : '#f8fafc'}
+          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
         >
-          <span className={`flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg transition-all duration-200
-            ${isDark ? 'bg-white/[0.05] group-hover:bg-white/10' : 'bg-slate-100 group-hover:bg-slate-200'}`}>
+          <span className="w-7 h-7 flex items-center justify-center rounded-lg flex-shrink-0"
+            style={{ background: isDark ? 'rgba(255,255,255,.05)' : '#f1f5f9',
+              color: isDark ? '#94a3b8' : '#64748b' }}>
             {isStudentMode ? <GraduationCap size={14} /> : <Briefcase size={14} />}
           </span>
-          <span className="flex-1 text-left">{isStudentMode ? 'Student Mode' : 'Pro Mode'}</span>
-          <Toggle checked={isStudentMode} color="emerald" />
-        </button>
+          <AnimatePresence initial={false}>
+            {!collapsed && (
+              <motion.span
+                initial={{ opacity: 0, width: 0 }} animate={{ opacity: 1, width: 'auto' }}
+                exit={{ opacity: 0, width: 0 }} className="flex-1 text-left whitespace-nowrap">
+                {isStudentMode ? 'Student Mode' : 'Pro Mode'}
+              </motion.span>
+            )}
+          </AnimatePresence>
+          {!collapsed && <Toggle checked={isStudentMode} color="emerald" />}
+        </motion.button>
 
         {/* Divider */}
-        <div className={`my-1 mx-3 h-px ${isDark ? 'bg-white/[0.06]' : 'bg-slate-100'}`} />
+        <div className="my-1 mx-2 h-px" style={{ background: isDark ? 'rgba(255,255,255,.06)' : '#f1f5f9' }} />
 
         {/* Sign out */}
-        <button
+        <motion.button
+          whileHover={{ x: collapsed ? 0 : 3 }} whileTap={{ scale: 0.98 }}
           onClick={handleLogout}
-          className={`group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium
-            transition-all duration-200
-            ${isDark
-              ? 'text-slate-400 hover:text-red-400 hover:bg-red-500/[0.08]'
-              : 'text-slate-500 hover:text-red-600 hover:bg-red-50'}`}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-colors"
+          style={{ justifyContent: collapsed ? 'center' : 'flex-start', color: '#ef4444' }}
+          onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,.08)'}
+          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
         >
-          <span className={`flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg transition-all duration-200
-            ${isDark
-              ? 'bg-white/[0.05] group-hover:bg-red-500/10'
-              : 'bg-slate-100 group-hover:bg-red-50'}`}>
+          <span className="w-7 h-7 flex items-center justify-center rounded-lg flex-shrink-0"
+            style={{ background: 'rgba(239,68,68,.1)', color: '#f87171' }}>
             <LogOut size={14} />
           </span>
-          <span>Sign Out</span>
-        </button>
+          <AnimatePresence initial={false}>
+            {!collapsed && (
+              <motion.span
+                initial={{ opacity: 0, width: 0 }} animate={{ opacity: 1, width: 'auto' }}
+                exit={{ opacity: 0, width: 0 }} className="whitespace-nowrap">
+                Sign Out
+              </motion.span>
+            )}
+          </AnimatePresence>
+        </motion.button>
 
         {/* Version */}
-        <p className={`text-[10px] text-center pt-1 font-medium
-          ${isDark ? 'text-slate-700' : 'text-slate-300'}`}>
-          SecureTrail v2.0.0
-        </p>
+        <AnimatePresence initial={false}>
+          {!collapsed && (
+            <motion.p
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="text-[10px] text-center pt-2 font-medium"
+              style={{ color: isDark ? '#1e293b' : '#e2e8f0' }}>
+              SecureTrail v2.0.0
+            </motion.p>
+          )}
+        </AnimatePresence>
       </div>
-    </div>
+    </motion.div>
   );
 };
 
