@@ -1,5 +1,10 @@
 import React, { useState, useRef } from 'react';
-import { Upload, ChevronDown, Github, FileArchive, X, ArrowRight, Zap, GitBranch } from 'lucide-react';
+import {
+  Upload, ChevronDown, Github, FileArchive, X, ArrowRight,
+  Zap, GitBranch, CheckCircle2, Loader2, RotateCcw,
+  ShieldCheck, ScanLine,
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import RepositorySelector from './RepositorySelector';
 import { uploadAPI, repositoryAPI, authAPI } from '../services/api';
@@ -12,30 +17,26 @@ import { useTheme } from '../context/ThemeContext';
  *   onScanStarted({ job_id, repository_name }) — called once a scan is queued on the backend
  */
 const RepositoryUpload = ({ onScanStarted }) => {
-  const [uploadMethod, setUploadMethod] = useState(null); // 'github' or 'zip'
-  const [selectedBranch, setSelectedBranch] = useState('main');
-  const [showRepoSelector, setShowRepoSelector] = useState(false);
+  const [uploadMethod,       setUploadMethod]       = useState(null); // 'github' or 'zip'
+  const [selectedBranch,     setSelectedBranch]     = useState('main');
+  const [showRepoSelector,   setShowRepoSelector]   = useState(false);
   const [selectedRepository, setSelectedRepository] = useState(null);
-  const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploading,          setUploading]          = useState(false);
+  const [uploadProgress,     setUploadProgress]     = useState(0);
   const fileInputRef = useRef(null);
-  const { isDark } = useTheme();
+  const { isDark }   = useTheme();
 
+  /* ── Handlers (logic unchanged) ─────────────────────────────────────────── */
   const handleMethodSelect = async (method) => {
     if (method === 'github') {
       setUploadMethod('github');
-      
-      // Check if already logged in
       const token = localStorage.getItem('github_token');
       if (token) {
         setShowRepoSelector(true);
       } else {
-        // Automatically trigger GitHub OAuth
         try {
           const response = await authAPI.getGitHubLoginUrl();
           const { auth_url } = response.data;
-          
-          // Open OAuth in same window
           window.location.href = auth_url;
         } catch (error) {
           console.error('GitHub auth error:', error);
@@ -57,14 +58,11 @@ const RepositoryUpload = ({ onScanStarted }) => {
     const file = event.target.files[0];
     if (!file) return;
 
-    // Validate file type
     if (!file.name.endsWith('.zip')) {
       toast.error('Only ZIP files are allowed');
       return;
     }
-
-    // Validate file size (100MB max)
-    const maxSize = 100 * 1024 * 1024; // 100MB
+    const maxSize = 100 * 1024 * 1024;
     if (file.size > maxSize) {
       toast.error('File size must be less than 100MB');
       return;
@@ -73,14 +71,11 @@ const RepositoryUpload = ({ onScanStarted }) => {
     try {
       setUploading(true);
       setUploadProgress(0);
-
       const response = await uploadAPI.uploadZip(file, (progress) => {
         setUploadProgress(progress);
       });
-
       if (response.data.success) {
         toast.success('ZIP uploaded — scan queued!');
-        // Scan already started on backend; hand off to parent immediately
         onScanStarted?.({
           job_id: response.data.job_id,
           repository_name: response.data.repository_name,
@@ -92,9 +87,7 @@ const RepositoryUpload = ({ onScanStarted }) => {
     } finally {
       setUploading(false);
       setUploadProgress(0);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -103,13 +96,11 @@ const RepositoryUpload = ({ onScanStarted }) => {
       toast.warning('Please select a repository first');
       return;
     }
-
     try {
-      // GitHub repository — clone + scan via backend
       toast.info('Queuing security scan…');
       const response = await repositoryAPI.scanRepository(
         selectedRepository.full_name,
-        selectedBranch
+        selectedBranch,
       );
       if (response.data.success) {
         toast.success('Scan queued!');
@@ -130,223 +121,217 @@ const RepositoryUpload = ({ onScanStarted }) => {
     setSelectedBranch('main');
   };
 
-  // If showing repository selector
+  /* ── Repo selector overlay (unchanged) ─────────────────────────────────── */
   if (showRepoSelector) {
     return (
       <RepositorySelector
         onSelect={handleRepositorySelect}
-        onBack={() => {
-          setShowRepoSelector(false);
-          setUploadMethod(null);
-        }}
+        onBack={() => { setShowRepoSelector(false); setUploadMethod(null); }}
       />
     );
   }
 
+  const cardBg  = isDark ? 'rgba(17,24,39,0.9)' : 'rgba(255,255,255,0.98)';
+  const borderC = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)';
+
+  /* ── Main card ─────────────────────────────────────────────────────────── */
   return (
-    <>
-      {/* Glass upload card */}
-      <div
-        className="rounded-2xl relative overflow-hidden transition-all"
-        style={{
-          background: isDark
-            ? 'linear-gradient(135deg, rgba(15,17,32,0.92) 0%, rgba(20,22,45,0.84) 60%, rgba(18,14,30,0.78) 100%)'
-            : 'linear-gradient(135deg, rgba(255,255,255,0.97) 0%, rgba(248,246,255,0.92) 60%, rgba(240,240,255,0.88) 100%)',
-          backdropFilter: 'blur(20px)',
-          border: isDark ? '1px solid rgba(255,255,255,0.09)' : '1px solid rgba(139,92,246,0.20)',
-          boxShadow: isDark
-            ? '0 8px 32px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.07)'
-            : '0 6px 24px rgba(99,102,241,0.10), inset 0 1px 0 rgba(255,255,255,0.9)',
-        }}
-      >
-        {/* Indigo top accent line */}
-        <div className="absolute top-0 left-0 right-0 h-px z-10"
-          style={{ background: 'linear-gradient(90deg, transparent, rgba(139,92,246,0.5), rgba(99,102,241,0.9), rgba(139,92,246,0.5), transparent)' }} />
-        {/* Noise texture overlay */}
-        <div className="absolute inset-0 opacity-[0.018] pointer-events-none"
-          style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 256 256\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.9\' numOctaves=\'4\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\' opacity=\'1\'/%3E%3C/svg%3E")', backgroundSize: '128px 128px' }} />
+    <div style={{
+      borderRadius: 22, overflow: 'hidden', position: 'relative',
+      background: cardBg,
+      border: `1px solid ${borderC}`,
+      backdropFilter: 'blur(24px)',
+      boxShadow: isDark
+        ? '0 12px 48px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.06)'
+        : '0 8px 40px rgba(99,102,241,0.1), inset 0 1px 0 rgba(255,255,255,1)',
+    }}>
+      {/* Gradient top accent */}
+      <div style={{
+        height: 3,
+        background: 'linear-gradient(90deg, transparent, rgba(99,102,241,0.7) 30%, rgba(139,92,246,0.9) 60%, rgba(99,102,241,0.7) 85%, transparent)',
+      }} />
 
-        <div className="relative z-10 p-6">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h2 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>Repository Upload</h2>
-              <p className={`text-[11px] mt-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Choose upload method</p>
+      <div style={{ padding: '24px 24px 28px' }}>
+
+        {/* ── Card header ─────────────────────────────────────────────── */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 22 }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <ScanLine size={15} style={{ color: '#6366f1' }} />
+              <h2 style={{
+                fontSize: 16, fontWeight: 800, margin: 0,
+                color: isDark ? '#f8fafc' : '#0f172a',
+              }}>
+                Repository Upload
+              </h2>
             </div>
-            {selectedRepository && (
-              <button
-                onClick={handleReset}
-                className={`flex items-center gap-1.5 text-[11px] font-semibold px-3 py-1.5 rounded-lg transition-colors
-                  ${isDark
-                    ? 'text-slate-400 hover:text-white bg-white/[0.05] hover:bg-white/[0.08]'
-                    : 'text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200'}`}
-              >
-                <X size={12} /> Reset
-              </button>
-            )}
+            <p style={{ fontSize: 11, color: isDark ? '#475569' : '#94a3b8', margin: 0 }}>
+              {!uploadMethod
+                ? 'Choose how you want to provide your code'
+                : uploadMethod === 'github' && !selectedRepository
+                  ? 'Connect your GitHub account'
+                  : uploadMethod === 'zip' && !selectedRepository
+                    ? 'Upload a ZIP archive of your project'
+                    : 'Ready to scan'}
+            </p>
           </div>
+          {(uploadMethod || selectedRepository) && (
+            <motion.button
+              whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+              onClick={handleReset}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 5,
+                fontSize: 11, fontWeight: 700, padding: '6px 12px', borderRadius: 9,
+                background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
+                border: `1px solid ${borderC}`,
+                color: isDark ? '#64748b' : '#94a3b8', cursor: 'pointer',
+              }}
+            >
+              <RotateCcw size={11} /> Reset
+            </motion.button>
+          )}
+        </div>
 
-          {!uploadMethod ? (
-            /* ── Method Selection ── */
-            <div className="space-y-3">
-              {/* GitHub Option */}
-              <button
+        <AnimatePresence mode="wait">
+
+          {/* ══ STATE 1: Method selection ══════════════════════════════════ */}
+          {!uploadMethod && (
+            <motion.div
+              key="method-select"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.25 }}
+              style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}
+            >
+              {/* GitHub card */}
+              <MethodCard
                 onClick={() => handleMethodSelect('github')}
-                className="w-full text-left group transition-all duration-200 rounded-xl"
-                style={{ outline: 'none' }}
-              >
-                <div
-                  className="flex items-center gap-4 p-4 rounded-xl transition-all duration-200 group-hover:-translate-y-0.5"
-                  style={{
-                    background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.60)',
-                    border: isDark
-                      ? '1px solid rgba(255,255,255,0.08)'
-                      : '1px solid rgba(59,130,246,0.18)',
-                    boxShadow: isDark
-                      ? 'none'
-                      : '0 2px 8px rgba(59,130,246,0.06)',
-                  }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.border = isDark ? '1px solid rgba(59,130,246,0.35)' : '1px solid rgba(59,130,246,0.40)';
-                    e.currentTarget.style.boxShadow = isDark ? '0 0 18px rgba(59,130,246,0.12)' : '0 4px 16px rgba(59,130,246,0.14)';
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.border = isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(59,130,246,0.18)';
-                    e.currentTarget.style.boxShadow = isDark ? 'none' : '0 2px 8px rgba(59,130,246,0.06)';
-                  }}
-                >
-                  <div
-                    className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-transform duration-300 group-hover:scale-110"
-                    style={{
-                      background: isDark ? 'rgba(59,130,246,0.12)' : 'rgba(59,130,246,0.10)',
-                      border: '1px solid rgba(59,130,246,0.25)',
-                      boxShadow: '0 0 16px rgba(59,130,246,0.18)',
-                    }}
-                  >
-                    <Github size={22} className={isDark ? 'text-blue-400' : 'text-blue-600'} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-[13px] font-bold mb-0.5 ${isDark ? 'text-white' : 'text-slate-900'}`}>Connect GitHub</p>
-                    <p className={`text-[11px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-                      Login and select a repository from your GitHub account
-                    </p>
-                  </div>
-                  <ArrowRight size={14}
-                    className={`flex-shrink-0 transition-all duration-200 opacity-0 -translate-x-1
-                      group-hover:opacity-60 group-hover:translate-x-0
-                      ${isDark ? 'text-blue-400' : 'text-blue-500'}`} />
-                </div>
-              </button>
+                Icon={Github}
+                iconColor="#3b82f6"
+                iconBg="rgba(59,130,246,0.12)"
+                iconBorder="rgba(59,130,246,0.28)"
+                hoverBorder="rgba(59,130,246,0.55)"
+                hoverGlow="rgba(59,130,246,0.2)"
+                isDark={isDark}
+                title="Connect GitHub"
+                desc="Authorize and select any repo from your GitHub account"
+                arrowColor="#3b82f6"
+              />
 
-              {/* ZIP Option */}
-              <button
+              {/* ZIP card */}
+              <MethodCard
                 onClick={() => handleMethodSelect('zip')}
-                className="w-full text-left group transition-all duration-200 rounded-xl"
-                style={{ outline: 'none' }}
-              >
-                <div
-                  className="flex items-center gap-4 p-4 rounded-xl transition-all duration-200 group-hover:-translate-y-0.5"
-                  style={{
-                    background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.60)',
-                    border: isDark
-                      ? '1px solid rgba(255,255,255,0.08)'
-                      : '1px solid rgba(139,92,246,0.18)',
-                    boxShadow: isDark
-                      ? 'none'
-                      : '0 2px 8px rgba(139,92,246,0.06)',
-                  }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.border = isDark ? '1px solid rgba(139,92,246,0.35)' : '1px solid rgba(139,92,246,0.40)';
-                    e.currentTarget.style.boxShadow = isDark ? '0 0 18px rgba(139,92,246,0.12)' : '0 4px 16px rgba(139,92,246,0.14)';
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.border = isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(139,92,246,0.18)';
-                    e.currentTarget.style.boxShadow = isDark ? 'none' : '0 2px 8px rgba(139,92,246,0.06)';
-                  }}
-                >
-                  <div
-                    className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-transform duration-300 group-hover:scale-110"
-                    style={{
-                      background: isDark ? 'rgba(139,92,246,0.12)' : 'rgba(139,92,246,0.10)',
-                      border: '1px solid rgba(139,92,246,0.25)',
-                      boxShadow: '0 0 16px rgba(139,92,246,0.18)',
-                    }}
-                  >
-                    <FileArchive size={21} className={isDark ? 'text-violet-400' : 'text-violet-600'} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-[13px] font-bold mb-0.5 ${isDark ? 'text-white' : 'text-slate-900'}`}>Upload ZIP File</p>
-                    <p className={`text-[11px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-                      Upload a ZIP archive containing your project code
-                    </p>
-                  </div>
-                  <ArrowRight size={14}
-                    className={`flex-shrink-0 transition-all duration-200 opacity-0 -translate-x-1
-                      group-hover:opacity-60 group-hover:translate-x-0
-                      ${isDark ? 'text-violet-400' : 'text-violet-500'}`} />
-                </div>
-              </button>
-            </div>
+                Icon={FileArchive}
+                iconColor="#8b5cf6"
+                iconBg="rgba(139,92,246,0.12)"
+                iconBorder="rgba(139,92,246,0.28)"
+                hoverBorder="rgba(139,92,246,0.55)"
+                hoverGlow="rgba(139,92,246,0.2)"
+                isDark={isDark}
+                title="Upload ZIP File"
+                desc="Upload a ZIP archive containing your project source"
+                arrowColor="#8b5cf6"
+              />
+            </motion.div>
+          )}
 
-          ) : uploadMethod === 'zip' && !selectedRepository ? (
-            /* ── ZIP Dropzone ── */
-            <>
-              <div
-                className="rounded-xl p-8 mb-5 text-center relative overflow-hidden cursor-pointer group"
-                style={{
-                  background: isDark ? 'rgba(139,92,246,0.04)' : 'rgba(139,92,246,0.04)',
-                  border: isDark ? '2px dashed rgba(139,92,246,0.25)' : '2px dashed rgba(139,92,246,0.30)',
-                }}
+          {/* ══ STATE 2: ZIP dropzone ══════════════════════════════════════ */}
+          {uploadMethod === 'zip' && !selectedRepository && (
+            <motion.div
+              key="zip-drop"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.25 }}
+            >
+              {/* Drop zone */}
+              <motion.div
+                whileHover={!uploading ? { scale: 1.008 } : {}}
                 onClick={() => !uploading && fileInputRef.current?.click()}
+                style={{
+                  borderRadius: 16, padding: '40px 24px', textAlign: 'center',
+                  position: 'relative', overflow: 'hidden', cursor: uploading ? 'default' : 'pointer',
+                  background: isDark ? 'rgba(139,92,246,0.05)' : 'rgba(139,92,246,0.04)',
+                  border: `2px dashed ${isDark ? 'rgba(139,92,246,0.3)' : 'rgba(139,92,246,0.35)'}`,
+                  transition: 'all 0.2s',
+                  marginBottom: 14,
+                }}
+                onMouseEnter={e => {
+                  if (!uploading) {
+                    e.currentTarget.style.borderColor = 'rgba(139,92,246,0.65)';
+                    e.currentTarget.style.background = isDark ? 'rgba(139,92,246,0.08)' : 'rgba(139,92,246,0.07)';
+                    e.currentTarget.style.boxShadow = '0 0 24px rgba(139,92,246,0.18)';
+                  }
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.borderColor = isDark ? 'rgba(139,92,246,0.3)' : 'rgba(139,92,246,0.35)';
+                  e.currentTarget.style.background = isDark ? 'rgba(139,92,246,0.05)' : 'rgba(139,92,246,0.04)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
               >
-                {/* Glow orb */}
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className="w-32 h-32 rounded-full blur-3xl opacity-20"
-                    style={{ background: 'radial-gradient(circle, #8b5cf6, transparent 70%)' }} />
+                {/* Glow orb background */}
+                <div style={{
+                  position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none',
+                }}>
+                  <div style={{
+                    width: 160, height: 160, borderRadius: '50%',
+                    background: 'radial-gradient(circle, rgba(139,92,246,0.2), transparent 70%)',
+                    filter: 'blur(20px)',
+                  }} />
                 </div>
 
-                <div className="relative z-10 flex flex-col items-center">
-                  <div
-                    className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4
-                               transition-transform duration-300 group-hover:scale-110"
+                <div style={{ position: 'relative', zIndex: 1 }}>
+                  <motion.div
+                    animate={uploading ? {} : { y: [0, -4, 0] }}
+                    transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
                     style={{
-                      background: isDark ? 'rgba(139,92,246,0.15)' : 'rgba(139,92,246,0.12)',
-                      border: '1px solid rgba(139,92,246,0.30)',
-                      boxShadow: '0 0 20px rgba(139,92,246,0.22)',
+                      width: 56, height: 56, borderRadius: 18, margin: '0 auto 16px',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      background: isDark ? 'rgba(139,92,246,0.16)' : 'rgba(139,92,246,0.12)',
+                      border: '1px solid rgba(139,92,246,0.35)',
+                      boxShadow: '0 0 24px rgba(139,92,246,0.25)',
                     }}
                   >
-                    <Upload size={24} className={isDark ? 'text-violet-400' : 'text-violet-600'} />
-                  </div>
+                    {uploading
+                      ? <Loader2 size={24} style={{ color: '#8b5cf6', animation: 'spin 1s linear infinite' }} />
+                      : <Upload size={24} style={{ color: isDark ? '#a78bfa' : '#7c3aed' }} />
+                    }
+                  </motion.div>
 
-                  <p className={`text-sm font-semibold mb-1 ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
+                  <p style={{
+                    fontSize: 14, fontWeight: 700, marginBottom: 4,
+                    color: isDark ? '#e2e8f0' : '#1e293b',
+                  }}>
                     {uploading ? 'Uploading…' : 'Drop your ZIP here'}
                   </p>
-                  <p className={`text-[11px] mb-4 ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>
+                  <p style={{ fontSize: 11, color: isDark ? '#475569' : '#94a3b8', marginBottom: 16 }}>
                     {uploading ? `${uploadProgress}% complete` : 'or click to browse — max 100 MB'}
                   </p>
 
                   {uploading ? (
-                    /* Progress bar */
-                    <div className={`w-full max-w-[200px] h-1.5 rounded-full overflow-hidden
-                      ${isDark ? 'bg-white/[0.08]' : 'bg-slate-200'}`}>
-                      <div
-                        className="h-full rounded-full transition-all duration-300"
+                    <div style={{
+                      width: 200, height: 6, borderRadius: 6, overflow: 'hidden', margin: '0 auto',
+                      background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+                    }}>
+                      <motion.div
+                        animate={{ width: `${uploadProgress}%` }}
+                        transition={{ duration: 0.4 }}
                         style={{
-                          width: `${uploadProgress}%`,
+                          height: '100%', borderRadius: 6,
                           background: 'linear-gradient(90deg, #8b5cf6, #6366f1)',
-                          boxShadow: '0 0 8px rgba(139,92,246,0.5)',
+                          boxShadow: '0 0 10px rgba(139,92,246,0.6)',
                         }}
                       />
                     </div>
                   ) : (
-                    <span
-                      className="px-4 py-2 rounded-lg text-[12px] font-semibold transition-colors"
-                      style={{
-                        background: isDark ? 'rgba(139,92,246,0.15)' : 'rgba(139,92,246,0.10)',
-                        border: '1px solid rgba(139,92,246,0.28)',
-                        color: isDark ? '#c4b5fd' : '#7c3aed',
-                      }}
-                    >
+                    <span style={{
+                      display: 'inline-block', padding: '7px 18px', borderRadius: 10,
+                      fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                      background: isDark ? 'rgba(139,92,246,0.15)' : 'rgba(139,92,246,0.1)',
+                      border: '1px solid rgba(139,92,246,0.32)',
+                      color: isDark ? '#c4b5fd' : '#7c3aed',
+                    }}>
                       Select ZIP File
                     </span>
                   )}
@@ -357,107 +342,222 @@ const RepositoryUpload = ({ onScanStarted }) => {
                   type="file"
                   accept=".zip"
                   onChange={handleFileSelect}
-                  className="hidden"
+                  style={{ display: 'none' }}
                   disabled={uploading}
                 />
-              </div>
+              </motion.div>
 
               <button
                 onClick={() => setUploadMethod(null)}
-                className={`w-full py-2 text-[12px] font-medium flex items-center justify-center gap-1
-                  ${isDark ? 'text-slate-500 hover:text-slate-300' : 'text-slate-400 hover:text-slate-600'}`}
+                style={{
+                  width: '100%', padding: '8px', fontSize: 12, fontWeight: 600,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: isDark ? '#475569' : '#94a3b8',
+                }}
               >
                 ← Back to method selection
               </button>
-            </>
+            </motion.div>
+          )}
 
-          ) : selectedRepository ? (
-            /* ── Selected repository ── */
-            <>
-              <div
-                className="rounded-xl p-4 mb-5"
-                style={{
-                  background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.65)',
-                  border: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(59,130,246,0.18)',
-                }}
-              >
-                <div className="flex items-center gap-3">
-                  <div
-                    className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                    style={{
-                      background: isDark ? 'rgba(59,130,246,0.12)' : 'rgba(59,130,246,0.10)',
-                      border: '1px solid rgba(59,130,246,0.25)',
-                    }}
-                  >
+          {/* ══ STATE 3: Repository selected ═══════════════════════════════ */}
+          {selectedRepository && (
+            <motion.div
+              key="repo-selected"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.3 }}
+            >
+              {/* Selected repo display */}
+              <div style={{
+                padding: '14px 16px', borderRadius: 14, marginBottom: 16,
+                background: isDark ? 'rgba(99,102,241,0.07)' : 'rgba(99,102,241,0.05)',
+                border: `1px solid ${isDark ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.18)'}`,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{
+                    width: 40, height: 40, borderRadius: 12, flexShrink: 0,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: isDark ? 'rgba(59,130,246,0.12)' : 'rgba(59,130,246,0.1)',
+                    border: '1px solid rgba(59,130,246,0.28)',
+                  }}>
                     {selectedRepository.type !== 'zip'
-                      ? <Github size={18} className={isDark ? 'text-blue-400' : 'text-blue-600'} />
-                      : <FileArchive size={18} className={isDark ? 'text-violet-400' : 'text-violet-600'} />}
+                      ? <Github size={18} style={{ color: isDark ? '#60a5fa' : '#3b82f6' }} />
+                      : <FileArchive size={18} style={{ color: isDark ? '#a78bfa' : '#7c3aed' }} />
+                    }
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-[10px] font-semibold uppercase tracking-wider mb-0.5
-                      ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Selected Repository</p>
-                    <p className={`text-[13px] font-bold truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{
+                      fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase',
+                      color: isDark ? '#475569' : '#94a3b8', marginBottom: 2,
+                    }}>
+                      Selected Repository
+                    </p>
+                    <p style={{
+                      fontSize: 14, fontWeight: 700, margin: 0,
+                      color: isDark ? '#f1f5f9' : '#0f172a',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>
                       {selectedRepository.name}
                     </p>
                     {selectedRepository.files_count && (
-                      <p className={`text-[11px] mt-0.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                      <p style={{ fontSize: 11, marginTop: 2, color: isDark ? '#475569' : '#94a3b8' }}>
                         {selectedRepository.files_count} files extracted
                       </p>
                     )}
                   </div>
+                  <CheckCircle2 size={16} style={{ color: '#10b981', flexShrink: 0 }} />
                 </div>
               </div>
 
-              {/* Branch Selection */}
+              {/* Branch selector */}
               {selectedRepository.type !== 'zip' && (
-                <div className="mb-5">
-                  <label className={`flex items-center gap-1.5 text-[11px] font-semibold mb-2
-                    ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                    <GitBranch size={11} />
-                    Branch
+                <div style={{ marginBottom: 18 }}>
+                  <label style={{
+                    display: 'flex', alignItems: 'center', gap: 5,
+                    fontSize: 11, fontWeight: 700, marginBottom: 6,
+                    color: isDark ? '#64748b' : '#64748b',
+                  }}>
+                    <GitBranch size={11} /> Branch
                   </label>
-                  <div className="relative">
+                  <div style={{ position: 'relative' }}>
                     <select
                       value={selectedBranch}
                       onChange={(e) => setSelectedBranch(e.target.value)}
-                      className={`w-full px-4 py-2.5 pr-10 rounded-xl appearance-none text-[13px]
-                        focus:outline-none transition-all
-                        ${isDark
-                          ? 'bg-white/[0.04] border border-white/[0.08] text-white focus:border-indigo-500/40'
-                          : 'bg-white/80 border border-slate-200 text-slate-700 focus:border-indigo-400/60'}`}
+                      style={{
+                        width: '100%', paddingLeft: 14, paddingRight: 36,
+                        paddingTop: 10, paddingBottom: 10,
+                        borderRadius: 10, fontSize: 13, fontWeight: 500,
+                        outline: 'none', appearance: 'none', cursor: 'pointer',
+                        background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.9)',
+                        border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
+                        color: isDark ? '#e2e8f0' : '#1e293b',
+                        boxSizing: 'border-box',
+                      }}
+                      onFocus={e => { e.target.style.borderColor = '#6366f1'; }}
+                      onBlur={e => { e.target.style.borderColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'; }}
                     >
-                      <option value={selectedRepository.default_branch}>
-                        {selectedRepository.default_branch}
-                      </option>
+                      <option value={selectedRepository.default_branch}>{selectedRepository.default_branch}</option>
                       <option value="develop">develop</option>
                       <option value="feature">feature</option>
                       <option value="staging">staging</option>
                     </select>
-                    <ChevronDown className={`absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none
-                      ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
+                    <ChevronDown size={14} style={{
+                      position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
+                      color: isDark ? '#475569' : '#94a3b8', pointerEvents: 'none',
+                    }} />
                   </div>
                 </div>
               )}
 
-              {/* Start scan CTA */}
-              <button
+              {/* Start Scan CTA */}
+              <motion.button
+                whileHover={{ scale: 1.015, boxShadow: '0 6px 28px rgba(99,102,241,0.5)' }}
+                whileTap={{ scale: 0.98 }}
                 onClick={handleStartScan}
-                className="w-full py-3.5 rounded-xl font-bold text-[13px] text-white
-                           flex items-center justify-center gap-2
-                           transition-all duration-200 hover:scale-[1.01] active:scale-[0.98]"
                 style={{
-                  background: 'linear-gradient(135deg, #4f46e5, #7c3aed, #6d28d9)',
-                  boxShadow: '0 4px 20px rgba(99,102,241,0.35), 0 1px 0 rgba(255,255,255,0.1) inset',
+                  width: '100%', padding: '14px', borderRadius: 14,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
+                  fontSize: 14, fontWeight: 800, color: '#fff', border: 'none', cursor: 'pointer',
+                  background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 60%, #6d28d9 100%)',
+                  boxShadow: '0 4px 20px rgba(99,102,241,0.4), inset 0 1px 0 rgba(255,255,255,0.12)',
+                  letterSpacing: '0.01em',
                 }}
               >
-                <Zap size={14} />
+                <motion.div
+                  animate={{ rotate: [0, 10, -10, 0] }}
+                  transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
+                >
+                  <Zap size={15} fill="#fff" />
+                </motion.div>
                 Start Security Scan
-              </button>
-            </>
-          ) : null}
-        </div>
+                <ShieldCheck size={14} style={{ opacity: 0.7 }} />
+              </motion.button>
+            </motion.div>
+          )}
+
+        </AnimatePresence>
       </div>
-    </>
+
+      <style>{`
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      `}</style>
+    </div>
+  );
+};
+
+/* ─── MethodCard ─────────────────────────────────────────────────────────────── */
+const MethodCard = ({
+  onClick, Icon, iconColor, iconBg, iconBorder,
+  hoverBorder, hoverGlow, isDark, title, desc, arrowColor,
+}) => {
+  const [hovered, setHovered] = useState(false);
+
+  return (
+    <motion.button
+      onClick={onClick}
+      onHoverStart={() => setHovered(true)}
+      onHoverEnd={() => setHovered(false)}
+      whileHover={{ y: -3, scale: 1.005 }}
+      whileTap={{ scale: 0.99 }}
+      style={{
+        width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: 0,
+        cursor: 'pointer', outline: 'none', borderRadius: 14,
+      }}
+    >
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 16,
+        padding: '16px 18px', borderRadius: 14,
+        background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.7)',
+        border: `1px solid ${hovered ? hoverBorder : isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
+        boxShadow: hovered
+          ? `0 8px 28px ${hoverGlow}, 0 0 0 1px ${hoverBorder}`
+          : isDark ? 'none' : '0 2px 8px rgba(0,0,0,0.04)',
+        transition: 'all 0.22s ease',
+      }}>
+        {/* Icon */}
+        <motion.div
+          animate={{ scale: hovered ? 1.1 : 1, rotate: hovered ? 6 : 0 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 20 }}
+          style={{
+            width: 52, height: 52, borderRadius: 16, flexShrink: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: iconBg, border: `1px solid ${iconBorder}`,
+            boxShadow: hovered ? `0 0 20px ${hoverGlow}` : `0 0 10px ${iconBg}`,
+          }}
+        >
+          <Icon size={24} style={{ color: iconColor }} />
+        </motion.div>
+
+        {/* Text */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{
+            fontSize: 14, fontWeight: 800, marginBottom: 3,
+            color: hovered ? iconColor : isDark ? '#f1f5f9' : '#0f172a',
+            transition: 'color 0.2s',
+          }}>
+            {title}
+          </p>
+          <p style={{
+            fontSize: 11, lineHeight: 1.5,
+            color: isDark ? '#475569' : '#94a3b8', margin: 0,
+          }}>
+            {desc}
+          </p>
+        </div>
+
+        {/* Arrow */}
+        <motion.div
+          animate={{ x: hovered ? 0 : -4, opacity: hovered ? 1 : 0 }}
+          transition={{ duration: 0.18 }}
+          style={{ flexShrink: 0 }}
+        >
+          <ArrowRight size={16} style={{ color: arrowColor }} />
+        </motion.div>
+      </div>
+    </motion.button>
   );
 };
 

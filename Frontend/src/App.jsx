@@ -2,12 +2,14 @@ import React, { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import { motion } from 'framer-motion';
 import Sidebar from './components/Sidebar';
 import Navbar  from './components/Navbar';
 import AppRoutes from './routes/AppRoutes';
 import { ScanProvider } from './context/ScanContext';
 import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
+import { SidebarProvider, useSidebar } from './context/SidebarContext';
 
 /** Scroll to top on every route change — prevents "blank page" after long pages */
 const ScrollToTop = () => {
@@ -47,9 +49,10 @@ class ErrorBoundary extends React.Component {
  *   /dashboard/*  → Protected layout (Sidebar + main content)
  */
 const AppShell = () => {
-  const { pathname } = useLocation();
-  const { isDark }   = useTheme();
-  const isPublic     = pathname === '/';
+  const { pathname }  = useLocation();
+  const { isDark }    = useTheme();
+  const { collapsed } = useSidebar();
+  const isPublic      = pathname === '/';
 
   if (isPublic) {
     return (
@@ -66,9 +69,13 @@ const AppShell = () => {
       ${isDark ? 'bg-[#0d0f17]' : 'bg-[#f0f2f8]'}`}>
       <ScrollToTop />
       <Sidebar />
-      <main className="ml-64 flex-1 overflow-x-hidden">
+      <motion.main
+        animate={{ marginLeft: collapsed ? 72 : 256 }}
+        transition={{ type: 'spring', stiffness: 320, damping: 32 }}
+        className="flex-1 overflow-x-hidden"
+      >
         <AppRoutes />
-      </main>
+      </motion.main>
     </div>
   );
 };
@@ -77,6 +84,7 @@ function App() {
   return (
     <AuthProvider>
       <ThemeProvider>
+        <SidebarProvider>
         <ScanProvider>
           <ErrorBoundary>
             <AppShell />
@@ -93,6 +101,7 @@ function App() {
             theme="colored"
           />
         </ScanProvider>
+        </SidebarProvider>
       </ThemeProvider>
     </AuthProvider>
   );
