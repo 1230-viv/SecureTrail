@@ -15,7 +15,6 @@ const NAV_ITEMS = [
   { icon: ScanLine,        label: 'New Scan',          path: '/scan',         description: 'Start A Security Scan' },
   { icon: Folder,          label: 'Repositories',      path: '/repositories', description: 'Manage Repos'          },
   { icon: History,         label: 'Scan History',      path: '/history',      description: 'Past Scan Results'     },
-  { icon: BookOpen,        label: 'Learning Insights', path: '/learning',     description: 'AI-Powered Tips'       },
   { icon: Sparkles,        label: 'AI Coach',          path: '/coach',        description: 'Ask Me Anything'       },
   { icon: Settings,        label: 'Settings',          path: null,            description: 'Preferences'           },
 ];
