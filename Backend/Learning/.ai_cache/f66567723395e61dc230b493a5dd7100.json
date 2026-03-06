@@ -1,0 +1,121 @@
+{
+  "learning_summary": "Your current health score is 51, indicating room for improvement, but the stable risk momentum is a positive sign. Focus on addressing critical and high-severity issues to enhance your security posture.",
+  "behavioral_insights": [
+    {
+      "pattern": "Hardcoded Secrets",
+      "habit": "Typing secrets directly into source files instead of using environment variables or a secrets manager.",
+      "recommendation": "Start using environment variables or a secrets manager for storing sensitive information."
+    },
+    {
+      "pattern": "Outdated Dependencies",
+      "habit": "Not regularly updating dependencies, leaving known vulnerabilities open.",
+      "recommendation": "Regularly review and update dependencies to prevent known vulnerabilities."
+    }
+  ],
+  "recurring_patterns": [],
+  "priority_roadmap": [
+    {
+      "rank": 1,
+      "category": "secret_management",
+      "reason": "Critical severity issues related to hardcoded secrets in Podfile.lock.",
+      "action": "Remove hardcoded secrets and use environment variables or a secrets manager.",
+      "estimated_time": "2 hours",
+      "score_improvement": 30
+    },
+    {
+      "rank": 2,
+      "category": "dependency",
+      "reason": "High severity issues with Axios dependency in package-lock.json and yarn.lock.",
+      "action": "Update Axios to a secure version.",
+      "estimated_time": "1 hour",
+      "score_improvement": 16
+    },
+    {
+      "rank": 3,
+      "category": "dependency",
+      "reason": "Medium severity issue with REXML dependency in Gemfile.lock.",
+      "action": "Update REXML to a secure version.",
+      "estimated_time": "1 hour",
+      "score_improvement": 3
+    },
+    {
+      "rank": 4,
+      "category": "secret_management",
+      "reason": "Preventing future hardcoded secrets.",
+      "action": "Implement a secrets management solution.",
+      "estimated_time": "1 day",
+      "score_improvement": 0
+    },
+    {
+      "rank": 5,
+      "category": "dependency",
+      "reason": "Maintaining up-to-date dependencies.",
+      "action": "Schedule regular dependency reviews.",
+      "estimated_time": "1 hour",
+      "score_improvement": 0
+    }
+  ],
+  "deep_dive": [
+    {
+      "finding_id": "c66768b4-21d3-4ef4-833e-5dad04fa01ac",
+      "what_happened": "A hardcoded secret was detected in Podfile.lock, potentially exposing access to various services.",
+      "why_it_matters": "This could lead to unauthorized access to sensitive operations.",
+      "secure_example_before": "var apiKey = '1c1a8a...';",
+      "secure_example_after": "var apiKey = process.env.API_KEY;",
+      "learning_takeaway": "Never hardcode secrets in source files.",
+      "business_impact": ""
+    },
+    {
+      "finding_id": "ce84e9c5-50d7-490f-8e74-a40ef18465ac",
+      "what_happened": "Another hardcoded secret was detected in Podfile.lock.",
+      "why_it_matters": "This could lead to further unauthorized access.",
+      "secure_example_before": "var apiKey = '217a87...';",
+      "secure_example_after": "var apiKey = process.env.ANOTHER_API_KEY;",
+      "learning_takeaway": "Always use environment variables for secrets.",
+      "business_impact": ""
+    },
+    {
+      "finding_id": "cc6f3483-e1ed-42b8-a6d6-a402f4602f7c",
+      "what_happened": "The Axios dependency is outdated and vulnerable.",
+      "why_it_matters": "This could lead to service disruption due to a TypeError when processing configuration objects.",
+      "secure_example_before": "axios version 0.30.2",
+      "secure_example_after": "axios version 0.30.3 or later",
+      "learning_takeaway": "Keep dependencies up-to-date to prevent known vulnerabilities.",
+      "business_impact": ""
+    },
+    {
+      "finding_id": "7633d7ba-a1cc-4cec-ba7b-c11b55643251",
+      "what_happened": "The Axios dependency is also outdated in yarn.lock.",
+      "why_it_matters": "Same vulnerability as in package-lock.json.",
+      "secure_example_before": "axios version 1.13.4",
+      "secure_example_after": "axios version 1.13.5 or later",
+      "learning_takeaway": "Ensure consistency across package managers.",
+      "business_impact": ""
+    },
+    {
+      "finding_id": "c1a3ff13-1b18-4fab-be28-430612f82ad7",
+      "what_happened": "The REXML dependency is vulnerable to a DoS vulnerability.",
+      "why_it_matters": "This could lead to service disruption when parsing XML.",
+      "secure_example_before": "REXML version 3.3.3 to 3.4.1",
+      "secure_example_after": "REXML version outside the vulnerable range",
+      "learning_takeaway": "Regularly review dependencies for known vulnerabilities.",
+      "business_impact": ""
+    }
+  ],
+  "maturity_explanation": {
+    "current_level": "developing",
+    "reasons": [
+      "Critical and high-severity issues indicate a developing maturity level.",
+      "Lack of secrets management and outdated dependencies."
+    ],
+    "to_advance": [
+      "Implement a secrets management solution.",
+      "Regularly update dependencies."
+    ],
+    "encouragement": "You're taking the first steps towards improving your security posture."
+  },
+  "risk_momentum_explanation": "Your risk momentum is stable, indicating that while there are significant security issues, they are not increasing in severity or number at this time.",
+  "exploit_simulations": [],
+  "source": "ai",
+  "_ts": 1772791707.1077204
+}

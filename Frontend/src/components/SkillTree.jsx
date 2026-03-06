@@ -11,6 +11,7 @@ import {
   Shield, Key, Globe, AlertTriangle, Package, Layers, TrendingUp, Loader2
 } from 'lucide-react';
 import { learningAPI } from '../services/api';
+import { useTheme } from '../context/ThemeContext';
 
 const DOMAIN_ICONS = {
   auth_authz:       Shield,
@@ -29,13 +30,15 @@ const LEVEL_LABELS = {
   5: 'Expert',
 };
 
-function DomainCard({ domain, compact }) {
+function DomainCard({ domain, compact, isDark }) {
   const Icon      = DOMAIN_ICONS[domain.id] || Shield;
   const pct       = domain.progress_pct ?? 0;
   const xpToNext  = domain.xp_to_next ?? 0;
 
   return (
-    <div className={`rounded-xl border border-white/10 bg-white/4 hover:bg-white/6 transition-all ${compact ? 'p-3' : 'p-4'}`}>
+    <div className={`rounded-xl border transition-all ${compact ? 'p-3' : 'p-4'} ${
+      isDark ? 'border-white/10 bg-white/4 hover:bg-white/6' : 'border-gray-200 bg-white hover:bg-gray-50'
+    }`}>
       {/* Header */}
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex items-center gap-2 min-w-0">
@@ -46,11 +49,15 @@ function DomainCard({ domain, compact }) {
             <Icon size={compact ? 13 : 15} style={{ color: domain.color }} />
           </div>
           <div className="min-w-0">
-            <p className={`font-semibold text-white/90 truncate ${compact ? 'text-xs' : 'text-sm'}`}>
+            <p className={`font-semibold truncate ${compact ? 'text-xs' : 'text-sm'} ${
+              isDark ? 'text-white/90' : 'text-gray-900'
+            }`}>
               {domain.label}
             </p>
             {!compact && (
-              <p className="text-[11px] text-white/40 mt-0.5">
+              <p className={`text-[11px] mt-0.5 ${
+                isDark ? 'text-white/40' : 'text-gray-500'
+              }`}>
                 {domain.description}
               </p>
             )}
@@ -63,7 +70,9 @@ function DomainCard({ domain, compact }) {
           >
             Lv.{domain.level}
           </p>
-          <p className="text-[10px] text-white/40">
+          <p className={`text-[10px] ${
+            isDark ? 'text-white/40' : 'text-gray-500'
+          }`}>
             {LEVEL_LABELS[domain.level] || 'Expert'}
           </p>
         </div>
@@ -71,7 +80,9 @@ function DomainCard({ domain, compact }) {
 
       {/* XP bar */}
       <div className="space-y-1">
-        <div className="h-1.5 rounded-full bg-white/8 overflow-hidden">
+        <div className={`h-1.5 rounded-full overflow-hidden ${
+          isDark ? 'bg-white/8' : 'bg-gray-200'
+        }`}>
           <div
             className="h-full rounded-full transition-all duration-700"
             style={{
@@ -80,7 +91,9 @@ function DomainCard({ domain, compact }) {
             }}
           />
         </div>
-        <div className="flex justify-between text-[10px] text-white/35">
+        <div className={`flex justify-between text-[10px] ${
+          isDark ? 'text-white/35' : 'text-gray-400'
+        }`}>
           <span>{domain.xp} XP</span>
           {xpToNext > 0 ? (
             <span>{xpToNext} XP to next level</span>
@@ -102,6 +115,7 @@ function DomainCard({ domain, compact }) {
 }
 
 export default function SkillTree({ repoName, compact = false }) {
+  const { isDark } = useTheme();
   const [data, setData]       = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState('');
@@ -119,7 +133,9 @@ export default function SkillTree({ repoName, compact = false }) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
-        <Loader2 size={20} className="animate-spin text-white/30" />
+        <Loader2 size={20} className={`animate-spin ${
+          isDark ? 'text-white/30' : 'text-gray-400'
+        }`} />
       </div>
     );
   }
@@ -129,7 +145,9 @@ export default function SkillTree({ repoName, compact = false }) {
   }
 
   if (!data?.domains) {
-    return <p className="text-sm text-white/40 py-4">No skill data yet. Complete a scan to start leveling.</p>;
+    return <p className={`text-sm py-4 ${
+      isDark ? 'text-white/40' : 'text-gray-500'
+    }`}>No skill data yet. Complete a scan to start leveling.</p>;
   }
 
   const { domains, total_xp } = data;
@@ -138,15 +156,21 @@ export default function SkillTree({ repoName, compact = false }) {
     <div className="space-y-3">
       {!compact && (
         <div className="flex items-center justify-between mb-1">
-          <h3 className="text-sm font-bold text-white/80">Skill Tree</h3>
-          <div className="text-xs text-white/40">
-            Total: <span className="text-white/70 font-bold">{total_xp} XP</span>
+          <h3 className={`text-sm font-bold ${
+            isDark ? 'text-white/80' : 'text-gray-900'
+          }`}>Skill Tree</h3>
+          <div className={`text-xs ${
+            isDark ? 'text-white/40' : 'text-gray-500'
+          }`}>
+            Total: <span className={`font-bold ${
+              isDark ? 'text-white/70' : 'text-gray-700'
+            }`}>{total_xp} XP</span>
           </div>
         </div>
       )}
       <div className={`grid gap-3 ${compact ? 'grid-cols-2' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'}`}>
         {domains.map(d => (
-          <DomainCard key={d.id} domain={d} compact={compact} />
+          <DomainCard key={d.id} domain={d} compact={compact} isDark={isDark} />
         ))}
       </div>
     </div>

@@ -11,6 +11,7 @@ import {
   Loader2, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { learningAPI } from '../services/api';
+import { useTheme } from '../context/ThemeContext';
 
 const TREND_CONFIG = {
   Improving:  { Icon: TrendingDown, color: 'text-emerald-400', label: 'Improving' },
@@ -31,7 +32,7 @@ function confidenceLabel(score) {
   return 'Low Confidence';
 }
 
-function HabitCard({ habit }) {
+function HabitCard({ habit, isDark }) {
   const [expanded, setExpanded] = useState(false);
   const trendCfg = TREND_CONFIG[habit.trend] || TREND_CONFIG.Stable;
   const { Icon: TrendIcon } = trendCfg;
@@ -39,15 +40,21 @@ function HabitCard({ habit }) {
   const color = confidenceColor(score);
 
   return (
-    <div className="rounded-xl border border-white/10 bg-white/4 overflow-hidden">
+    <div className={`rounded-xl border overflow-hidden ${
+      isDark ? 'border-white/10 bg-white/4' : 'border-gray-200 bg-white'
+    }`}>
       <button
-        className="w-full flex items-start justify-between gap-3 p-4 text-left hover:bg-white/4 transition-colors"
+        className={`w-full flex items-start justify-between gap-3 p-4 text-left transition-colors ${
+          isDark ? 'hover:bg-white/4' : 'hover:bg-gray-50'
+        }`}
         onClick={() => setExpanded(v => !v)}
       >
         {/* Left */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <span className="text-sm font-semibold text-white/90 truncate">{habit.pattern_name}</span>
+            <span className={`text-sm font-semibold truncate ${
+              isDark ? 'text-white/90' : 'text-gray-900'
+            }`}>{habit.pattern_name}</span>
             <span
               className="text-[10px] font-bold px-2 py-0.5 rounded-full border"
               style={{ color, borderColor: `${color}40`, background: `${color}15` }}
@@ -55,7 +62,9 @@ function HabitCard({ habit }) {
               {confidenceLabel(score)}
             </span>
           </div>
-          <div className="flex items-center gap-3 text-xs text-white/45">
+          <div className={`flex items-center gap-3 text-xs ${
+            isDark ? 'text-white/45' : 'text-gray-500'
+          }`}>
             <span className={`flex items-center gap-1 font-medium ${trendCfg.color}`}>
               <TrendIcon size={11} />
               {trendCfg.label}
@@ -77,7 +86,7 @@ function HabitCard({ habit }) {
         <div className="shrink-0 flex flex-col items-center gap-0.5">
           <div className="relative w-11 h-11">
             <svg viewBox="0 0 36 36" className="rotate-[-90deg]">
-              <circle cx="18" cy="18" r="15.9" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="3" />
+              <circle cx="18" cy="18" r="15.9" fill="none" stroke={isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'} strokeWidth="3" />
               <circle
                 cx="18" cy="18" r="15.9"
                 fill="none"
@@ -91,28 +100,37 @@ function HabitCard({ habit }) {
               {score}
             </span>
           </div>
-          <span className="text-[9px] text-white/35">confidence</span>
-          {expanded ? <ChevronUp size={11} className="text-white/30 mt-1" /> : <ChevronDown size={11} className="text-white/30 mt-1" />}
+          <span className={`text-[9px] ${
+            isDark ? 'text-white/35' : 'text-gray-400'
+          }`}>confidence</span>
+          {expanded ? 
+            <ChevronUp size={11} className={isDark ? 'text-white/30 mt-1' : 'text-gray-400 mt-1'} /> : 
+            <ChevronDown size={11} className={isDark ? 'text-white/30 mt-1' : 'text-gray-400 mt-1'} />
+          }
         </div>
       </button>
 
       {expanded && (
-        <div className="px-4 pb-4 border-t border-white/8 space-y-3 pt-3">
+        <div className={`px-4 pb-4 border-t space-y-3 pt-3 ${
+          isDark ? 'border-white/8' : 'border-gray-200'
+        }`}>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <Stat label="Recurrence Rate" value={`${Math.round(habit.recurrence_rate * 100)}%`} />
-            <Stat label="Scans Detected" value={`${habit.occurrence_count}/${habit.scan_count}`} />
+            <Stat label="Recurrence Rate" value={`${Math.round(habit.recurrence_rate * 100)}%`} isDark={isDark} />
+            <Stat label="Scans Detected" value={`${habit.occurrence_count}/${habit.scan_count}`} isDark={isDark} />
             {habit.first_detected_at && (
-              <Stat label="First Detected" value={fmtDate(habit.first_detected_at)} />
+              <Stat label="First Detected" value={fmtDate(habit.first_detected_at)} isDark={isDark} />
             )}
             {habit.last_detected_at && (
-              <Stat label="Last Detected" value={fmtDate(habit.last_detected_at)} />
+              <Stat label="Last Detected" value={fmtDate(habit.last_detected_at)} isDark={isDark} />
             )}
           </div>
 
           {/* Count history sparkline */}
           {habit.count_history?.length > 1 && (
             <div className="space-y-1">
-              <p className="text-[10px] text-white/35 uppercase tracking-wide font-semibold">Finding Count Per Scan</p>
+              <p className={`text-[10px] uppercase tracking-wide font-semibold ${
+                isDark ? 'text-white/35' : 'text-gray-400'
+              }`}>Finding Count Per Scan</p>
               <Sparkline values={habit.count_history} color={color} />
             </div>
           )}
@@ -122,11 +140,17 @@ function HabitCard({ habit }) {
   );
 }
 
-function Stat({ label, value }) {
+function Stat({ label, value, isDark }) {
   return (
-    <div className="bg-white/4 rounded-lg px-3 py-2">
-      <p className="text-[10px] text-white/40 font-medium">{label}</p>
-      <p className="text-sm font-bold text-white/85 mt-0.5">{value}</p>
+    <div className={`rounded-lg px-3 py-2 ${
+      isDark ? 'bg-white/4' : 'bg-gray-50'
+    }`}>
+      <p className={`text-[10px] font-medium ${
+        isDark ? 'text-white/40' : 'text-gray-500'
+      }`}>{label}</p>
+      <p className={`text-sm font-bold mt-0.5 ${
+        isDark ? 'text-white/85' : 'text-gray-900'
+      }`}>{value}</p>
     </div>
   );
 }
@@ -168,6 +192,7 @@ function fmtDate(iso) {
 }
 
 export default function HabitConfidencePanel({ repoName }) {
+  const { isDark } = useTheme();
   const [data, setData]       = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState('');
@@ -183,7 +208,9 @@ export default function HabitConfidencePanel({ repoName }) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
-        <Loader2 size={20} className="animate-spin text-white/30" />
+        <Loader2 size={20} className={`animate-spin ${
+          isDark ? 'text-white/30' : 'text-gray-400'
+        }`} />
       </div>
     );
   }
@@ -193,7 +220,9 @@ export default function HabitConfidencePanel({ repoName }) {
   const habits = data?.habits || [];
   if (!habits.length) {
     return (
-      <p className="text-sm text-white/40 py-4">
+      <p className={`text-sm py-4 ${
+        isDark ? 'text-white/40' : 'text-gray-500'
+      }`}>
         No persistent habits detected yet. Run multiple scans to see patterns.
       </p>
     );
@@ -202,11 +231,15 @@ export default function HabitConfidencePanel({ repoName }) {
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-sm font-bold text-white/80">Habit Patterns</h3>
-        <span className="text-xs text-white/35">{habits.length} habit{habits.length !== 1 ? 's' : ''} detected</span>
+        <h3 className={`text-sm font-bold ${
+          isDark ? 'text-white/80' : 'text-gray-900'
+        }`}>Habit Patterns</h3>
+        <span className={`text-xs ${
+          isDark ? 'text-white/35' : 'text-gray-500'
+        }`}>{habits.length} habit{habits.length !== 1 ? 's' : ''} detected</span>
       </div>
       {habits.map(h => (
-        <HabitCard key={`${h.trigger_category}`} habit={h} />
+        <HabitCard key={`${h.trigger_category}`} habit={h} isDark={isDark} />
       ))}
     </div>
   );
