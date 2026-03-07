@@ -70,7 +70,7 @@ def analyze_rate_limiting(project_dir: Path, job_id: str) -> List[NormalizedVuln
                         title=f"No rate limiting on {endpoint_type} endpoint",
                         description=(
                             f"The {endpoint_type} endpoint in {fpath.name} has no rate limiting, "
-                            f"enabling brute-force and credential stuffing attacks."
+                            f"enabling brute-force and credential stuffing attempts."
                         ),
                         file=rel,
                         line=line_num,
@@ -82,7 +82,7 @@ def analyze_rate_limiting(project_dir: Path, job_id: str) -> List[NormalizedVuln
                         metadata={
                             "endpoint_type": endpoint_type,
                             "is_public_endpoint": True,
-                            "automated_exploit": True,
+                            "automated_misuse": True,
                         },
                     ))
 

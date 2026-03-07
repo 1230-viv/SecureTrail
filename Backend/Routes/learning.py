@@ -482,7 +482,10 @@ async def get_vuln_guide(
         vg_res = await db.execute(vg_stmt)
         vg_cached = vg_res.scalar_one_or_none()
         if vg_cached is not None:
-            return vg_cached.payload
+            cached_payload = vg_cached.payload
+            # Invalidate stale caches that lack per-finding coaching_reviews
+            if isinstance(cached_payload, dict) and "coaching_reviews" in cached_payload:
+                return cached_payload
 
     result_json = job.result_json or {}
     all_findings = _get_findings(result_json)
@@ -524,68 +527,56 @@ async def get_vuln_guide(
     checklist    = knowledge.get("checklist", [])
     cwe_refs     = knowledge.get("cwe_refs", [])
 
-    # ── AI guide (if AI_ENABLED) ─────────────────────────────────────────────
+    # ── AI per-finding coaching (if AI_ENABLED) ────────────────────────────────
     ai_guide: dict[str, Any] = {}
+    coaching_reviews: list[dict] = []
     source = "static"
 
     if _AI_ENABLED and cat_findings:
         try:
-            from Engines.ai.bedrock_client import invoke_chat
+            from Learning.ai_mentor import (
+                _build_coach_prompt,
+                _call_bedrock_coach,
+                _build_coach_fallback,
+                _COACH_SYSTEM_PROMPT,
+            )
 
-            # Sample up to 5 findings as context
-            sample = cat_findings[:5]
-            file_lines = "\n".join(
-                f"  • {f.get('file','?')}:{f.get('line','?')} "
-                f"[{(f.get('severity') or 'info').upper()}] "
-                f"{f.get('title') or f.get('rule_id','?')}"
-                + (f"\n    Code: {(f.get('code_snippet','') or '')[:120]}" if f.get('code_snippet') else "")
-                for f in sample
-            )
-            prompt = (
-                f"A developer is learning about the security category: **{label}** ({category}).\n"
-                f"Their code has {len(cat_findings)} finding(s) of this type in the repository '"
-                f"{job.repository_name}'.\n\n"
-                f"Sample affected locations:\n{file_lines}\n\n"
-                "Produce a structured educational guide using **exactly** these section headers:\n\n"
-                f"## What is {label}?\n"
-                "Brief explanation (3-4 sentences) of what this vulnerability class is.\n\n"
-                "## Why it matters\n"
-                "Business and security impact in plain language. No scare tactics — focus on concrete risk.\n\n"
-                "## Secure Code Template\n"
-                "Provide a ready-to-use code template the developer can adapt directly. "
-                "Use a fenced code block with the correct language. Label it '# ✅ Secure template'.\n\n"
-                "## Common Mistake Patterns\n"
-                "List 3-5 specific coding patterns that trigger this category (what developers accidentally write). "
-                "For each mistake show a short insecure snippet and one-line explanation.\n\n"
-                "## How to fix it\n"
-                "Step-by-step remediation specific to the findings above. "
-                "Reference actual file names if possible.\n\n"
-                "## How to test this fix\n"
-                "Provide 2-3 concrete testing steps (unit test assertion, curl command, or tool invocation) "
-                "to verify the fix was applied correctly.\n\n"
-                "## Quick checklist\n"
-                "5-7 bullet points a developer can use as a pre-commit checklist.\n\n"
-                "Rules: use fenced markdown code blocks (```python etc). "
-                "Do NOT use 'attacker' — use 'unauthorised actor'. "
-                "Do NOT use 'exploit' — use 'misuse'. "
-                "Keep total response under 1400 tokens."
-            )
-            system = (
-                "You are a senior application security educator embedded in SecureTrail. "
-                "Write educational, constructive content for developers learning to fix their security issues. "
-                "Use professional language. "
-                "Never use the words 'attacker', 'exploit', 'hack', or 'penetration'. "
-                "Replace 'attacker' with 'unauthorised actor', 'exploit' with 'misuse', "
-                "'penetration' with 'security evaluation', 'vulnerability' with 'security issue' where natural. "
-                "Outputs must be deterministic, structured, and developer-focused. "
-                "Always emit valid markdown with fenced code blocks. "
-                "Do not include preamble or 'Sure, here is...' phrases — start directly with the first section header."
-            )
-            raw = invoke_chat([{"role": "user", "content": prompt}], system)
-            ai_guide = {"full_guide": raw}
+            # Generate per-finding coaching for up to 8 findings
+            sample = cat_findings[:8]
+            fallbacks = _build_coach_fallback(sample)
+
+            for i, finding in enumerate(sample):
+                try:
+                    prompt = _build_coach_prompt(
+                        finding=finding,
+                        project_name=job.repository_name,
+                        recurring_patterns=[],
+                        index=i,
+                    )
+                    coach_item = _call_bedrock_coach(prompt)
+                    coaching_reviews.append(coach_item)
+                except Exception as exc:
+                    logger.warning(
+                        "Vuln guide per-finding coach failed for finding %d/%d: %s — using fallback",
+                        i + 1, len(sample), exc,
+                    )
+                    coaching_reviews.append(fallbacks[i])
+
             source = "ai"
+            logger.info(
+                "Vuln guide coaching complete: %d/%d findings coached for %s/%s",
+                len(coaching_reviews), len(sample), job_id, category,
+            )
         except Exception as exc:
-            logger.warning("Vuln guide AI call failed for %s/%s: %s", job_id, category, exc)
+            logger.warning("Vuln guide AI coaching failed for %s/%s: %s", job_id, category, exc)
+
+    # ── Deterministic fallback when AI is disabled ────────────────────────────
+    if not coaching_reviews and cat_findings:
+        try:
+            from Learning.ai_mentor import _build_coach_fallback
+            coaching_reviews = _build_coach_fallback(cat_findings[:8])
+        except Exception:
+            pass
 
     vg_response = {
         "job_id":      job_id,
@@ -604,7 +595,8 @@ async def get_vuln_guide(
         "code_example": code_ex,
         "checklist":   checklist,
         "cwe_refs":    cwe_refs,
-        # AI content (empty dict if AI disabled / failed)
+        # Per-finding coaching reviews (empty list if AI disabled / failed)
+        "coaching_reviews": coaching_reviews,
         "ai_guide":    ai_guide,
         "source":      source,
     }

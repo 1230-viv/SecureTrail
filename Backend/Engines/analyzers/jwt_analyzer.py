@@ -78,7 +78,7 @@ def analyze_jwt(project_dir: Path, job_id: str) -> List[NormalizedVulnerability]
                     title="JWT signature verification disabled",
                     description=(
                         "jwt.decode() is called with signature verification disabled, "
-                        "allowing attacker-crafted tokens to be accepted."
+                        "allowing forged or tampered tokens to be accepted."
                     ),
                     file=str(fpath.relative_to(project_dir)),
                     line=line_num,
@@ -86,7 +86,7 @@ def analyze_jwt(project_dir: Path, job_id: str) -> List[NormalizedVulnerability]
                     confidence=Confidence.HIGH,
                     source=ScannerSource.INTERNAL_JWT,
                     owasp_id="A07:2021",
-                    metadata={"automated_exploit": True},
+                    metadata={"automated_misuse": True},
                 ))
 
         # 3. Hardcoded JWT secret
@@ -98,7 +98,7 @@ def analyze_jwt(project_dir: Path, job_id: str) -> List[NormalizedVulnerability]
                 title="JWT secret hardcoded in source code",
                 description=(
                     "The JWT signing secret appears to be hardcoded. "
-                    "An attacker who reads the source code can forge tokens."
+                    "Anyone with access to the source code could forge valid tokens."
                 ),
                 file=str(fpath.relative_to(project_dir)),
                 line=line_num,

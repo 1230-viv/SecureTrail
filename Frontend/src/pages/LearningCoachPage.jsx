@@ -354,7 +354,7 @@ function HabitEvidenceCards({ habits, loading }) {
 }
 
 // ── Deep Dive v4 — per-finding AI coach with real code fixes ─────────────────
-function DeepDiveV3({ deepDive, loading }) {
+function DeepDiveV4({ deepDive, loading }) {
   const [expanded, setExpanded] = useState({ 0: true });
   const [copied, setCopied]     = useState({});
 
@@ -459,9 +459,12 @@ function DeepDiveV3({ deepDive, loading }) {
 
                 {/* Coach explanation banner */}
                 {coachExpl && (
-                  <div className="flex items-start gap-2.5 p-3 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-700/40">
-                    <Icon d={IC.brain} size={15} color="#6366f1" className="flex-shrink-0 mt-0.5" />
-                    <p className="text-sm text-indigo-800 dark:text-indigo-200 leading-relaxed">{coachExpl}</p>
+                  <div className="flex items-start gap-2.5 p-3.5 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-700/40">
+                    <Icon d={IC.brain} size={16} color="#6366f1" className="flex-shrink-0 mt-0.5" />
+                    <div>
+                      <span className="text-xs font-bold text-indigo-700 dark:text-indigo-400 uppercase tracking-wide block mb-1">Coach Explanation</span>
+                      <p className="text-sm text-indigo-800 dark:text-indigo-200 leading-relaxed">{coachExpl}</p>
+                    </div>
                   </div>
                 )}
 
@@ -469,7 +472,7 @@ function DeepDiveV3({ deepDive, loading }) {
                 {whatIsWrong && (
                   <div>
                     <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide flex items-center gap-1.5 mb-1.5">
-                      <Icon d={IC.alertTriangle} size={12} color="#f97316" />What's Wrong
+                      <Icon d={IC.alertTriangle} size={12} color="#f97316" />What You Did Wrong
                     </span>
                     <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{whatIsWrong}</p>
                   </div>
@@ -487,11 +490,11 @@ function DeepDiveV3({ deepDive, loading }) {
 
                 {/* Security impact */}
                 {securityImpact && (
-                  <div className="p-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700/40 rounded-xl">
-                    <span className="text-xs font-bold text-orange-700 dark:text-orange-400 uppercase tracking-wide flex items-center gap-1.5 mb-1">
+                  <div className="p-3.5 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700/40 rounded-xl">
+                    <span className="text-xs font-bold text-orange-700 dark:text-orange-400 uppercase tracking-wide flex items-center gap-1.5 mb-1.5">
                       <Icon d={IC.flame} size={12} color="#f97316" />Security Impact
                     </span>
-                    <p className="text-xs text-orange-800 dark:text-orange-200 leading-relaxed">{securityImpact}</p>
+                    <p className="text-sm text-orange-800 dark:text-orange-200 leading-relaxed">{securityImpact}</p>
                   </div>
                 )}
 
@@ -500,14 +503,14 @@ function DeepDiveV3({ deepDive, loading }) {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {insecureCode && (
                       <div>
-                        <span className="text-xs font-bold text-red-500 uppercase tracking-wide mb-1.5 block">❌ Insecure Code</span>
+                        <span className="text-xs font-bold text-red-500 uppercase tracking-wide mb-1.5 block">❌ Insecure Code Pattern</span>
                         <pre className="text-xs bg-red-50 dark:bg-red-950/30 text-red-800 dark:text-red-300 p-3 rounded-xl overflow-auto max-h-48 border border-red-200 dark:border-red-900/50 whitespace-pre-wrap font-mono leading-relaxed">{insecureCode}</pre>
                       </div>
                     )}
                     {secureCode && (
                       <div>
                         <div className="flex items-center justify-between mb-1.5">
-                          <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">✅ Secure Fix</span>
+                          <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">✅ Secure Implementation</span>
                           <button
                             onClick={() => copyCode(secureCode, `${i}-fix`)}
                             className="text-[10px] font-semibold px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-700/40 hover:bg-emerald-200 dark:hover:bg-emerald-900/50 transition-colors">
@@ -1122,7 +1125,7 @@ function CategoryDetailView({ guide, loading, onBack, onMarkLearned, isLearned, 
   if (!guide) return null;
 
   const { label, color, total, sev_counts = {}, findings = [], source,
-          ai_guide = {}, plain_what, plain_why, plain_fix, code_example,
+          ai_guide = {}, coaching_reviews = [], plain_what, plain_why, plain_fix, code_example,
           checklist, cwe_refs } = guide;
 
   const filesTabLabel = `Affected Files (${findings.length}${total > findings.length ? ` of ${total}` : ''})`;
@@ -1184,92 +1187,52 @@ function CategoryDetailView({ guide, loading, onBack, onMarkLearned, isLearned, 
           {/* Learn & Fix tab */}
           {guideTab === 'learn' && (
             <div className="space-y-6">
-              {/* Findings in your code section */}
-              {findings.length > 0 && (
-                <div className="bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/20 rounded-2xl border border-orange-200 dark:border-orange-800/40 p-6">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 rounded-xl bg-orange-500/10 dark:bg-orange-500/20 flex items-center justify-center">
-                      <Icon d={IC.alertTriangle} size={20} color="#f97316" />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-slate-900 dark:text-white text-base">
-                        Issues Found in Your Code
-                      </h3>
-                      <p className="text-xs text-slate-600 dark:text-slate-400">
-                        {findings.length} location{findings.length !== 1 ? 's' : ''} where this vulnerability was detected
-                      </p>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    {findings.slice(0, 10).map((f, i) => {
-                      const lineNum = f.line || f.line_start;
-                      const endLine = f.line_end;
-                      const lineDisplay = lineNum 
-                        ? (endLine && endLine !== lineNum ? `Lines ${lineNum}-${endLine}` : `Line ${lineNum}`)
-                        : null;
-                      
-                      return (
-                        <div key={i} className="bg-white dark:bg-[#1a1d27] rounded-xl border border-orange-200 dark:border-white/10 p-4">
-                          <div className="flex items-start justify-between gap-3 mb-3">
-                            <div className="flex-1 min-w-0 space-y-2">
-                              <div className="flex items-center gap-2">
-                                <code className="text-sm font-mono text-indigo-600 dark:text-indigo-400 truncate">
-                                  {f.file || `Finding ${i+1}`}
-                                </code>
-                              </div>
-                              <div className="flex items-center gap-2 flex-wrap">
-                                {f.severity && (
-                                  <span className="text-xs font-bold px-2 py-0.5 rounded flex-shrink-0"
-                                    style={{ background: `${SEV_COLORS[f.severity]}20`, color: SEV_COLORS[f.severity] }}>
-                                    {f.severity.toUpperCase()}
-                                  </span>
-                                )}
-                                {lineDisplay && (
-                                  <span className="text-xs font-semibold text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 px-2 py-0.5 rounded border border-orange-200 dark:border-orange-700/40">
-                                    {lineDisplay}
-                                  </span>
-                                )}
-                              </div>
-                              {f.title && (
-                                <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                                  {f.title}
-                                </p>
-                              )}
-                              {f.message && (
-                                <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-                                  {f.message}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                          {f.code_snippet && (
-                            <div className="mt-3">
-                              <pre className="text-xs p-3 rounded-lg bg-slate-50 dark:bg-black/30 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300 font-mono overflow-x-auto whitespace-pre-wrap">
-{f.code_snippet}
-                              </pre>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                    {findings.length > 10 && (
-                      <p className="text-xs text-slate-500 dark:text-slate-400 text-center pt-2">
-                        Showing 10 of {findings.length} findings. View all in the "Affected Files" tab.
-                      </p>
+              {/* Per-finding coaching reviews (from AI or deterministic fallback) */}
+              {coaching_reviews.length > 0 ? (
+                <div>
+                  <div className="flex items-center gap-2 mb-4">
+                    <Icon d={IC.brain} size={16} color="#6366f1" />
+                    <span className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                      AI Security Coach — {coaching_reviews.length} Coaching {coaching_reviews.length !== 1 ? 'Reviews' : 'Review'}
+                    </span>
+                    {source === 'ai' && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 border border-violet-300 dark:border-violet-700/40 font-semibold">
+                        AI personalised
+                      </span>
                     )}
                   </div>
+                  <DeepDiveV4 deepDive={coaching_reviews} loading={false} />
                 </div>
-              )}
-
-              {/* Educational content section */}
-              <div className="bg-slate-50 dark:bg-[#1a1d27] rounded-2xl border border-slate-200 dark:border-white/10 p-6">
-                {ai_guide?.full_guide
-                  ? <div className="prose-sm text-sm text-slate-600 dark:text-slate-300 leading-relaxed space-y-1">
-                      {renderMarkdown(ai_guide.full_guide)}
+              ) : (
+                /* Fallback: show findings + static guide when no coaching reviews */
+                <>
+                  {findings.length > 0 && (
+                    <div className="bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/20 rounded-2xl border border-orange-200 dark:border-orange-800/40 p-6">
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="w-10 h-10 rounded-xl bg-orange-500/10 dark:bg-orange-500/20 flex items-center justify-center">
+                          <Icon d={IC.alertTriangle} size={20} color="#f97316" />
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-slate-900 dark:text-white text-base">
+                            Issues Found in Your Code
+                          </h3>
+                          <p className="text-xs text-slate-600 dark:text-slate-400">
+                            {findings.length} location{findings.length !== 1 ? 's' : ''} detected
+                          </p>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        {findings.slice(0, 10).map((f, i) => (
+                          <FindingRow key={i} finding={f} idx={i} />
+                        ))}
+                      </div>
                     </div>
-                  : <StaticGuide guide={{ plain_what, plain_why, plain_fix, code_example, checklist, cwe_refs }} />
-                }
-              </div>
+                  )}
+                  <div className="bg-slate-50 dark:bg-[#1a1d27] rounded-2xl border border-slate-200 dark:border-white/10 p-6">
+                    <StaticGuide guide={{ plain_what, plain_why, plain_fix, code_example, checklist, cwe_refs }} />
+                  </div>
+                </>
+              )}
             </div>
           )}
 
@@ -1564,7 +1527,7 @@ function ReportView({
           </Card>
           <Card>
             <h3 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2 mb-3">
-              <Icon d={IC.brain} size={15} color="#6366f1" />Coaching Reviews
+              <Icon d={IC.brain} size={15} color="#6366f1" />AI Security Coach
               {aiDeepDive.length > 0 && (
                 <span className="ml-auto flex items-center gap-1.5">
                   <span className="text-xs text-slate-400 dark:text-slate-500">{aiDeepDive.length} {aiDeepDive.length !== 1 ? 'reviews' : 'review'}</span>
@@ -1576,7 +1539,7 @@ function ReportView({
                 </span>
               )}
             </h3>
-            <DeepDiveV3 deepDive={aiDeepDive} loading={loadingInsights} />
+            <DeepDiveV4 deepDive={aiDeepDive} loading={loadingInsights} />
           </Card>
           <Card>
             <h3 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2 mb-3">

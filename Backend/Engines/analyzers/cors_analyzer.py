@@ -109,7 +109,7 @@ def analyze_cors(project_dir: Path, job_id: str) -> List[NormalizedVulnerability
                 title="CORS origin reflected from request header without whitelist validation",
                 description=(
                     "The server echoes back the Origin header without checking against "
-                    "an allowlist, permitting any attacker-controlled origin."
+                    "an allowlist, permitting any externally controlled origin to make requests."
                 ),
                 file=rel,
                 line=line_num,
@@ -127,7 +127,7 @@ def analyze_cors(project_dir: Path, job_id: str) -> List[NormalizedVulnerability
                 type="cors-allow-all-methods",
                 category=VulnerabilityCategory.CORS,
                 title="CORS allows all HTTP methods",
-                description="Allowing all HTTP methods via '*' expands the attack surface unnecessarily.",
+                description="Allowing all HTTP methods via '*' expands the exposure surface unnecessarily.",
                 file=rel,
                 line=line_num,
                 severity=Severity.LOW,
