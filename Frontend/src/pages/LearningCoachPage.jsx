@@ -249,14 +249,27 @@ function AIMentorBanner({ summary, source, cached, aiError, loading }) {
       <Skeleton h="h-4" w="w-3/4" />
     </div>
   );
-  const isPowered = source === 'ai';
+
+  // v4 source values: 'ai' | 'deterministic' | 'clean'
+  const sourceConfig = {
+    ai:            { label: 'Per-Finding AI Coach · Llama 4 Maverick', color: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300' },
+    deterministic: { label: 'Deterministic Analysis',                  color: 'bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300' },
+    clean:         { label: 'Clean Codebase ✓',                        color: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' },
+  };
+  const cfg = sourceConfig[source] || sourceConfig.deterministic;
+
   return (
     <div>
       <div className="flex items-center gap-2 mb-2 flex-wrap">
-        <div className="flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-semibold bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300">
+        <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-semibold ${cfg.color}`}>
           <Icon d={IC.brain} size={13} />
-          {isPowered ? 'AWS Bedrock — Amazon Nova Pro' : 'Deterministic Analysis'}
+          {cfg.label}
         </div>
+        {source === 'ai' && (
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/8 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-white/10">
+            Overview · deterministic
+          </span>
+        )}
         {cached && <Chip label="Cached" color="#6366f1" />}
         {aiError && <Chip label="AI unavailable — fallback used" color="#ef4444" />}
       </div>
@@ -1539,8 +1552,17 @@ function ReportView({
           </Card>
           <Card>
             <h3 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2 mb-3">
-              <Icon d={IC.target} size={15} color="#6366f1" />Deep Dive Analysis
-              {aiDeepDive.length > 0 && <span className="ml-auto text-xs text-slate-400 dark:text-slate-500">{aiDeepDive.length} findings</span>}
+              <Icon d={IC.brain} size={15} color="#6366f1" />Per-Finding Coach Analysis
+              {aiDeepDive.length > 0 && (
+                <span className="ml-auto flex items-center gap-1.5">
+                  <span className="text-xs text-slate-400 dark:text-slate-500">{aiDeepDive.length} finding{aiDeepDive.length !== 1 ? 's' : ''}</span>
+                  {insights?.source === 'ai' && (
+                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300">
+                      AI coached
+                    </span>
+                  )}
+                </span>
+              )}
             </h3>
             <DeepDiveV3 deepDive={aiDeepDive} loading={loadingInsights} />
           </Card>
