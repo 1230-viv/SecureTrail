@@ -26,11 +26,11 @@ html.dark body {
 
 /* Smooth scrollbar for dark mode */
 html.dark ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 html.dark ::-webkit-scrollbar-track {
-  background: #0d0f17;
+  background: transparent;
 }
 html.dark ::-webkit-scrollbar-thumb {
   background: #2a2d3e;
@@ -38,6 +38,36 @@ html.dark ::-webkit-scrollbar-thumb {
 }
 html.dark ::-webkit-scrollbar-thumb:hover {
   background: #3a3d4e;
+}
+
+/* Light mode thin scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* Firefox thin scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db transparent;
+}
+html.dark * {
+  scrollbar-color: #2a2d3e transparent;
+}
+
+/* Code block font stack */
+pre, code, .font-mono {
+  font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Code', 'Menlo', 'Consolas', monospace;
 }
 
 /* ── SecureTrail Custom Animations ─────────────────────────────────────────── */
