@@ -1,0 +1,14 @@
+{
+  "total_xp": 32,
+  "history": [
+    {
+      "scan_id": "4c49a9fa-1a81-40fb-97ae-76c488d49a6e",
+      "xp_gained": 32,
+      "total_after": 32,
+      "resolved": {
+        "high": 3,
+        "low": 1
+      }
+    }
+  ]
+}
