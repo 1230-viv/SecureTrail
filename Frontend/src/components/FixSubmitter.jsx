@@ -49,12 +49,15 @@ export default function FixSubmitter({
   label,
   originalIssue = '',
   onVerified,
+  secureExample = null,  // { bad: string, good: string }
+  securePattern = '',    // description of secure pattern
 }) {
   const [open, setOpen]         = useState(false);
   const [code, setCode]         = useState('');
   const [loading, setLoading]   = useState(false);
   const [result, setResult]     = useState(null);
   const [error, setError]       = useState('');
+  const [showAnswer, setShowAnswer] = useState(false);
   const textareaRef             = useRef(null);
 
   const handleSubmit = async () => {
@@ -156,6 +159,47 @@ export default function FixSubmitter({
             <div className="flex items-center gap-2 text-red-400 text-xs bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
               <AlertTriangle size={13} />
               {error}
+            </div>
+          )}
+
+          {/* Show Answer section - available before submission */}
+          {(secureExample || securePattern) && (
+            <div className="border-t border-white/10 pt-3 mt-2">
+              <button
+                onClick={() => setShowAnswer(!showAnswer)}
+                className="flex items-center gap-2 text-xs font-semibold text-emerald-400 hover:text-emerald-300 transition-colors"
+              >
+                {showAnswer ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                {showAnswer ? 'Hide' : 'Show'} Secure Solution
+              </button>
+              
+              {showAnswer && (
+                <div className="mt-3 space-y-3">
+                  {securePattern && (
+                    <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3">
+                      <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 mb-1.5">✅ Secure Pattern:</p>
+                      <p className="text-xs text-slate-900 dark:text-emerald-100/90 leading-relaxed">{securePattern}</p>
+                    </div>
+                  )}
+                  
+                  {secureExample && (
+                    <div className="grid grid-cols-1 gap-2">
+                      {secureExample.bad && (
+                        <div>
+                          <p className="text-[10px] font-bold text-red-600 dark:text-red-400 uppercase tracking-wide mb-1.5">❌ Insecure</p>
+                          <pre className="text-xs p-3 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-300 dark:border-red-500/30 text-slate-900 dark:text-red-200 font-mono overflow-x-auto whitespace-pre-wrap">{secureExample.bad}</pre>
+                        </div>
+                      )}
+                      {secureExample.good && (
+                        <div>
+                          <p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wide mb-1.5">✅ Secure</p>
+                          <pre className="text-xs p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-300 dark:border-emerald-500/30 text-slate-900 dark:text-emerald-200 font-mono overflow-x-auto whitespace-pre-wrap">{secureExample.good}</pre>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

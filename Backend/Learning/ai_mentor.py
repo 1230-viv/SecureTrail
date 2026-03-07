@@ -137,6 +137,9 @@ def _build_fallback(
 
         deep_dive.append({
             "finding_id":           vid,
+            "file":                 short_path,
+            "line":                 str(line_no) if line_no != "?" else None,
+            "severity":             sev,
             "what_happened":        knowledge["plain_explanation"],
             "why_it_matters":       knowledge["why_it_matters"],
             "business_impact":      f"This {sev}-severity {knowledge['label']} weakness in {short_path} (line {line_no}) could allow unauthorized access or data exposure if left unaddressed.",
