@@ -903,9 +903,9 @@ function CategoryCard({ catSlug, catData, onSelect, learned }) {
 
   return (
     <button onClick={onSelect}
-      className={`group relative text-left w-full rounded-2xl overflow-hidden transition-all duration-300 ease-out
-        bg-white dark:bg-[#1a1d27] hover:shadow-xl hover:shadow-slate-200/50 dark:hover:shadow-black/20 hover:-translate-y-1 active:translate-y-0 active:shadow-md
-        ring-1 ${isLearned ? 'ring-emerald-300/60 dark:ring-emerald-700/40' : 'ring-slate-200/80 dark:ring-white/6 hover:ring-slate-300 dark:hover:ring-white/10'}`}>
+      className={`group relative text-left w-full rounded-xl overflow-hidden transition-all duration-300 ease-out
+        bg-white dark:bg-[#1a1d27] hover:shadow-lg hover:shadow-slate-200/40 dark:hover:shadow-black/20 hover:-translate-y-0.5 active:translate-y-0 active:shadow-md
+        border ${isLearned ? 'border-emerald-300/60 dark:border-emerald-700/40' : 'border-neutral-200 dark:border-white/6 hover:border-neutral-300 dark:hover:border-white/10'}`}>
 
       {/* Gradient accent strip */}
       <div className="h-[3px] w-full" style={{ background: `linear-gradient(90deg, ${color}, ${color}60)` }} />
@@ -923,13 +923,13 @@ function CategoryCard({ catSlug, catData, onSelect, learned }) {
             <Icon d={IC.shield} size={18} color={color} />
           </div>
           <div className="flex flex-col items-end">
-            <span className="text-2xl font-black leading-none tracking-tight" style={{ color }}>{count}</span>
+            <span className="text-2xl font-bold leading-none tracking-tight" style={{ color }}>{count}</span>
             <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">{count === 1 ? 'issue' : 'issues'}</span>
           </div>
         </div>
 
         {/* Name */}
-        <h3 className="font-bold text-[13px] text-slate-900 dark:text-white mb-2 leading-snug tracking-tight group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+        <h3 className="font-semibold text-[14px] text-slate-900 dark:text-white mb-2 leading-snug tracking-tight group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
           {label}
         </h3>
 
@@ -1139,19 +1139,17 @@ function LearningPanel({ item, guide, isVisible }) {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Panel header — gradient accent */}
+      {/* Panel header */}
       <div className="flex-shrink-0 relative overflow-hidden">
-        <div className="absolute inset-0 opacity-[0.04]"
-          style={{ background: `linear-gradient(135deg, ${color || '#6366f1'}, transparent)` }} />
-        <div className="relative px-5 py-4 border-b border-slate-200/80 dark:border-white/6">
+        <div className="relative px-5 py-5 border-b border-slate-200/80 dark:border-white/6">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center shadow-sm"
-              style={{ background: `linear-gradient(135deg, ${color || '#6366f1'}25, ${color || '#6366f1'}10)`, border: `1px solid ${color || '#6366f1'}20` }}>
-              <Icon d={IC.book} size={16} color={color || '#6366f1'} />
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center"
+              style={{ background: `${color || '#6366f1'}10` }}>
+              <Icon d={IC.book} size={18} color={color || '#6366f1'} />
             </div>
             <div className="flex-1 min-w-0">
-              <h3 className="font-bold text-[13px] text-slate-900 dark:text-white leading-tight tracking-tight">Security Learning</h3>
-              <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5 leading-tight">
+              <h3 className="font-semibold text-base text-slate-900 dark:text-white leading-tight">Security Learning</h3>
+              <p className="text-[12px] text-slate-400 dark:text-slate-500 mt-0.5 leading-tight">
                 {item ? 'Concept deep-dive' : 'Click "Explain Concept" on any issue'}
               </p>
             </div>
@@ -1164,7 +1162,7 @@ function LearningPanel({ item, guide, isVisible }) {
 
       {/* Scrollable content */}
       <div key={animKey} className="flex-1 overflow-y-auto">
-        <div className={`px-5 py-5 space-y-4 transition-all duration-300 ease-out ${
+        <div className={`px-5 py-6 space-y-4 transition-all duration-300 ease-out ${
           isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'
         }`}>
         {!item ? (
@@ -1179,7 +1177,7 @@ function LearningPanel({ item, guide, isVisible }) {
                   <Icon d={IC.brain} size={24} color={color || '#6366f1'} className="opacity-60" />
                 </div>
               </div>
-              <h4 className="font-bold text-sm text-slate-900 dark:text-white mb-1.5">{label || 'Select an Issue'}</h4>
+              <h4 className="font-semibold text-sm text-slate-900 dark:text-white mb-1.5">{label || 'Select an Issue'}</h4>
               <p className="text-[11px] text-slate-400 dark:text-slate-500 max-w-[220px] mx-auto leading-relaxed">
                 Tap <strong className="text-indigo-500">Explain Concept</strong> on any issue to see a deep explanation here
               </p>
@@ -1237,7 +1235,7 @@ function LearningPanel({ item, guide, isVisible }) {
                     </span>
                   )}
                 </div>
-                <h4 className="font-black text-[15px] text-slate-900 dark:text-white leading-snug">{conceptTitle}</h4>
+                <h4 className="font-semibold text-[18px] text-slate-900 dark:text-white leading-snug">{conceptTitle}</h4>
                 {item?.file && (
                   <p className="text-[11px] font-mono text-slate-400 dark:text-slate-500 mt-1.5 truncate flex items-center gap-1.5">
                     <Icon d={IC.file} size={10} className="opacity-50" />
@@ -1266,17 +1264,14 @@ function LearningPanel({ item, guide, isVisible }) {
               </LearnCard>
             )}
 
-            {/* Security Impact — highlighted card */}
+            {/* Security Impact */}
             {secImpact && (
-              <div className="rounded-xl border border-orange-200/60 dark:border-orange-800/30 overflow-hidden">
-                <div className="px-4 py-1.5 bg-orange-500/5 border-b border-orange-200/40 dark:border-orange-800/20">
-                  <span className="text-[10px] font-bold text-orange-600 dark:text-orange-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <Icon d={IC.flame} size={10} color="#f97316" />Security Impact
-                  </span>
+              <div className="rounded-xl p-[18px] bg-[#fff7ed] dark:bg-orange-950/10">
+                <div className="flex items-center gap-2 mb-3">
+                  <Icon d={IC.flame} size={14} color="#f97316" />
+                  <span className="text-[14px] font-medium text-orange-700 dark:text-orange-300">Security Impact</span>
                 </div>
-                <div className="px-4 py-3 bg-orange-50/50 dark:bg-orange-950/10">
-                  <p className="text-[13px] text-orange-800 dark:text-orange-200 leading-relaxed">{secImpact}</p>
-                </div>
+                <p className="text-[13px] text-orange-800 dark:text-orange-200 leading-relaxed">{secImpact}</p>
               </div>
             )}
 
@@ -1286,17 +1281,14 @@ function LearningPanel({ item, guide, isVisible }) {
               </LearnCard>
             )}
 
-            {/* Key takeaway — prominent callout */}
+            {/* Key takeaway */}
             {lesson && (
-              <div className="rounded-xl border border-indigo-200/50 dark:border-indigo-800/30 overflow-hidden">
-                <div className="px-4 py-1.5 bg-indigo-500/5 border-b border-indigo-200/40 dark:border-indigo-800/20">
-                  <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <Icon d={IC.star} size={10} color="#6366f1" />Key Takeaway
-                  </span>
+              <div className="rounded-xl p-[18px] bg-[#eef2ff] dark:bg-indigo-950/10">
+                <div className="flex items-center gap-2 mb-3">
+                  <Icon d={IC.star} size={14} color="#6366f1" />
+                  <span className="text-[14px] font-medium text-indigo-700 dark:text-indigo-300">Key Takeaway</span>
                 </div>
-                <div className="px-4 py-3 bg-indigo-50/40 dark:bg-indigo-950/10">
-                  <p className="text-[13px] text-indigo-900 dark:text-indigo-200 leading-relaxed font-medium">{lesson}</p>
-                </div>
+                <p className="text-[13px] text-indigo-900 dark:text-indigo-200 leading-relaxed font-medium">{lesson}</p>
               </div>
             )}
 
@@ -1337,17 +1329,17 @@ function LearningPanel({ item, guide, isVisible }) {
 
 function LearnCard({ icon, iconColor, title, children, accent }) {
   return (
-    <div className={`rounded-xl border p-4 transition-all duration-200 ${
+    <div className={`rounded-xl p-[18px] transition-all duration-200 ${
       accent
-        ? 'border-indigo-200/50 dark:border-indigo-800/25 bg-indigo-50/30 dark:bg-indigo-950/10'
-        : 'border-slate-200/80 dark:border-white/6 bg-white dark:bg-white/[0.02]'
+        ? 'bg-[#eef2ff] dark:bg-indigo-950/10'
+        : 'bg-[#f8fafc] dark:bg-white/[0.02]'
     }`}>
-      <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider flex items-center gap-1.5 mb-2.5">
-        <span className="w-5 h-5 rounded-md flex items-center justify-center" style={{ background: `${iconColor}10` }}>
-          <Icon d={icon} size={10} color={iconColor} />
+      <div className="flex items-center gap-2 mb-3">
+        <span className="w-6 h-6 rounded-lg flex items-center justify-center" style={{ background: `${iconColor}12` }}>
+          <Icon d={icon} size={12} color={iconColor} />
         </span>
-        {title}
-      </span>
+        <span className="text-[14px] font-medium text-slate-700 dark:text-slate-300">{title}</span>
+      </div>
       {children}
     </div>
   );
@@ -1399,15 +1391,15 @@ function IssueCoachCard({ item, index, isOpen, onToggle, onExplain, isExplaining
   const sevColor = SEV_COLORS[severity] || '#64748b';
 
   return (
-    <div className={`group rounded-2xl overflow-hidden transition-all duration-300 ease-out ${
+    <div className={`group rounded-xl overflow-hidden transition-all duration-300 ease-out ${
       isOpen
-        ? 'shadow-lg shadow-slate-200/60 dark:shadow-black/20 ring-1 ring-slate-200 dark:ring-white/8'
-        : 'shadow-sm hover:shadow-md ring-1 ring-slate-200/80 dark:ring-white/6 hover:ring-slate-300 dark:hover:ring-white/10'
+        ? 'shadow-md shadow-slate-900/[0.04] dark:shadow-black/20 border border-neutral-200 dark:border-white/8'
+        : 'shadow-[0_1px_3px_rgba(0,0,0,0.04)] border border-neutral-200 dark:border-white/6 hover:shadow-md hover:border-neutral-300 dark:hover:border-white/10'
     } bg-white dark:bg-[#1a1d27]`}>
 
       {/* ── Header ── */}
       <button onClick={onToggle}
-        className="w-full flex items-center gap-3.5 px-4 py-3.5 text-left group/header transition-colors relative">
+        className="w-full flex items-center gap-4 px-6 py-5 text-left group/header transition-colors relative">
         {/* Left accent line on open */}
         {isOpen && (
           <div className="absolute left-0 top-3 bottom-3 w-[3px] rounded-r-full" style={{ background: sevColor }} />
@@ -1422,7 +1414,7 @@ function IssueCoachCard({ item, index, isOpen, onToggle, onExplain, isExplaining
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-bold text-[13px] text-slate-900 dark:text-white leading-tight">{fid}</span>
+            <span className="font-semibold text-base text-slate-900 dark:text-white leading-snug">{fid}</span>
             {severity && (
               <span className="text-[9px] font-black px-2 py-[3px] rounded-md flex-shrink-0 uppercase tracking-wider"
                 style={{ background: `${sevColor}12`, color: sevColor, border: `1px solid ${sevColor}20` }}>
@@ -1459,18 +1451,16 @@ function IssueCoachCard({ item, index, isOpen, onToggle, onExplain, isExplaining
       {/* ── Body ── */}
       {isOpen && (
         <div className="border-t border-slate-100 dark:border-white/5">
-          <div className="px-5 py-5 space-y-4">
+          <div className="px-6 py-6 space-y-4">
 
-            {/* Coach explanation — hero banner */}
+            {/* Coach Insight */}
             {coachExpl && (
-              <div className="rounded-xl overflow-hidden border border-indigo-200/50 dark:border-indigo-800/30">
-                <div className="px-4 py-1.5 bg-indigo-500/[0.06] border-b border-indigo-200/40 dark:border-indigo-800/20 flex items-center gap-2">
-                  <Icon d={IC.brain} size={12} color="#6366f1" />
-                  <span className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Coach Insight</span>
+              <div className="rounded-xl p-5 bg-[#eef2ff] dark:bg-indigo-950/10">
+                <div className="flex items-center gap-2 mb-3">
+                  <Icon d={IC.brain} size={14} color="#6366f1" />
+                  <span className="text-[14px] font-medium text-indigo-700 dark:text-indigo-300">Coach Insight</span>
                 </div>
-                <div className="px-4 py-3 bg-indigo-50/30 dark:bg-indigo-950/10">
-                  <p className="text-[13px] text-indigo-900 dark:text-indigo-200 leading-relaxed">{coachExpl}</p>
-                </div>
+                <p className="text-[13px] text-indigo-900 dark:text-indigo-200 leading-relaxed">{coachExpl}</p>
               </div>
             )}
 
@@ -1488,24 +1478,22 @@ function IssueCoachCard({ item, index, isOpen, onToggle, onExplain, isExplaining
               </CoachSection>
             )}
 
-            {/* Security impact — accented card */}
+            {/* Security Impact */}
             {securityImpact && (
-              <div className="rounded-xl overflow-hidden border border-orange-200/50 dark:border-orange-800/30">
-                <div className="px-4 py-1.5 bg-orange-500/[0.06] border-b border-orange-200/40 dark:border-orange-800/20 flex items-center gap-2">
-                  <Icon d={IC.flame} size={11} color="#f97316" />
-                  <span className="text-[10px] font-black text-orange-600 dark:text-orange-400 uppercase tracking-widest">Security Impact</span>
+              <div className="rounded-xl p-5 bg-[#fff7ed] dark:bg-orange-950/10">
+                <div className="flex items-center gap-2 mb-3">
+                  <Icon d={IC.flame} size={14} color="#f97316" />
+                  <span className="text-[14px] font-medium text-orange-700 dark:text-orange-300">Security Impact</span>
                 </div>
-                <div className="px-4 py-3 bg-orange-50/30 dark:bg-orange-950/10">
-                  <p className="text-[13px] text-orange-800 dark:text-orange-200 leading-relaxed">{securityImpact}</p>
-                </div>
+                <p className="text-[13px] text-orange-800 dark:text-orange-200 leading-relaxed">{securityImpact}</p>
               </div>
             )}
 
             {/* Code comparison — unified container */}
             {(insecureCode || secureCode) && (
-              <div className="rounded-xl overflow-hidden border border-slate-200 dark:border-white/8">
-                <div className="px-4 py-2 bg-slate-800 dark:bg-slate-900 flex items-center justify-between">
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+              <div className="rounded-[10px] overflow-hidden border border-neutral-200 dark:border-white/8">
+                <div className="px-4 py-2.5 bg-[#0f172a] flex items-center justify-between">
+                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
                     <Icon d={IC.code} size={11} color="#94a3b8" />Code Comparison
                   </span>
                   {secureCode && (
@@ -1526,7 +1514,7 @@ function IssueCoachCard({ item, index, isOpen, onToggle, onExplain, isExplaining
                         <span className="w-2 h-2 rounded-full bg-red-500/80" />
                         <span className="text-[9px] font-bold text-red-500/80 dark:text-red-400/80 uppercase tracking-wider">Before (Insecure)</span>
                       </div>
-                      <pre className="text-[12px] bg-red-50/40 dark:bg-red-950/15 text-red-800 dark:text-red-300 p-3.5 overflow-auto max-h-56 whitespace-pre-wrap font-mono leading-[1.7] selection:bg-red-200 dark:selection:bg-red-800">
+                      <pre className="text-[13px] bg-red-50/30 dark:bg-red-950/15 text-red-800 dark:text-red-300 p-4 overflow-auto max-h-64 whitespace-pre-wrap font-mono leading-[1.7] selection:bg-red-200 dark:selection:bg-red-800">
 {insecureCode}
                       </pre>
                     </div>
@@ -1537,7 +1525,7 @@ function IssueCoachCard({ item, index, isOpen, onToggle, onExplain, isExplaining
                         <span className="w-2 h-2 rounded-full bg-emerald-500/80" />
                         <span className="text-[9px] font-bold text-emerald-600/80 dark:text-emerald-400/80 uppercase tracking-wider">After (Secure)</span>
                       </div>
-                      <pre className="text-[12px] bg-emerald-50/40 dark:bg-emerald-950/15 text-emerald-800 dark:text-emerald-200 p-3.5 overflow-auto max-h-56 whitespace-pre-wrap font-mono leading-[1.7] selection:bg-emerald-200 dark:selection:bg-emerald-800">
+                      <pre className="text-[13px] bg-emerald-50/30 dark:bg-emerald-950/15 text-emerald-800 dark:text-emerald-200 p-4 overflow-auto max-h-64 whitespace-pre-wrap font-mono leading-[1.7] selection:bg-emerald-200 dark:selection:bg-emerald-800">
 {secureCode}
                       </pre>
                       {secureNotes && (
@@ -1556,16 +1544,14 @@ function IssueCoachCard({ item, index, isOpen, onToggle, onExplain, isExplaining
               </CoachSection>
             )}
 
-            {/* Lesson — key takeaway callout */}
+            {/* Key Takeaway */}
             {lesson && (
-              <div className="rounded-xl overflow-hidden border border-indigo-200/50 dark:border-indigo-800/30">
-                <div className="px-4 py-1.5 bg-indigo-500/[0.06] border-b border-indigo-200/40 dark:border-indigo-800/20 flex items-center gap-2">
-                  <Icon d={IC.star} size={10} color="#6366f1" />
-                  <span className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Key Takeaway</span>
+              <div className="rounded-xl p-5 bg-[#eef2ff] dark:bg-indigo-950/10">
+                <div className="flex items-center gap-2 mb-3">
+                  <Icon d={IC.star} size={14} color="#6366f1" />
+                  <span className="text-[14px] font-medium text-indigo-700 dark:text-indigo-300">Key Takeaway</span>
                 </div>
-                <div className="px-4 py-3 bg-indigo-50/30 dark:bg-indigo-950/10">
-                  <p className="text-[13px] text-indigo-900 dark:text-indigo-200 leading-relaxed font-medium">{lesson}</p>
-                </div>
+                <p className="text-[13px] text-indigo-900 dark:text-indigo-200 leading-relaxed font-medium">{lesson}</p>
               </div>
             )}
 
@@ -1610,13 +1596,13 @@ function IssueCoachCard({ item, index, isOpen, onToggle, onExplain, isExplaining
 
 function CoachSection({ icon, iconColor, title, children }) {
   return (
-    <div className="rounded-xl border border-slate-100 dark:border-white/5 p-4 bg-slate-50/50 dark:bg-white/[0.015]">
-      <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider flex items-center gap-1.5 mb-2">
-        <span className="w-5 h-5 rounded-md flex items-center justify-center" style={{ background: `${iconColor}10` }}>
-          <Icon d={icon} size={10} color={iconColor} />
+    <div className="rounded-xl p-5 bg-[#f8fafc] dark:bg-white/[0.02]">
+      <div className="flex items-center gap-2 mb-3">
+        <span className="w-6 h-6 rounded-lg flex items-center justify-center" style={{ background: `${iconColor}12` }}>
+          <Icon d={icon} size={12} color={iconColor} />
         </span>
-        {title}
-      </span>
+        <span className="text-[14px] font-medium text-slate-700 dark:text-slate-300">{title}</span>
+      </div>
       {children}
     </div>
   );
@@ -1665,7 +1651,7 @@ function CategoryDetailView({ guide, loading, onBack, onMarkLearned, isLearned, 
     <div className="flex-1 flex flex-col overflow-hidden bg-slate-50/30 dark:bg-transparent">
       {/* ── Top bar: back + hero strip ── */}
       <div className="flex-shrink-0 bg-white dark:bg-[#1a1d27] border-b border-slate-200/80 dark:border-white/6">
-        <div className="max-w-[1400px] mx-auto px-5 py-3 flex items-center gap-4">
+        <div className="max-w-[1400px] mx-auto px-5 py-5 flex items-center gap-4">
           <button onClick={onBack}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/15 transition-all flex-shrink-0">
             <Icon d={IC.arrowDn} size={11} className="rotate-90" />Back
@@ -1677,18 +1663,19 @@ function CategoryDetailView({ guide, loading, onBack, onMarkLearned, isLearned, 
               <Icon d={IC.shield} size={18} color={color} />
             </div>
             <div className="min-w-0">
-              <h2 className="font-black text-[15px] text-slate-900 dark:text-white truncate tracking-tight">{label}</h2>
-              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                <span className="text-[11px] font-bold" style={{ color }}>{total} issue{total !== 1 ? 's' : ''}</span>
+              <h2 className="font-semibold text-[22px] text-slate-900 dark:text-white truncate tracking-tight leading-tight">{label}</h2>
+              <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                <span className="text-[13px] font-medium text-slate-500 dark:text-slate-400">{total} Issue{total !== 1 ? 's' : ''}</span>
+                <span className="w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-600" />
                 {SEV_ORDER.filter(s => (sev_counts[s] || 0) > 0).map(s => (
-                  <span key={s} className="text-[9px] px-1.5 py-[2px] rounded-md font-bold"
-                    style={{ background: `${SEV_COLORS[s]}10`, color: SEV_COLORS[s], border: `1px solid ${SEV_COLORS[s]}15` }}>
+                  <span key={s} className="text-[11px] px-2 py-0.5 rounded-md font-semibold"
+                    style={{ background: `${SEV_COLORS[s]}08`, color: SEV_COLORS[s], border: `1px solid ${SEV_COLORS[s]}12` }}>
                     {sev_counts[s]} {s}
                   </span>
                 ))}
                 {source === 'ai' && (
-                  <span className="text-[9px] px-2 py-[2px] rounded-md bg-violet-50 dark:bg-violet-900/25 text-violet-600 dark:text-violet-300 border border-violet-200/60 dark:border-violet-700/30 font-bold flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-violet-500 animate-pulse" />AI-powered
+                  <span className="text-[11px] px-2.5 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 font-semibold flex items-center gap-1.5 border border-indigo-200/40 dark:border-indigo-700/30">
+                    <Icon d={IC.brain} size={11} color="#6366f1" />AI Personalized
                   </span>
                 )}
               </div>
@@ -1720,8 +1707,8 @@ function CategoryDetailView({ guide, loading, onBack, onMarkLearned, isLearned, 
         <div className={`flex-1 lg:flex-none overflow-y-auto transition-all duration-300 ${
           showPanel ? 'hidden lg:block' : ''
         }`}
-        style={{ flexBasis: '63%', minWidth: 0 }}>
-          <div className="px-5 py-5 space-y-3 max-w-[840px]">
+        style={{ flexBasis: '60%', minWidth: 0 }}>
+          <div className="px-8 py-6 space-y-5 max-w-[840px]">
 
             {/* Issue count header */}
             <div className="flex items-center gap-2.5 pb-3">
@@ -1729,7 +1716,7 @@ function CategoryDetailView({ guide, loading, onBack, onMarkLearned, isLearned, 
                 <div className="w-6 h-6 rounded-lg bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-center">
                   <Icon d={IC.brain} size={12} color="#6366f1" />
                 </div>
-                <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+                <span className="text-[12px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
                   {items.length > 0
                     ? `${items.length} Coaching Review${items.length !== 1 ? 's' : ''}`
                     : `${findings.length} Finding${findings.length !== 1 ? 's' : ''}`
@@ -1791,7 +1778,7 @@ function CategoryDetailView({ guide, loading, onBack, onMarkLearned, isLearned, 
         <div className={`flex-shrink-0 overflow-hidden bg-slate-50/80 dark:bg-[#111318] transition-all duration-300 ${
           showPanel ? 'fixed inset-0 top-auto bottom-0 h-[70vh] lg:static lg:h-auto z-50 rounded-t-2xl lg:rounded-none shadow-2xl lg:shadow-none border-t lg:border-t-0 border-slate-300 dark:border-white/15' : 'hidden lg:block'
         }`}
-        style={{ flexBasis: '37%', minWidth: 0 }}>
+        style={{ flexBasis: '40%', minWidth: 0 }}>
           {/* Mobile close button */}
           {showPanel && (
             <button onClick={() => setShowPanel(false)}
@@ -1864,7 +1851,7 @@ function VulnHubView({ summary, loadingSummary, healthScore, maturityLevel, onSe
           <div className="w-5 h-5 rounded-md bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-center">
             <Icon d={IC.code} size={10} color="#6366f1" />
           </div>
-          <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Repositories</p>
+          <p className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Repositories</p>
         </div>
         <div className="flex-1 overflow-y-auto py-1">
           {repoNames.length === 0 && (
@@ -1941,7 +1928,7 @@ function VulnHubView({ summary, loadingSummary, healthScore, maturityLevel, onSe
               <div className="w-16 h-16 rounded-2xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700/25 flex items-center justify-center mx-auto mb-4">
                 <Icon d={IC.check} size={30} color="#34d399" />
               </div>
-              <h3 className="text-lg font-black text-slate-900 dark:text-white mb-2">No findings detected</h3>
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">No findings detected</h3>
               <p className="text-sm text-slate-500 dark:text-slate-400">
                 {repoName ? `${repoName} looks clean.` : 'Select a repository to view findings.'}
               </p>
@@ -1958,10 +1945,10 @@ function VulnHubView({ summary, loadingSummary, healthScore, maturityLevel, onSe
                     <Icon d={IC.shield} size={18} color="#6366f1" />
                   </div>
                   <div>
-                    <h2 className="text-[16px] font-black text-slate-900 dark:text-white tracking-tight">
+                    <h2 className="text-[18px] font-semibold text-slate-900 dark:text-white tracking-tight">
                       {repoName || 'Security Learning Hub'}
                     </h2>
-                    <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 flex items-center gap-2">
+                    <p className="text-[12px] text-slate-400 dark:text-slate-500 mt-0.5 flex items-center gap-2">
                       <span>{catList.length} vulnerability type{catList.length !== 1 ? 's' : ''}</span>
                       {healthScore > 0 && (
                         <>
@@ -1999,7 +1986,7 @@ function VulnHubView({ summary, loadingSummary, healthScore, maturityLevel, onSe
             </div>
 
             {/* Category grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
               {catList.map(c => (
                 <CategoryCard
                   key={c.slug}
@@ -2346,7 +2333,7 @@ export default function LearningCoachPage({ jobId: propJobId, repoName: propRepo
             <Icon d={IC.shield} size={16} color="white" />
           </div>
           <div>
-            <span className="font-black text-[13px] leading-none tracking-tight">Security Coach</span>
+            <span className="font-semibold text-[14px] leading-none tracking-tight">Security Coach</span>
             <div className="text-[9px] text-slate-400 dark:text-slate-500 leading-tight mt-0.5 font-mono">Llama 4 Maverick</div>
           </div>
         </div>
@@ -2363,7 +2350,7 @@ export default function LearningCoachPage({ jobId: propJobId, repoName: propRepo
               : <span className="text-[12px] text-slate-400 dark:text-slate-600 italic">No scan selected</span>
           }
           {healthScore > 0 && !loadingInsights && (
-            <span className="flex-shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-black"
+            <span className="flex-shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold"
               style={{
                 background: healthScore >= 70 ? 'rgba(52,211,153,0.08)' : healthScore >= 40 ? 'rgba(245,158,11,0.08)' : 'rgba(248,113,113,0.08)',
                 color:      healthScore >= 70 ? '#34d399' : healthScore >= 40 ? '#f59e0b' : '#f87171',
