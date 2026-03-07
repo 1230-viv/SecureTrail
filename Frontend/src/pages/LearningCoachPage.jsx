@@ -271,7 +271,8 @@ function AIMentorBanner({ summary, source, cached, aiError, loading }) {
           </span>
         )}
         {cached && <Chip label="Cached" color="#6366f1" />}
-        {aiError && <Chip label="AI unavailable — fallback used" color="#ef4444" />}
+        {aiError && !aiError.includes(';') && <Chip label="AI unavailable — fallback used" color="#ef4444" />}
+        {aiError && aiError.includes(';') && <Chip label="Partial AI — some findings used fallback" color="#f97316" />}
       </div>
       <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{summary}</p>
     </div>
@@ -365,7 +366,13 @@ function DeepDiveV3({ deepDive, loading }) {
   };
 
   if (loading) return (
-    <div className="space-y-3">{[1,2].map(i => <Skeleton key={i} h="h-32" />)}</div>
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500 pb-1">
+        <Icon d={IC.brain} size={13} color="#6366f1" />
+        <span>Coaching each finding individually…</span>
+      </div>
+      {[1,2,3,4,5].map(i => <Skeleton key={i} h="h-14" />)}
+    </div>
   );
   if (!deepDive?.length) return (
     <p className="text-sm text-gray-400 italic">No deep-dive analysis available.</p>
@@ -399,8 +406,8 @@ function DeepDiveV3({ deepDive, loading }) {
             <button
               onClick={() => setExpanded(p => ({ ...p, [i]: !p[i] }))}
               className="w-full flex items-center gap-3 p-3.5 text-left hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
-              <div className="flex-shrink-0 w-7 h-7 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-xs font-black text-indigo-600 dark:text-indigo-400">
-                {i + 1}
+              <div className="flex-shrink-0 px-2.5 py-1 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 text-xs font-black text-indigo-600 dark:text-indigo-400 whitespace-nowrap">
+                Issue {i + 1}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -409,6 +416,11 @@ function DeepDiveV3({ deepDive, loading }) {
                     <span className="text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0"
                       style={{ background: `${SEV_COLORS[severity]}20`, color: SEV_COLORS[severity] }}>
                       {severity.toUpperCase()}
+                    </span>
+                  )}
+                  {!isInferred && (
+                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300 border border-purple-200 dark:border-purple-700/40 flex-shrink-0">
+                      AI coached
                     </span>
                   )}
                   {isInferred && (
@@ -904,7 +916,7 @@ function CategoryCard({ catSlug, catData, onSelect, learned }) {
           </div>
           <div className="flex flex-col items-end gap-1">
             <span className="text-2xl font-black leading-none" style={{ color }}>{count}</span>
-            <span className="text-xs text-slate-400 dark:text-slate-500">findings</span>
+            <span className="text-xs text-slate-400 dark:text-slate-500">{count === 1 ? 'coaching review' : 'coaching reviews'}</span>
           </div>
         </div>
 
@@ -1137,7 +1149,7 @@ function CategoryDetailView({ guide, loading, onBack, onMarkLearned, isLearned, 
               <h2 className="text-xl font-black text-slate-900 dark:text-white mb-1">{label}</h2>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-bold text-2xl" style={{ color }}>{total}</span>
-                <span className="text-sm text-slate-500 dark:text-slate-400">finding{total !== 1 ? 's' : ''} in your code</span>
+                <span className="text-sm text-slate-500 dark:text-slate-400">{total} coaching {total !== 1 ? 'reviews' : 'review'} in your code</span>
                 {SEV_ORDER.filter(s => (sev_counts[s] || 0) > 0).map(s => (
                   <span key={s} className="text-xs px-2 py-0.5 rounded-full font-bold"
                     style={{ background: `${SEV_COLORS[s]}20`, color: SEV_COLORS[s] }}>
@@ -1552,10 +1564,10 @@ function ReportView({
           </Card>
           <Card>
             <h3 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2 mb-3">
-              <Icon d={IC.brain} size={15} color="#6366f1" />Per-Finding Coach Analysis
+              <Icon d={IC.brain} size={15} color="#6366f1" />Coaching Reviews
               {aiDeepDive.length > 0 && (
                 <span className="ml-auto flex items-center gap-1.5">
-                  <span className="text-xs text-slate-400 dark:text-slate-500">{aiDeepDive.length} finding{aiDeepDive.length !== 1 ? 's' : ''}</span>
+                  <span className="text-xs text-slate-400 dark:text-slate-500">{aiDeepDive.length} {aiDeepDive.length !== 1 ? 'reviews' : 'review'}</span>
                   {insights?.source === 'ai' && (
                     <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300">
                       AI coached

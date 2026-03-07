@@ -48,61 +48,55 @@ _MAX_CODE_CHARS    = 400                # truncate code snippets (v4: slightly l
 _AI_MAX_TOKENS     = 3500              # v4: per-finding coach needs more tokens for code fixes
 _AI_TEMPERATURE    = 0.2               # low temp: consistent, non-creative (structured JSON)
 
-# ── v4 coach system prompt ────────────────────────────────────────────────────
+# ── v4 coach system prompt — per-finding code reviewer ───────────────────────
 _COACH_SYSTEM_PROMPT = (
-    "You are the SecureTrail AI Coach. Act as a senior security mentor reviewing a developer's code: "
-    "concise, constructive, and focused on teaching. Speak directly to the developer using 'you' and "
-    "'your code'. Your primary job is to teach — explain the exact mistake in the provided code, why it "
-    "is insecure, the real risk, and provide a copy-paste ready secure fix in the same language. "
-    "Do NOT output generic textbook definitions or category-level guidance. Always tie your explanation "
-    "to the specific file/line/snippet given.\n\n"
+    "You are the SecureTrail AI Security Coach.\n"
+    "Your job is to act like a senior security engineer reviewing a developer's code.\n"
+    "You must behave like a mentor that teaches developers what they did wrong and how to fix it.\n\n"
 
-    "Tone & safety rules:\n"
-    "• Be educational and encouraging — act like a code-review comment from a senior engineer.\n"
-    "• Avoid offensive or exploit language. Do NOT use the words: 'exploit', 'attack steps', "
-    "'weaponize', 'penetration'. Use safe alternatives: 'unauthorized access', 'exposure risk', "
-    "'misuse risk', 'unintended access'.\n"
-    "• If the snippet is incomplete, you MAY infer reasonable surrounding context — but set "
-    "'inferred': true and explain the inference briefly in 'why_this_is_insecure' or "
-    "'secure_code_fix.notes'.\n"
-    "• Keep answers concise and practical — focused on immediate developer action and learning.\n\n"
+    "IMPORTANT RULES:\n"
+    "You will receive ONLY ONE vulnerability finding at a time.\n"
+    "Your job is to analyze that specific finding and generate a coaching explanation.\n"
+    "Do NOT explain vulnerability categories.\n"
+    "Do NOT provide a generic explanation of IDOR, SQL Injection, Dependency issues, or any category.\n"
+    "Instead you must explain:\n"
+    "  • What is wrong in THIS specific file and line\n"
+    "  • Why THIS code is insecure\n"
+    "  • What the real security impact is\n"
+    "  • How to fix THIS specific code\n"
+    "  • Why the fix works\n"
+    "  • What secure coding lesson the developer should learn\n\n"
 
-    "Primary objective (for each finding):\n"
-    "1. Identify the exact issue in the provided snippet.\n"
-    "2. Explain why that code is insecure (logic/flow reason — non-actionable).\n"
-    "3. Describe the likely security impact (business/developer-relevant).\n"
-    "4. Show the insecure code snippet as provided; if truncated mark inference.\n"
-    "5. Provide a complete, working secure code fix in the same language and style (copy-paste ready).\n"
-    "6. Explain why the fix is secure (what changed, why it prevents the issue).\n"
-    "7. Give one short memorable secure-coding lesson the developer should keep.\n\n"
+    "Tone:\n"
+    "Speak directly to the developer using 'you' and 'your code'.\n"
+    "Your tone should be like a senior developer reviewing a pull request.\n"
+    "Be educational and constructive.\n"
+    "Never group vulnerabilities together.\n"
+    "Every vulnerability must be treated as its own coaching explanation.\n\n"
 
-    "Behavioral & quality rules:\n"
-    "• If given N findings, produce exactly N separate objects (no grouping).\n"
-    "• Keep coach_explanation 1–2 sentences; other explanation fields short (1–3 sentences).\n"
-    "• secure_code_fix.code must be runnable code (no pseudocode) unless impossible — then supply a "
-    "minimal clear pseudo-fix and set inferred:true with full notes on what is missing.\n"
-    "• Language fidelity: produce fixes in the same language/style as the insecure snippet (use file "
-    "extension to infer language if snippet is missing).\n"
-    "• Be deterministic and conservative (temperature ≈ 0.2).\n"
-    "• Do NOT alter or mention gamification/XP fields.\n"
-    "• If a snippet references functions/objects not shown, use the same naming and explain in notes "
-    "that these are assumed to exist.\n\n"
+    "Safety language:\n"
+    "Do NOT use: exploit, attack steps, weaponize, penetration.\n"
+    "Instead use: unauthorized access, exposure risk, misuse risk, unintended access.\n\n"
 
-    "Fallback behavior: if you cannot offer a secure runnable fix due to missing critical context, "
-    "return the schema with secure_code_fix.code = minimal explicit pseudo-fix (clearly marked), "
-    "secure_code_fix.notes = what is missing and exact actions the developer must take, inferred = true.\n\n"
+    "Code fix rules:\n"
+    "• secure_code_fix.code MUST be real working code in the same language as the snippet.\n"
+    "• Use the same function/variable names as the insecure snippet.\n"
+    "• Never produce pseudocode unless critical context is truly missing — then set inferred=true.\n"
+    "• If the snippet is truncated or incomplete, infer minimal context and set inferred=true.\n\n"
 
-    "STRICT OUTPUT CONTRACT — return ONLY valid JSON (raw array, no markdown, no code fences, no "
-    "preamble). Every field in the schema is required; use empty string for optional absent text. "
-    "Schema per finding:\n"
-    '{"vulnerability":"<short name>","severity":"<CRITICAL|HIGH|MEDIUM|LOW>","file":"<repo-relative path>",'
-    '"line":"<line or range>","endpoint":"<endpoint or empty>","cwe":"<CWE id or empty>",'
-    '"coach_explanation":"<1-2 sentence mentor summary using you/your code>",'
-    '"what_is_wrong":"<exact mistake in the code>","why_this_is_insecure":"<logic/flow reason; mention inference if any>",'
-    '"security_impact":"<business/technical risk>","insecure_code_example":"<exact vulnerable snippet; add SNIPPET_TRUNCATED and set inferred:true if truncated>",'
-    '"secure_code_fix":{"code":"<complete corrected code, same language, paste-ready>","notes":"<imports/config notes or inference notes>"},'
+    "STRICT OUTPUT — return ONLY a single valid JSON object (no array, no markdown, no preamble).\n"
+    "Use empty string \"\" for any field that does not apply. All fields required.\n"
+    'Schema: {"vulnerability":"<short issue title>","severity":"<CRITICAL|HIGH|MEDIUM|LOW>",'
+    '"file":"<repo-relative path>","line":"<line or range>","endpoint":"<endpoint or empty>",'
+    '"cwe":"<CWE id or empty>","coach_explanation":"<1-2 sentences using you/your code, referencing this specific file and line>",'
+    '"what_is_wrong":"<exact mistake in THIS code — not a generic category description>",'
+    '"why_this_is_insecure":"<logic/flow reason tied directly to the snippet>",'
+    '"security_impact":"<real risk to the application or business — use safe language>",'
+    '"insecure_code_example":"<exact vulnerable snippet from the finding; if missing infer and set inferred:true>",'
+    '"secure_code_fix":{"code":"<complete corrected code, paste-ready, same language, same function names>",'
+    '"notes":"<required imports/config or inference notes>"},'
     '"why_the_fix_is_secure":"<what changed and why it prevents the issue>",'
-    '"secure_coding_lesson":"<single short memorable sentence>","inferred":<true|false>}'
+    '"secure_coding_lesson":"<one short memorable principle for this specific issue>","inferred":<true|false>}'
 )
 
 # In-memory cache: {cache_key: (timestamp, response_dict)}
@@ -319,110 +313,96 @@ def _build_overview_deterministic(
     }
 
 
-# ── Coach prompt builder (v4) ─────────────────────────────────────────────────
+# ── Coach prompt builder (v4 — single finding) ───────────────────────────────
 def _build_coach_prompt(
-    top_findings:       list[dict],
+    finding:            dict,
     project_name:       str = "",
     recurring_patterns: list[dict] | None = None,
+    index:              int = 0,
 ) -> str:
     """
-    Build the v4 per-finding coach prompt.
-
-    Sends an array of enriched finding objects and a strict output schema.
-    The model must return a JSON array — one coach object per finding in the input.
+    Build a per-finding coach prompt for a SINGLE vulnerability.
+    The model returns ONE JSON object (not an array) — one focused coaching
+    session per finding, eliminating cross-finding contamination.
     """
     recurring_patterns = recurring_patterns or []
 
-    # ── Enrich each finding with file/line/code/CWE/vuln_type/recurring ───────
-    input_findings: list[dict] = []
-    for i, f in enumerate(top_findings):
-        cat       = classify_finding(f)
-        knowledge = get_knowledge(cat)
-        sev       = (f.get("severity") or "info").lower()
-        file_path = (f.get("file") or f.get("path") or "").replace("\\", "/")
-        short_path = "/".join(file_path.split("/")[-3:]) if file_path else ""
-        line_no   = f.get("line") or f.get("start_line") or ""
-        code_raw  = f.get("code") or f.get("code_snippet") or f.get("lines") or ""
-        code_snip = str(code_raw)[:_MAX_CODE_CHARS] if code_raw else ""
-        cwe_list  = knowledge.get("cwe_refs", [])
-        endpoint  = f.get("endpoint") or f.get("check_id") or ""
-        is_rec    = any(r.get("category") == cat for r in recurring_patterns)
+    cat       = classify_finding(finding)
+    knowledge = get_knowledge(cat)
+    sev       = (finding.get("severity") or "info").lower()
+    file_path = (finding.get("file") or finding.get("path") or "").replace("\\", "/")
+    short_path = "/".join(file_path.split("/")[-3:]) if file_path else ""
+    line_no   = finding.get("line") or finding.get("start_line") or ""
+    code_raw  = finding.get("code") or finding.get("code_snippet") or finding.get("lines") or ""
+    code_snip = str(code_raw)[:_MAX_CODE_CHARS] if code_raw else ""
+    cwe_list  = knowledge.get("cwe_refs", [])
+    endpoint  = finding.get("endpoint") or finding.get("check_id") or ""
+    is_rec    = any(r.get("category") == cat for r in recurring_patterns)
+    message   = (finding.get("message") or finding.get("description") or "")[:_MAX_MSG_CHARS]
 
-        input_findings.append({
-            "project_name":      project_name or "your repository",
-            "file":              short_path,
-            "line":              line_no,
-            "severity":          sev.upper(),
-            "vulnerability_type": knowledge.get("label", cat),
-            "endpoint":          endpoint,
-            "cwe":               cwe_list[0] if cwe_list else "",
-            "message": (f.get("message") or f.get("description") or "")[:_MAX_MSG_CHARS],
-            "code_snippet":      code_snip,
-            "is_recurring":      is_rec,
-        })
+    input_obj = {
+        "project_name":       project_name or "your repository",
+        "file":               short_path,
+        "line":               str(line_no),
+        "severity":           sev.upper(),
+        "vulnerability_type": knowledge.get("label", cat),
+        "endpoint":           endpoint,
+        "cwe":                cwe_list[0] if cwe_list else "",
+        "message":            message,
+        "code_snippet":       code_snip,
+        "is_recurring":       is_rec,
+    }
+    input_json = json.dumps(input_obj, indent=2)
 
-    input_json = json.dumps(input_findings, indent=2)
-    n = len(input_findings)
+    code_note = (
+        f"The vulnerable snippet is shown in code_snippet. "
+        "Tie every explanation directly to that specific code."
+        if code_snip
+        else
+        "No code snippet was captured for this finding. "
+        "Infer the most likely insecure pattern from the file path, vulnerability_type, and message. "
+        "Set inferred=true in your response."
+    )
 
-    # ── Output schema (one entry per finding) ─────────────────────────────────
-    schema = """[
-  {
-    "vulnerability": "<short vulnerability name>",
-    "severity": "<CRITICAL|HIGH|MEDIUM|LOW>",
-    "file": "<path from input>",
-    "line": "<line number or range from input>",
-    "endpoint": "<endpoint from input, or empty string if not applicable>",
-    "cwe": "<CWE id from input, or empty string>",
-    "coach_explanation": "<1-2 sentence mentor summary — speak directly to the developer using 'you'/'your code', referencing the specific file and line>",
-    "what_is_wrong": "<1-2 sentences identifying the exact mistake in the developer's code — specific, not generic>",
-    "why_this_is_insecure": "<1-3 sentences: explain the logic/flow reason this code is insecure; reference the code_snippet if present>",
-    "security_impact": "<1-2 sentences: business/technical risk if this weakness is unaddressed — use: unauthorized access, exposure risk, misuse risk, unintended access>",
-    "insecure_code_example": "<the exact code_snippet from input, or infer a minimal example if snippet missing; set inferred=true if inferred>",
-    "secure_code_fix": {
-      "code": "<complete corrected code block in the same language — copy-paste ready, not pseudocode>",
-      "notes": "<any required imports, config changes, or assumptions made>"
-    },
-    "why_the_fix_is_secure": "<1-2 sentences: what changed and why it prevents the weakness>",
-    "secure_coding_lesson": "<one short memorable sentence the developer should remember>",
-    "inferred": <true if you inferred missing context from the snippet, false if exact snippet was provided>
-  }
-]"""
+    return f"""You are the SecureTrail AI Security Coach performing a one-on-one code review session.
 
-    return f"""You are the SecureTrail AI Coach — a senior security mentor reviewing a developer's code.
+You are reviewing Coaching Issue #{index + 1} for {project_name or 'this project'}.
+This is ONE specific vulnerability. Do not reference any other findings.
+Treat this as a private mentor session with the developer who wrote this code.
 
-PRIMARY OBJECTIVE: For each finding below, produce a focused coaching response that:
-1) identifies the exact mistake in the developer's code
-2) explains why that specific code is insecure (logic/flow reason)
-3) describes the likely security impact (business/developer-relevant)
-4) shows the insecure code snippet (as provided or inferred)
-5) provides an actionable secure code fix in the SAME language (real, copy-paste ready)
-6) explains why the fix is secure (what changed, why it prevents the issue)
-7) gives one short secure-coding lesson the developer should remember
-
-RULES:
-- Speak directly to the developer: use "you" and "your code"
-- Do NOT produce generic textbook definitions — tie every explanation to the provided code_snippet
-- NEVER use: exploit, weaponize, attack steps, penetration — use instead: unauthorized access, exposure risk, misuse risk, unintended access
-- secure_code_fix.code must be real working code in the same language (inferred from file extension or snippet)
-- If code_snippet is missing or truncated, infer context from file/vulnerability_type and set inferred=true
-- Return exactly {n} entries in the array — one per finding, in the same order as the input
-- Output raw JSON array only — no markdown, no preamble, no code fences
-
-━━━ FINDINGS INPUT ({n} items) ━━━
+THIS IS THE ONLY ISSUE YOU ARE COACHING:
 {input_json}
 
-━━━ YOUR TASK ━━━
-Return ONLY a valid JSON array of exactly {n} objects matching this schema:
-{schema}"""
+YOUR TASK — 7 steps for this specific issue:
+1. Identify the exact mistake in the developer's code at the file and line above.
+2. Explain why that specific code logic creates a security weakness.
+3. Describe the real impact if this issue is unaddressed (use: unauthorized access, exposure risk, misuse risk).
+4. Show the insecure code pattern from code_snippet above.
+5. Write a complete, working secure fix in the SAME language — copy-paste ready.
+   Keep the same function names, route paths, and code style as the original.
+6. Explain what changed and why the fix closes the security weakness.
+7. Give one short memorable secure-coding principle for this specific type of issue.
+
+{code_note}
+
+STRICT RULES:
+- Use "you" and "your code" throughout — speak directly to the developer
+- Do NOT explain what IDOR, SQL injection, or any category means in general
+- Everything must reference THIS specific file, line, and snippet
+- Do NOT use: exploit, weaponize, attack steps, penetration
+- secure_code_fix.code must be working code in the same language as the file extension
+- Use the same variable and function names from the original snippet
+
+Return ONLY a single raw JSON object — no array wrapper, no markdown, no preamble."""
 
 
-# ── Bedrock integration (v4 — returns list[dict]) ────────────────────────────
-def _call_bedrock_coach(prompt: str, expected_count: int) -> list[dict]:
+# ── Bedrock integration (v4 — single finding, returns dict) ──────────────────
+def _call_bedrock_coach(prompt: str) -> dict:
     """
-    Invoke the configured Bedrock model via bedrock_client.invoke_claude().
-    Parses the expected JSON array response (one coach object per finding).
-    Validates each item against the v4 coach schema.
-    Returns a validated list[dict].
+    Invoke the configured Bedrock model for a SINGLE finding.
+    Expects a single JSON object back (not an array).
+    Validates and normalises the response against the v4 coach schema.
+    Returns a single validated dict.
     """
     from Engines.ai.bedrock_client import invoke_claude  # lazy import
 
@@ -441,74 +421,51 @@ def _call_bedrock_coach(prompt: str, expected_count: int) -> list[dict]:
         end    = len(lines) - 1 if lines[-1].strip() == "```" else len(lines)
         cleaned = "\n".join(lines[start:end]).strip()
 
-    # ── Extract outermost JSON array ──────────────────────────────────────────
-    if cleaned and cleaned[0] not in ("[", "{"):
-        import re as _re
-        m = _re.search(r"\[.*\]", cleaned, _re.DOTALL)
-        if m:
-            cleaned = m.group(0)
-        else:
-            raise ValueError(f"Response is not a JSON array (first 200 chars): {cleaned[:200]!r}")
-
     if not cleaned:
         raise ValueError("Bedrock returned empty response text")
 
+    # ── Extract the first JSON object or array ────────────────────────────────
+    if cleaned[0] not in ("[", "{"):
+        import re as _re
+        m = _re.search(r"[{\[]", cleaned)
+        if m:
+            cleaned = cleaned[m.start():]
+        else:
+            raise ValueError(f"No JSON found in response (first 200 chars): {cleaned[:200]!r}")
+
     parsed = json.loads(cleaned)
 
-    # ── Handle case where model returned a single object instead of array ─────
-    if isinstance(parsed, dict):
-        # Could be a single-item array wrapped in an object, or just one item
-        if "coach_findings" in parsed:
-            parsed = parsed["coach_findings"]
-        else:
-            parsed = [parsed]
+    # ── If model returned an array, take the first element ───────────────────
+    if isinstance(parsed, list):
+        if not parsed:
+            raise ValueError("Model returned an empty array")
+        parsed = parsed[0]
 
-    if not isinstance(parsed, list):
-        raise ValueError(f"Expected JSON array, got {type(parsed).__name__}")
+    if not isinstance(parsed, dict):
+        raise ValueError(f"Expected JSON object, got {type(parsed).__name__}")
 
-    # ── Validate + normalize each coach item ──────────────────────────────────
-    required_item_keys = {
+    # ── Validate + normalise required fields ─────────────────────────────────
+    required_keys = {
         "vulnerability", "severity", "file", "line",
         "coach_explanation", "what_is_wrong", "why_this_is_insecure",
         "security_impact", "insecure_code_example", "secure_code_fix",
         "why_the_fix_is_secure", "secure_coding_lesson",
     }
+    missing = required_keys - set(parsed.keys())
+    if missing:
+        logger.warning("Coach response missing keys: %s — defaulting", missing)
+    for k in missing:
+        parsed[k] = "" if k != "secure_code_fix" else {"code": "", "notes": ""}
 
-    normalized: list[dict] = []
-    for idx, item in enumerate(parsed):
-        if not isinstance(item, dict):
-            logger.warning("Coach item %d is not a dict — skipping", idx)
-            continue
+    if not isinstance(parsed.get("secure_code_fix"), dict):
+        parsed["secure_code_fix"] = {"code": str(parsed.get("secure_code_fix", "")), "notes": ""}
+    parsed["secure_code_fix"].setdefault("code",  "")
+    parsed["secure_code_fix"].setdefault("notes", "")
+    parsed.setdefault("endpoint", "")
+    parsed.setdefault("cwe",      "")
+    parsed.setdefault("inferred", False)
 
-        # Fill missing required keys with safe defaults
-        missing = required_item_keys - set(item.keys())
-        if missing:
-            logger.warning("Coach item %d missing keys: %s — defaulting", idx, missing)
-        for k in missing:
-            item[k] = "" if k != "secure_code_fix" else {"code": "", "notes": ""}
-
-        # Ensure secure_code_fix is a dict
-        if not isinstance(item.get("secure_code_fix"), dict):
-            item["secure_code_fix"] = {"code": str(item.get("secure_code_fix", "")), "notes": ""}
-        item["secure_code_fix"].setdefault("code",  "")
-        item["secure_code_fix"].setdefault("notes", "")
-
-        item.setdefault("endpoint", "")
-        item.setdefault("cwe",      "")
-        item.setdefault("inferred", False)
-
-        normalized.append(item)
-
-    # If model returned fewer items than expected, pad with None markers
-    # (get_ai_insights will fall back to deterministic for missing indices)
-    if len(normalized) < expected_count:
-        logger.warning(
-            "Coach response has %d items, expected %d — padding with None",
-            len(normalized), expected_count,
-        )
-        normalized.extend([None] * (expected_count - len(normalized)))  # type: ignore[list-item]
-
-    return normalized
+    return parsed
 
 
 # ── Helper: map coach findings → deep_dive (backward compat) ─────────────────
@@ -684,27 +641,45 @@ def get_ai_insights(
         logger.debug("AI disabled — deterministic coach fallback for job %s", job_id)
         coach_findings = _build_coach_fallback(top_findings, recurring_patterns)
     else:
-        try:
-            prompt = _build_coach_prompt(
-                top_findings       = top_findings,
-                project_name       = project_name,
-                recurring_patterns = recurring_patterns,
+        # ── Per-finding loop: one AI call per finding ─────────────────────────
+        # This prevents cross-finding contamination and produces focused,
+        # code-specific coaching instead of generic batch output.
+        fallback_all    = _build_coach_fallback(top_findings, recurring_patterns)
+        ai_errors:  list[str] = []
+        ai_success: int = 0
+
+        for i, finding in enumerate(top_findings):
+            try:
+                prompt = _build_coach_prompt(
+                    finding            = finding,
+                    project_name       = project_name,
+                    recurring_patterns = recurring_patterns,
+                    index              = i,
+                )
+                result_item = _call_bedrock_coach(prompt)
+                coach_findings.append(result_item)
+                ai_success += 1
+                logger.debug("AI coach OK for finding %d/%d (job %s)", i + 1, len(top_findings), job_id)
+
+            except Exception as exc:
+                logger.warning(
+                    "AI coach failed for finding %d/%d (job %s): %s — using fallback",
+                    i + 1, len(top_findings), job_id, exc,
+                )
+                coach_findings.append(fallback_all[i])
+                ai_errors.append(f"finding {i+1}: {exc}")
+
+        if ai_success > 0:
+            source = "ai" if ai_success == len(top_findings) else "ai"
+            logger.info(
+                "Per-finding AI coach complete: %d/%d AI, %d fallback (job %s, cache_key=%s)",
+                ai_success, len(top_findings), len(ai_errors), job_id, cache_key,
             )
-            coach_findings = _call_bedrock_coach(prompt, expected_count=len(top_findings))
+        else:
+            source = "deterministic"
 
-            # Replace any None-padded slots with deterministic fallback
-            fallback_all = _build_coach_fallback(top_findings, recurring_patterns)
-            coach_findings = [
-                cf if cf is not None else fallback_all[i]
-                for i, cf in enumerate(coach_findings)
-            ]
-            source = "ai"
-            logger.info("Coach insights generated by AI for job %s (cache_key=%s)", job_id, cache_key)
-
-        except Exception as exc:
-            logger.warning("AI call failed for job %s (%s) — deterministic coach fallback", job_id, exc)
-            coach_findings = _build_coach_fallback(top_findings, recurring_patterns)
-            ai_error       = str(exc)
+        if ai_errors:
+            ai_error = "; ".join(ai_errors)
 
     # ── Map coach findings → deep_dive (backward compat with frontend) ─────────
     deep_dive = _map_to_deep_dive(coach_findings, top_findings)
