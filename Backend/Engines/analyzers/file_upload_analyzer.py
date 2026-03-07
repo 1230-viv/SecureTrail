@@ -64,7 +64,7 @@ def analyze_file_upload(project_dir: Path, job_id: str) -> List[NormalizedVulner
                 title="File upload missing MIME type validation",
                 description=(
                     f"{fpath.name} accepts file uploads without validating MIME type. "
-                    "Attackers can upload malicious files disguised as allowed types."
+                    "Unauthorized users could upload harmful files disguised as allowed types."
                 ),
                 file=rel,
                 severity=Severity.HIGH,
@@ -120,7 +120,7 @@ def analyze_file_upload(project_dir: Path, job_id: str) -> List[NormalizedVulner
                 title="Files stored in publicly accessible web directory",
                 description=(
                     f"Uploaded files are stored in a public directory. "
-                    "Executable files stored here can be directly requested and run by attackers."
+                    "Executable files stored here can be directly requested and run by unauthorized users."
                 ),
                 file=rel,
                 line=line_num,

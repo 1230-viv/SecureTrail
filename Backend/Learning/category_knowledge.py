@@ -7,7 +7,7 @@ Does NOT depend on AI — always available, always consistent.
 Each category maps to:
   - Plain-language explanation
   - Why it matters
-  - Attacker exploitation path
+  - Unauthorized access path
   - Secure coding pattern + example
   - Prevention checklist
   - Semgrep/CWE mapping for auto-categorisation
@@ -181,11 +181,11 @@ CATEGORY_KNOWLEDGE: Final[dict[str, dict]] = {
             "the requesting user owns that record."
         ),
         "why_it_matters": (
-            "IDOR is the most common API vulnerability. An attacker with one valid "
+            "IDOR is the most common API vulnerability. An unauthorized user with one valid "
             "account can enumerate all other users' data by cycling through IDs."
         ),
         "attacker_path": [
-            "Attacker registers a legitimate account",
+            "Unauthorized user registers a legitimate account",
             "Makes a normal request, intercepts: GET /api/invoices/1001",
             "Iterates: GET /api/invoices/1002 … 9999",
             "Downloads every other user's invoice without authorisation",
@@ -219,7 +219,7 @@ CATEGORY_KNOWLEDGE: Final[dict[str, dict]] = {
         ),
         "why_it_matters": (
             "SQL injection can dump an entire database in one request. OS command "
-            "injection can give an attacker a shell on your server."
+            "injection can give an unauthorized user a shell on your server."
         ),
         "attacker_path": [
             "Find a form or query parameter that feels like it queries data",
@@ -251,16 +251,16 @@ CATEGORY_KNOWLEDGE: Final[dict[str, dict]] = {
         "color": "#eab308",
         "plain_explanation": (
             "Your app uses third-party packages. If those packages have known CVEs "
-            "and you haven't updated, attackers can exploit those CVEs against you."
+            "and you haven't updated, unauthorized users can take advantage of those CVEs against you."
         ),
         "why_it_matters": (
             "Log4Shell (CVE-2021-44228) affected millions of Java apps via one "
             "vulnerable library. 87% of breaches involve a known vulnerability."
         ),
         "attacker_path": [
-            "Attacker checks public CVE databases for your library versions",
-            "Finds CVE with public exploit code (e.g. on GitHub)",
-            "Runs exploit directly — no custom code required",
+            "Unauthorized user checks public CVE databases for your library versions",
+            "Finds CVE with public proof-of-concept code (e.g. on GitHub)",
+            "Runs the proof-of-concept directly — no custom code required",
         ],
         "secure_pattern": (
             "Pin exact versions, run automated CVE scanning in CI (Trivy, Snyk), "
@@ -324,17 +324,17 @@ CATEGORY_KNOWLEDGE: Final[dict[str, dict]] = {
         "icon":  "Gauge",
         "color": "#06b6d4",
         "plain_explanation": (
-            "Without rate limiting, an attacker can send unlimited requests to "
-            "authentication endpoints, enabling brute-force attacks, account "
+            "Without rate limiting, an unauthorized user can send unlimited requests to "
+            "authentication endpoints, enabling brute-force attempts, account "
             "enumeration, and resource exhaustion."
         ),
         "why_it_matters": (
             "A 6-digit OTP has 1 million combinations. Without rate limiting, "
-            "an attacker can try all of them in minutes."
+            "an unauthorized user can try all of them in minutes."
         ),
         "attacker_path": [
             "Target the login or OTP verification endpoint",
-            "Script thousands of requests per second using tools like Hydra",
+            "Script thousands of requests per second using automated tools",
             "Cycle through common passwords or all OTP values",
             "Gain access when the correct value is found",
         ],
@@ -371,10 +371,10 @@ CATEGORY_KNOWLEDGE: Final[dict[str, dict]] = {
             "cookie, exfiltrating data or performing actions on their behalf."
         ),
         "attacker_path": [
-            "Attacker hosts malicious.com",
+            "Unauthorized actor hosts malicious.com",
             "Victim visits malicious.com while logged into target app",
             "JavaScript on malicious.com calls target-api.com/user/profile",
-            "Wildcard/reflected CORS allows it — response returned to attacker",
+            "Wildcard/reflected CORS allows it — response returned to unauthorized actor",
         ],
         "secure_pattern": (
             "Explicitly whitelist exact production origins. "
@@ -401,10 +401,10 @@ CATEGORY_KNOWLEDGE: Final[dict[str, dict]] = {
         "plain_explanation": (
             "JSON Web Tokens carry identity claims. Misconfigurations — like "
             "accepting the 'none' algorithm, using weak secrets, or skipping "
-            "signature validation — allow attackers to forge tokens."
+            "signature validation — allow unauthorized users to forge tokens."
         ),
         "why_it_matters": (
-            "A forged JWT gives an attacker any identity they choose, "
+            "A forged JWT gives an unauthorized user any identity they choose, "
             "including admin. Complete authentication bypass."
         ),
         "attacker_path": [
@@ -438,18 +438,18 @@ CATEGORY_KNOWLEDGE: Final[dict[str, dict]] = {
         "icon":  "FileWarning",
         "color": "#f59e0b",
         "plain_explanation": (
-            "Insecure file upload allows attackers to upload executable scripts "
+            "Insecure file upload allows unauthorized users to upload executable scripts "
             "disguised as benign files, which can then be executed on the server."
         ),
         "why_it_matters": (
-            "Uploading a .php or .jsp webshell gives an attacker full remote code "
+            "Uploading a .php or .jsp webshell gives an unauthorized user full remote code "
             "execution on your server. Game over."
         ),
         "attacker_path": [
             "Find a file upload endpoint (profile picture, document upload)",
             "Rename malicious.php to malicious.jpg",
             "Upload — server only checks extension, not content",
-            "Access uploaded file via URL — PHP executes — attacker has shell",
+            "Access uploaded file via URL — PHP executes — unauthorized user has shell",
         ],
         "secure_pattern": (
             "Validate MIME type from file bytes (python-magic), not filename. "
@@ -515,11 +515,11 @@ CATEGORY_KNOWLEDGE: Final[dict[str, dict]] = {
         "color": "#e879f9",
         "plain_explanation": (
             "Deserializing untrusted data (pickle, marshal, yaml.load) can trigger "
-            "arbitrary code execution when the attacker controls the serialized payload."
+            "arbitrary code execution when an unauthorized user controls the serialized payload."
         ),
         "why_it_matters": (
-            "Python pickle deserialization of attacker-controlled data is immediate "
-            "remote code execution. No further exploit needed."
+            "Python pickle deserialization of untrusted user-controlled data is immediate "
+            "remote code execution. No further steps needed."
         ),
         "attacker_path": [
             "Find an endpoint that deserializes user-supplied data",
@@ -585,7 +585,7 @@ CATEGORY_KNOWLEDGE: Final[dict[str, dict]] = {
         "icon":  "Server",
         "color": "#0ea5e9",
         "plain_explanation": (
-            "Server-Side Request Forgery makes your server request an attacker-"
+            "Server-Side Request Forgery makes your server request a user-"
             "supplied URL. This can probe internal services, cloud metadata APIs, "
             "or exfiltrate data through the server."
         ),
@@ -596,7 +596,7 @@ CATEGORY_KNOWLEDGE: Final[dict[str, dict]] = {
         "attacker_path": [
             "Find an endpoint that fetches a URL (webhook, preview, import)",
             "Supply: http://169.254.169.254/latest/meta-data/iam/security-credentials/",
-            "Server fetches it — returns cloud IAM credentials to attacker",
+            "Server fetches it — returns cloud IAM credentials to the unauthorized user",
         ],
         "secure_pattern": (
             "Validate and allowlist target URLs. "
@@ -630,9 +630,9 @@ CATEGORY_KNOWLEDGE: Final[dict[str, dict]] = {
             "require audit trails. Missing logs also mean no forensic evidence."
         ),
         "attacker_path": [
-            "Attacker brute-forces login endpoint",
+            "Unauthorized user brute-forces login endpoint",
             "No logging means no alert fires",
-            "Attack continues for weeks undetected",
+            "Unauthorized access attempt continues for weeks undetected",
         ],
         "secure_pattern": (
             "Log authentication events, access control failures, and admin actions. "
@@ -658,8 +658,8 @@ CATEGORY_KNOWLEDGE: Final[dict[str, dict]] = {
         "icon":  "AlertCircle",
         "color": "#64748b",
         "plain_explanation": "Security findings that require manual review.",
-        "why_it_matters": "Even uncategorised findings can represent real attack surface.",
-        "attacker_path": ["Review each finding individually for exploit potential."],
+        "why_it_matters": "Even uncategorised findings can represent real exposure risk.",
+        "attacker_path": ["Review each finding individually for risk potential."],
         "secure_pattern": "Follow the principle of least privilege and defence in depth.",
         "code_example": {"bad": "", "good": ""},
         "checklist": [

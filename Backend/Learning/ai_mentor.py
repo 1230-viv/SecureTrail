@@ -174,41 +174,53 @@ def _build_coach_fallback(
 
         sev_pts = {"critical": 15, "high": 8, "medium": 3, "low": 1}.get(sev, 0)
 
+        label = knowledge.get("label", cat)
+        plain = knowledge.get("plain_explanation", "")
+        why_matters = knowledge.get("why_it_matters", "")
+        secure_pat = knowledge.get("secure_pattern", "")
+        impact_sum = knowledge.get("impact_summary", "unauthorized access or data exposure")
+
         coach_findings.append({
-            "vulnerability":        knowledge.get("label", cat),
+            "vulnerability":        label,
             "severity":             sev.upper(),
             "file":                 short_path,
             "line":                 str(line_no),
             "endpoint":             endpoint,
             "cwe":                  cwe_list[0] if cwe_list else "",
             "coach_explanation": (
-                f"Your code has a {sev}-severity {knowledge.get('label', cat)} weakness at "
-                f"{short_path} (line {line_no}). "
-                f"{knowledge['plain_explanation'][:180]}"
+                f"In your code at {short_path} (line {line_no}), you have a "
+                f"{sev}-severity {label} issue. {plain[:160]}"
             ),
             "what_is_wrong": (
                 f"{'[RECURRING] ' if is_recurring else ''}"
-                f"{knowledge['plain_explanation'][:220]}"
+                f"Your code at {short_path}:{line_no} {plain[:200]}"
             ),
-            "why_this_is_insecure": knowledge["why_it_matters"],
+            "why_this_is_insecure": (
+                f"Your code is insecure because {why_matters[:250]}"
+                if why_matters else
+                f"This pattern in your code creates an exposure risk that could lead to {impact_sum}."
+            ),
             "security_impact": (
-                f"This {sev}-severity weakness in {short_path} (line {line_no}) "
-                f"could allow {knowledge.get('impact_summary', 'unauthorized access or data exposure')} "
-                f"if left unaddressed. Resolving it improves your score by {sev_pts} points."
+                f"If this {sev}-severity issue in {short_path} (line {line_no}) is misused, "
+                f"it could lead to {impact_sum}. "
+                f"Fixing it improves your security score by {sev_pts} points."
             ),
             "insecure_code_example": code_snip or f"# Insecure pattern detected at {short_path}:{line_no}\n# See finding {vid} for details",
             "secure_code_fix": {
-                "code":  knowledge["secure_pattern"],
+                "code":  secure_pat,
                 "notes": (
-                    "Replace the flagged pattern with the secure version above. "
+                    "Replace your current code at the flagged location with the secure version above. "
                     + (f"References: {', '.join(cwe_list)}" if cwe_list else "")
                 ),
             },
             "why_the_fix_is_secure": (
-                f"The secure pattern eliminates the {knowledge.get('label', cat)} weakness "
-                "by enforcing proper validation and safe API usage, removing the unintended access path."
+                f"The corrected implementation eliminates the {label} weakness in your code "
+                f"by enforcing proper validation and safe API usage, preventing "
+                f"the unintended access path that existed before."
             ),
-            "secure_coding_lesson": (knowledge.get("checklist") or ["Follow secure coding practices"])[0],
+            "secure_coding_lesson": (
+                f"Remember: {(knowledge.get('checklist') or ['Always validate and sanitize user input before processing'])[0]}"
+            ),
             "inferred": not bool(code_snip),
         })
 
@@ -364,34 +376,37 @@ def _build_coach_prompt(
         "Set inferred=true in your response."
     )
 
-    return f"""You are the SecureTrail AI Security Coach performing a one-on-one code review session.
+    return f"""You are the SecureTrail AI Security Coach — a senior application security
+engineer reviewing a developer's code and teaching them to write secure code.
 
-You are reviewing Coaching Issue #{index + 1} for {project_name or 'this project'}.
+You are coaching on Issue #{index + 1} for {project_name or 'this project'}.
 This is ONE specific vulnerability. Do not reference any other findings.
 Treat this as a private mentor session with the developer who wrote this code.
 
-THIS IS THE ONLY ISSUE YOU ARE COACHING:
+THIS IS THE ONLY VULNERABILITY YOU ARE COACHING:
 {input_json}
 
-YOUR TASK — 7 steps for this specific issue:
-1. Identify the exact mistake in the developer's code at the file and line above.
-2. Explain why that specific code logic creates a security weakness.
-3. Describe the real impact if this issue is unaddressed (use: unauthorized access, exposure risk, misuse risk).
-4. Show the insecure code pattern from code_snippet above.
-5. Write a complete, working secure fix in the SAME language — copy-paste ready.
-   Keep the same function names, route paths, and code style as the original.
-6. Explain what changed and why the fix closes the security weakness.
-7. Give one short memorable secure-coding principle for this specific type of issue.
+YOUR TASK — analyze this specific finding and produce a clear coaching explanation:
+1. What the developer did wrong in this specific code (file and line above).
+2. Why the code is insecure (logic/flow reason tied to the snippet).
+3. The potential security impact (use: unauthorized access, exposure risk, misuse risk).
+4. The insecure code pattern from code_snippet above.
+5. A corrected secure implementation — real working code, copy-paste ready,
+   same language, same function/variable names, same code style.
+6. Why the corrected implementation is secure — what changed and why it prevents the issue.
+7. A secure coding lesson the developer should remember for this type of issue.
 
 {code_note}
 
 STRICT RULES:
-- Use "you" and "your code" throughout — speak directly to the developer
-- Do NOT explain what IDOR, SQL injection, or any category means in general
-- Everything must reference THIS specific file, line, and snippet
-- Do NOT use: exploit, weaponize, attack steps, penetration
-- secure_code_fix.code must be working code in the same language as the file extension
+- Speak directly to the developer: use "you" and "your code" throughout
+- Do NOT explain vulnerability categories in general
+- Everything must reference THIS specific file, line, and code pattern
+- Avoid: exploit, weaponize, attack steps, penetration
+- secure_code_fix.code must be working code in the same language as the file
 - Use the same variable and function names from the original snippet
+- Be clear and educational — teach the developer, not just describe the problem
+- Focus on practical secure coding guidance, not long theoretical explanations
 
 Return ONLY a single raw JSON object — no array wrapper, no markdown, no preamble."""
 

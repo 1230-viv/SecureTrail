@@ -1315,7 +1315,7 @@ class IDORRiskRule(DetectionRule):
             description=(
                 f"Route `{route.method.upper()} {route.path}` accepts path parameter(s) "
                 f"`{param_str}` but no ownership verification was detected in the handler. "
-                f"An authenticated attacker can enumerate other users' resources by altering the ID."
+                f"An authenticated user could access other users' resources by altering the ID, creating an exposure risk."
             ),
             recommendation=(
                 "Verify the requested resource belongs to the authenticated user. "
@@ -1460,8 +1460,8 @@ class BOLARule(DetectionRule):
             description=(
                 f"Handler for `{route.method.upper()} {route.path}` reads a user-supplied "
                 f"resource ID from `req.query` or `req.body` (e.g. `userId`, `id`) without "
-                f"an ownership check. An attacker can supply another user's ID to access or "
-                f"modify their resources."
+                f"an ownership check. An unauthorized user could supply another user's ID to access or "
+                f"modify their resources, creating an exposure risk."
             ),
             recommendation=(
                 "Never trust client-supplied resource IDs for ownership. "
