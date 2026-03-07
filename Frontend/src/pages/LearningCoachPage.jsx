@@ -60,6 +60,8 @@ const IC = {
   list:     'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
   wrench:   'M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z',
   minus:    'M5 12h14',
+  alertTriangle: 'M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01',
+  file:     'M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM13 2v7h7',
 };
 
 const SEV_COLORS = {
@@ -354,6 +356,9 @@ function DeepDiveV3({ deepDive, loading }) {
       {deepDive.map((item, i) => {
         const isOpen = expanded[i];
         const fid      = item.finding_id || item.vuln_id || `Finding ${i + 1}`;
+        const file     = item.file || '';
+        const line     = item.line || '';
+        const severity = item.severity || '';
         const whatHappened = item.what_happened || '';
         const whyMatters   = item.why_it_matters || item.business_impact || '';
         const bizImpact    = item.business_impact || '';
@@ -368,7 +373,23 @@ function DeepDiveV3({ deepDive, loading }) {
               <div className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-xs font-bold text-indigo-600 dark:text-indigo-400">
                 {i + 1}
               </div>
-              <span className="flex-1 font-mono text-xs text-gray-700 dark:text-gray-300 truncate">{fid}</span>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-mono text-xs text-gray-700 dark:text-gray-300 truncate">{fid}</span>
+                  {severity && (
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0"
+                      style={{ background: `${SEV_COLORS[severity]}20`, color: SEV_COLORS[severity] }}>
+                      {severity.toUpperCase()}
+                    </span>
+                  )}
+                </div>
+                {file && (
+                  <div className="flex items-center gap-1 mt-1">
+                    <span className="text-xs text-gray-500 dark:text-gray-400 font-mono truncate">{file}</span>
+                    {line && <span className="text-xs text-gray-400 dark:text-gray-500">:{line}</span>}
+                  </div>
+                )}
+              </div>
               <Icon d={isOpen ? IC.chevUp : IC.chevDn} size={16} className="flex-shrink-0 text-gray-400" />
             </button>
             {isOpen && (
@@ -826,10 +847,18 @@ function CategoryCard({ catSlug, catData, onSelect, learned }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // FindingRow — one affected file in the detail view
 // ─────────────────────────────────────────────────────────────────────────────
-function FindingRow({ finding, idx, jobId, category, onVerified }) {
+function FindingRow({ finding, idx, jobId, category, onVerified, secureExample, securePattern }) {
   const [open, setOpen] = useState(false);
-  const { file, line, severity, title, message, code_snippet, rule_id } = finding;
+  const { file, line, line_start, line_end, severity, title, message, code_snippet, rule_id } = finding;
   const sev = severity || 'info';
+  
+  // Determine line number to display (try line, then line_start)
+  const lineNum = line || line_start;
+  const endLine = line_end;
+  const lineDisplay = lineNum 
+    ? (endLine && endLine !== lineNum ? `Lines ${lineNum}-${endLine}` : `Line ${lineNum}`)
+    : null;
+  
   return (
     <div className="border border-slate-200 dark:border-white/10 rounded-xl overflow-hidden bg-white dark:bg-[#1a1d27]">
       <button onClick={() => setOpen(o => !o)}
@@ -846,14 +875,20 @@ function FindingRow({ finding, idx, jobId, category, onVerified }) {
           {sev.toUpperCase()}
         </span>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap mb-1">
             <span className="font-mono text-xs text-indigo-600 dark:text-indigo-400 truncate">
               {file || 'unknown file'}
             </span>
-            {line && <span className="text-xs text-slate-400 dark:text-slate-500">:{line}</span>}
           </div>
+          {lineDisplay && (
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className="text-xs font-semibold text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 px-2 py-0.5 rounded border border-orange-200 dark:border-orange-700/40">
+                {lineDisplay}
+              </span>
+            </div>
+          )}
           {title && title !== (rule_id || '') && (
-            <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">{title}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{title}</p>
           )}
         </div>
         <Icon d={open ? IC.chevUp : IC.chevDn} size={15} className="flex-shrink-0 text-slate-400 dark:text-slate-500 ml-1" />
@@ -882,6 +917,8 @@ function FindingRow({ finding, idx, jobId, category, onVerified }) {
               label={title || rule_id || category}
               originalIssue={message || ''}
               onVerified={onVerified}
+              secureExample={secureExample}
+              securePattern={securePattern}
             />
           )}
         </div>
@@ -1053,13 +1090,93 @@ function CategoryDetailView({ guide, loading, onBack, onMarkLearned, isLearned, 
 
           {/* Learn & Fix tab */}
           {guideTab === 'learn' && (
-            <div className="bg-slate-50 dark:bg-[#1a1d27] rounded-2xl border border-slate-200 dark:border-white/10 p-6">
-              {ai_guide?.full_guide
-                ? <div className="prose-sm text-sm text-slate-600 dark:text-slate-300 leading-relaxed space-y-1">
-                    {renderMarkdown(ai_guide.full_guide)}
+            <div className="space-y-6">
+              {/* Findings in your code section */}
+              {findings.length > 0 && (
+                <div className="bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/20 rounded-2xl border border-orange-200 dark:border-orange-800/40 p-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 rounded-xl bg-orange-500/10 dark:bg-orange-500/20 flex items-center justify-center">
+                      <Icon d={IC.alertTriangle} size={20} color="#f97316" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-slate-900 dark:text-white text-base">
+                        Issues Found in Your Code
+                      </h3>
+                      <p className="text-xs text-slate-600 dark:text-slate-400">
+                        {findings.length} location{findings.length !== 1 ? 's' : ''} where this vulnerability was detected
+                      </p>
+                    </div>
                   </div>
-                : <StaticGuide guide={{ plain_what, plain_why, plain_fix, code_example, checklist, cwe_refs }} />
-              }
+                  <div className="space-y-2">
+                    {findings.slice(0, 10).map((f, i) => {
+                      const lineNum = f.line || f.line_start;
+                      const endLine = f.line_end;
+                      const lineDisplay = lineNum 
+                        ? (endLine && endLine !== lineNum ? `Lines ${lineNum}-${endLine}` : `Line ${lineNum}`)
+                        : null;
+                      
+                      return (
+                        <div key={i} className="bg-white dark:bg-[#1a1d27] rounded-xl border border-orange-200 dark:border-white/10 p-4">
+                          <div className="flex items-start justify-between gap-3 mb-3">
+                            <div className="flex-1 min-w-0 space-y-2">
+                              <div className="flex items-center gap-2">
+                                <code className="text-sm font-mono text-indigo-600 dark:text-indigo-400 truncate">
+                                  {f.file || `Finding ${i+1}`}
+                                </code>
+                              </div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {f.severity && (
+                                  <span className="text-xs font-bold px-2 py-0.5 rounded flex-shrink-0"
+                                    style={{ background: `${SEV_COLORS[f.severity]}20`, color: SEV_COLORS[f.severity] }}>
+                                    {f.severity.toUpperCase()}
+                                  </span>
+                                )}
+                                {lineDisplay && (
+                                  <span className="text-xs font-semibold text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 px-2 py-0.5 rounded border border-orange-200 dark:border-orange-700/40">
+                                    {lineDisplay}
+                                  </span>
+                                )}
+                              </div>
+                              {f.title && (
+                                <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                                  {f.title}
+                                </p>
+                              )}
+                              {f.message && (
+                                <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                                  {f.message}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          {f.code_snippet && (
+                            <div className="mt-3">
+                              <pre className="text-xs p-3 rounded-lg bg-slate-50 dark:bg-black/30 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300 font-mono overflow-x-auto whitespace-pre-wrap">
+{f.code_snippet}
+                              </pre>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {findings.length > 10 && (
+                      <p className="text-xs text-slate-500 dark:text-slate-400 text-center pt-2">
+                        Showing 10 of {findings.length} findings. View all in the "Affected Files" tab.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Educational content section */}
+              <div className="bg-slate-50 dark:bg-[#1a1d27] rounded-2xl border border-slate-200 dark:border-white/10 p-6">
+                {ai_guide?.full_guide
+                  ? <div className="prose-sm text-sm text-slate-600 dark:text-slate-300 leading-relaxed space-y-1">
+                      {renderMarkdown(ai_guide.full_guide)}
+                    </div>
+                  : <StaticGuide guide={{ plain_what, plain_why, plain_fix, code_example, checklist, cwe_refs }} />
+                }
+              </div>
             </div>
           )}
 
@@ -1072,6 +1189,8 @@ function CategoryDetailView({ guide, loading, onBack, onMarkLearned, isLearned, 
                     <FindingRow key={i} finding={f} idx={i}
                       jobId={jobId} category={category}
                       onVerified={onVerified}
+                      secureExample={code_example}
+                      securePattern={plain_fix}
                     />
                   ))
               }
@@ -1109,6 +1228,8 @@ function CategoryDetailView({ guide, loading, onBack, onMarkLearned, isLearned, 
                           label={f.title || f.rule_id || label}
                           originalIssue={f.message || ''}
                           onVerified={onVerified}
+                          secureExample={code_example}
+                          securePattern={plain_fix}
                         />
                       </div>
                     </div>
@@ -1496,17 +1617,21 @@ export default function LearningCoachPage({ jobId: propJobId, repoName: propRepo
   const [loadingMaturity, setLoadingMaturity] = useState(false);
   const [error, setError] = useState('');
 
-  // Learned state persisted in localStorage
+  // Learned state persisted in localStorage (per repository, not per job)
   const [learned, setLearned] = useState(() => {
     try { return JSON.parse(localStorage.getItem('st_learned') || '{}'); } catch { return {}; }
   });
   const markLearned = (cat) => {
-    const key = `${jobId}__${cat}`;
+    if (!repoName) return;
+    const key = `${repoName}__${cat}`;
     const next = { ...learned, [key]: true };
     setLearned(next);
     try { localStorage.setItem('st_learned', JSON.stringify(next)); } catch {}
   };
-  const isLearned = (cat) => !!learned[`${jobId}__${cat}`];
+  const isLearned = (cat) => {
+    if (!repoName) return false;
+    return !!learned[`${repoName}__${cat}`];
+  };
 
   // Load jobs on mount
   useEffect(() => {
@@ -1692,7 +1817,7 @@ export default function LearningCoachPage({ jobId: propJobId, repoName: propRepo
           healthScore={healthScore}
           maturityLevel={maturityLevel}
           onSelectCategory={handleSelectCategory}
-          learned={{ ...Object.fromEntries(Object.entries(learned).map(([k, v]) => [k.replace(`${jobId}__`, ''), v])) }}
+          learned={{ ...Object.fromEntries(Object.entries(learned).map(([k, v]) => [k.replace(`${repoName}__`, ''), v])) }}
           repoName={repoName}
           jobId={jobId}
           jobs={jobs}
