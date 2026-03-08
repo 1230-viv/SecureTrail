@@ -34,8 +34,8 @@ function BadgeTile({ badge, earned, isDark }) {
       className={`
         relative rounded-xl border p-4 flex flex-col items-center text-center gap-2 transition-all duration-200
         ${earned
-          ? `bg-gradient-to-b ${cfg.bg} ${isDark ? 'border-white/15' : 'border-gray-300'} shadow-lg`
-          : isDark ? 'bg-white/3 border-white/7' : 'bg-gray-50 border-gray-200'
+          ? `bg-gradient-to-b ${cfg.bg} ${isDark ? 'border-white/15' : 'border-neutral-300'} shadow-lg`
+          : isDark ? 'bg-white/3 border-white/7' : 'bg-gray-50 border-neutral-200'
         }
       `}
     >
@@ -137,7 +137,7 @@ export default function BadgeGrid({ repoName }) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className={`text-sm font-bold ${
+        <h3 className={`text-[15px] font-semibold ${
           isDark ? 'text-white/80' : 'text-gray-900'
         }`}>Achievements</h3>
         <span className={`text-xs ${

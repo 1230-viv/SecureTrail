@@ -35,11 +35,11 @@ function DriftBadge({ drift }) {
 
 function Section({ icon: Icon, title, children, isDark }) {
   return (
-    <div className="space-y-2">
-      <div className={`flex items-center gap-2 text-xs font-bold uppercase tracking-wide ${
+    <div className="space-y-2.5">
+      <div className={`flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider ${
         isDark ? 'text-white/50' : 'text-gray-500'
       }`}>
-        <Icon size={12} />
+        <Icon size={13} />
         <span>{title}</span>
       </div>
       {children}
@@ -94,19 +94,23 @@ export default function LongitudinalPanel({ jobId }) {
       : [];
 
   return (
-    <div className={`rounded-xl border p-5 space-y-5 ${
-      isDark ? 'border-white/10 bg-white/4' : 'border-gray-200 bg-white'
+    <div className={`rounded-xl border p-6 space-y-5 ${
+      isDark ? 'border-white/10 bg-white/4' : 'border-neutral-200 bg-white'
     }`}>
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Brain size={16} className="text-violet-400 shrink-0" />
+        <div className="flex items-center gap-2.5">
+          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+            isDark ? 'bg-violet-900/30' : 'bg-violet-50'
+          }`}>
+            <Brain size={16} className="text-violet-400" />
+          </div>
           <div>
-            <h3 className={`text-sm font-bold ${
+            <h3 className={`text-[15px] font-semibold ${
               isDark ? 'text-white/85' : 'text-gray-900'
             }`}>Longitudinal Analysis</h3>
             {scan_count && (
-              <p className={`text-[10px] mt-0.5 ${
+              <p className={`text-[11px] mt-0.5 ${
                 isDark ? 'text-white/35' : 'text-gray-400'
               }`}>Based on last {scan_count} scan{scan_count > 1 ? 's' : ''}</p>
             )}
@@ -136,35 +140,35 @@ export default function LongitudinalPanel({ jobId }) {
       {/* Stats row */}
       <div className="grid grid-cols-2 gap-3">
         {top_recurring_habit && (
-          <div className={`rounded-lg px-3 py-2.5 ${
-            isDark ? 'bg-white/4' : 'bg-gray-50'
+          <div className={`rounded-lg px-4 py-3 ${
+            isDark ? 'bg-white/4' : 'bg-[#f8fafc]'
           }`}>
-            <p className={`text-[10px] font-medium uppercase mb-1 ${
+            <p className={`text-[10px] font-semibold uppercase tracking-wider mb-1.5 ${
               isDark ? 'text-white/35' : 'text-gray-400'
             }`}>Top Recurring Habit</p>
-            <p className="text-xs font-semibold text-amber-400 truncate">{top_recurring_habit}</p>
+            <p className="text-[13px] font-semibold text-amber-500 truncate">{top_recurring_habit}</p>
           </div>
         )}
         {improvement_trajectory && (
-          <div className={`rounded-lg px-3 py-2.5 ${
-            isDark ? 'bg-white/4' : 'bg-gray-50'
+          <div className={`rounded-lg px-4 py-3 ${
+            isDark ? 'bg-white/4' : 'bg-[#f8fafc]'
           }`}>
-            <p className={`text-[10px] font-medium uppercase mb-1 ${
+            <p className={`text-[10px] font-semibold uppercase tracking-wider mb-1.5 ${
               isDark ? 'text-white/35' : 'text-gray-400'
             }`}>Trajectory</p>
-            <p className={`text-xs font-semibold truncate ${
+            <p className={`text-[13px] font-semibold truncate ${
               isDark ? 'text-white/75' : 'text-gray-700'
             }`}>{improvement_trajectory}</p>
           </div>
         )}
         {focus_domain && (
-          <div className={`rounded-lg px-3 py-2.5 col-span-2 sm:col-span-1 ${
-            isDark ? 'bg-white/4' : 'bg-gray-50'
+          <div className={`rounded-lg px-4 py-3 col-span-2 sm:col-span-1 ${
+            isDark ? 'bg-white/4' : 'bg-[#f8fafc]'
           }`}>
-            <p className={`text-[10px] font-medium uppercase mb-1 ${
+            <p className={`text-[10px] font-semibold uppercase tracking-wider mb-1.5 ${
               isDark ? 'text-white/35' : 'text-gray-400'
             }`}>Recommended Focus</p>
-            <p className="text-xs font-semibold text-blue-400 capitalize truncate">
+            <p className="text-[13px] font-semibold text-blue-500 capitalize truncate">
               {focus_domain.replace(/_/g, ' ')}
             </p>
           </div>
