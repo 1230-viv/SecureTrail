@@ -181,6 +181,205 @@ pre, code, .font-mono {
   animation: reportBarSwipe 1.4s ease-in-out infinite;
 }
 
+/* ── Premium Coaching UI: shimmer loading animation ──────────────────────── */
+@keyframes shimmerLoad {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.shimmer-load {
+  background: linear-gradient(
+    90deg,
+    rgba(99,102,241,0.06) 0%,
+    rgba(99,102,241,0.15) 40%,
+    rgba(99,102,241,0.06) 60%,
+    rgba(99,102,241,0.06) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmerLoad 1.8s ease-in-out infinite;
+  border-radius: 12px;
+}
+html.dark .shimmer-load {
+  background: linear-gradient(
+    90deg,
+    rgba(99,102,241,0.04) 0%,
+    rgba(99,102,241,0.12) 40%,
+    rgba(99,102,241,0.04) 60%,
+    rgba(99,102,241,0.04) 100%
+  );
+  background-size: 200% 100%;
+}
+
+/* ── Toast notification ────────────────────────────────────────────────────── */
+@keyframes toastEnter {
+  from { opacity: 0; transform: translateY(16px) scale(0.95); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes toastExit {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(-8px) scale(0.95); }
+}
+.toast-enter {
+  animation: toastEnter 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.toast-exit {
+  animation: toastExit 0.25s ease forwards;
+}
+
+/* ── Risk gauge bar animation ──────────────────────────────────────────────── */
+@keyframes gaugeGrow {
+  from { width: 0%; }
+}
+.animate-gauge {
+  animation: gaugeGrow 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* ── Typing dots for AI loading ─────────────────────────────────────────── */
+@keyframes typingBounce {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+  40% { transform: translateY(-8px); opacity: 1; }
+}
+
+/* ── Premium card styles ───────────────────────────────────────────────────── */
+.premium-card {
+  border-radius: 14px;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  transition: box-shadow 0.25s ease, transform 0.25s ease, border-color 0.25s ease;
+}
+.premium-card:hover {
+  box-shadow: 0 8px 24px rgba(0,0,0,0.07);
+  transform: translateY(-1px);
+}
+html.dark .premium-card {
+  border-color: rgba(255,255,255,0.08);
+  background: #1a1d27;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+html.dark .premium-card:hover {
+  border-color: rgba(255,255,255,0.12);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+}
+
+/* ── Finding report card with left accent ──────────────────────────────────── */
+.finding-report-card {
+  border: 2px solid #e5e7eb;
+  border-left: 5px solid #22c55e;
+  padding: 24px;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  transition: box-shadow 0.3s ease, border-color 0.3s ease;
+}
+.finding-report-card:hover {
+  box-shadow: 0 12px 32px rgba(0,0,0,0.08);
+  border-color: #d1d5db;
+}
+html.dark .finding-report-card {
+  background: #1a1d27;
+  border-color: rgba(255,255,255,0.1);
+  border-left-color: #22c55e;
+}
+html.dark .finding-report-card:hover {
+  box-shadow: 0 12px 32px rgba(0,0,0,0.4);
+  border-color: rgba(255,255,255,0.15);
+}
+
+.finding-report-card[data-severity="critical"] { border-left-color: #ef4444; }
+.finding-report-card[data-severity="high"]     { border-left-color: #f97316; }
+.finding-report-card[data-severity="medium"]   { border-left-color: #eab308; }
+.finding-report-card[data-severity="low"]      { border-left-color: #22c55e; }
+.finding-report-card[data-severity="info"]     { border-left-color: #6366f1; }
+
+/* ── Code diff viewer ─────────────────────────────────────────────────────── */
+.diff-viewer {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+}
+html.dark .diff-viewer {
+  border-color: rgba(255,255,255,0.1);
+}
+.diff-header {
+  background: #111827;
+  color: #f9fafb;
+  padding: 10px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.diff-before {
+  background: #fff1f2;
+  border-right: 1px solid #e5e7eb;
+}
+html.dark .diff-before {
+  background: rgba(239, 68, 68, 0.06);
+  border-right-color: rgba(255,255,255,0.06);
+}
+.diff-after {
+  background: #ecfdf5;
+}
+html.dark .diff-after {
+  background: rgba(34, 197, 94, 0.06);
+}
+.diff-code {
+  font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  padding: 16px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ── Insight card backgrounds ─────────────────────────────────────────────── */
+.insight-coach    { background: #eff6ff; border: 1px solid #dbeafe; }
+.insight-wrong    { background: #fff7ed; border: 1px solid #fed7aa; }
+.insight-insecure { background: #fef2f2; border: 1px solid #fecaca; }
+.insight-impact   { background: #fffbeb; border: 1px solid #fde68a; }
+.insight-fix      { background: #ecfdf5; border: 1px solid #a7f3d0; }
+.insight-lesson   { background: #eef2ff; border: 1px solid #c7d2fe; }
+
+html.dark .insight-coach    { background: rgba(59,130,246,0.06);  border-color: rgba(59,130,246,0.15); }
+html.dark .insight-wrong    { background: rgba(249,115,22,0.06);  border-color: rgba(249,115,22,0.15); }
+html.dark .insight-insecure { background: rgba(239,68,68,0.06);   border-color: rgba(239,68,68,0.15); }
+html.dark .insight-impact   { background: rgba(245,158,11,0.06);  border-color: rgba(245,158,11,0.15); }
+html.dark .insight-fix      { background: rgba(34,197,94,0.06);   border-color: rgba(34,197,94,0.15); }
+html.dark .insight-lesson   { background: rgba(99,102,241,0.06);  border-color: rgba(99,102,241,0.15); }
+
+/* ── Gradient AI button ───────────────────────────────────────────────────── */
+.ai-gradient-btn {
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: white;
+  padding: 12px 18px;
+  border-radius: 8px;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  box-shadow: 0 4px 14px rgba(99,102,241,0.3);
+}
+.ai-gradient-btn:hover {
+  box-shadow: 0 6px 20px rgba(99,102,241,0.4);
+  transform: translateY(-1px);
+}
+.ai-gradient-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(99,102,241,0.3);
+}
+
+/* ── Risk gauge ───────────────────────────────────────────────────────────── */
+.risk-gauge-track {
+  height: 8px;
+  background: #f1f5f9;
+  border-radius: 4px;
+  overflow: hidden;
+}
+html.dark .risk-gauge-track {
+  background: rgba(255,255,255,0.06);
+}
+
 /* ═══ P5 — Accessibility: reduced motion ═══ */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
