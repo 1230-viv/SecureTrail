@@ -36,8 +36,8 @@ function DomainCard({ domain, compact, isDark }) {
   const xpToNext  = domain.xp_to_next ?? 0;
 
   return (
-    <div className={`rounded-xl border transition-all ${compact ? 'p-3' : 'p-4'} ${
-      isDark ? 'border-white/10 bg-white/4 hover:bg-white/6' : 'border-gray-200 bg-white hover:bg-gray-50'
+    <div className={`rounded-xl border transition-all ${compact ? 'p-3' : 'p-5'} ${
+      isDark ? 'border-white/10 bg-white/4 hover:bg-white/6' : 'border-neutral-200 bg-white hover:shadow-sm'
     }`}>
       {/* Header */}
       <div className="flex items-start justify-between gap-2 mb-2">
@@ -156,7 +156,7 @@ export default function SkillTree({ repoName, compact = false }) {
     <div className="space-y-3">
       {!compact && (
         <div className="flex items-center justify-between mb-1">
-          <h3 className={`text-sm font-bold ${
+          <h3 className={`text-[15px] font-semibold ${
             isDark ? 'text-white/80' : 'text-gray-900'
           }`}>Skill Tree</h3>
           <div className={`text-xs ${

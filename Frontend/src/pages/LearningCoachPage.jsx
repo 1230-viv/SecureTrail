@@ -898,65 +898,86 @@ function CategoryCard({ catSlug, catData, onSelect, learned }) {
   const fileCount = catData?.file_count || 0;
   const isLearned = !!learned;
 
-  // top severity badge
   const topSev = SEV_ORDER.find(s => (sevCounts[s] || 0) > 0);
+  const totalSev = Object.values(sevCounts).reduce((a, b) => a + b, 0) || count;
 
   return (
     <button onClick={onSelect}
       className={`group relative text-left w-full rounded-xl overflow-hidden transition-all duration-300 ease-out
-        bg-white dark:bg-[#1a1d27] hover:shadow-lg hover:shadow-slate-200/40 dark:hover:shadow-black/20 hover:-translate-y-0.5 active:translate-y-0 active:shadow-md
+        bg-white dark:bg-[#1a1d27] hover:shadow-lg hover:shadow-slate-900/[0.06] dark:hover:shadow-black/20 hover:-translate-y-0.5 active:translate-y-0 active:shadow-md
         border ${isLearned ? 'border-emerald-300/60 dark:border-emerald-700/40' : 'border-neutral-200 dark:border-white/6 hover:border-neutral-300 dark:hover:border-white/10'}`}>
 
-      {/* Gradient accent strip */}
-      <div className="h-[3px] w-full" style={{ background: `linear-gradient(90deg, ${color}, ${color}60)` }} />
+      {/* Severity distribution bar */}
+      <div className="h-1 w-full flex">
+        {SEV_ORDER.filter(s => sevCounts[s] > 0).map(s => (
+          <div key={s} className="h-full transition-all duration-500"
+            style={{ width: `${(sevCounts[s] / totalSev) * 100}%`, background: SEV_COLORS[s] }} />
+        ))}
+        {Object.keys(sevCounts).filter(s => sevCounts[s] > 0).length === 0 && (
+          <div className="h-full w-full" style={{ background: `${color}40` }} />
+        )}
+      </div>
 
-      {/* Learned shimmer overlay */}
       {isLearned && (
         <div className="absolute inset-0 pointer-events-none bg-gradient-to-br from-emerald-500/[0.03] to-transparent" />
       )}
 
-      <div className="p-4">
-        {/* Header: icon + count */}
+      <div className="p-5">
+        {/* Header: icon + top severity + learned check */}
         <div className="flex items-start justify-between mb-3">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm transition-transform duration-300 group-hover:scale-110"
-            style={{ background: `linear-gradient(135deg, ${color}18, ${color}08)`, border: `1px solid ${color}15` }}>
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-300 group-hover:scale-105 group-hover:shadow-md"
+            style={{ background: `${color}10`, border: `1px solid ${color}15` }}>
             <Icon d={IC.shield} size={18} color={color} />
           </div>
-          <div className="flex flex-col items-end">
-            <span className="text-2xl font-bold leading-none tracking-tight" style={{ color }}>{count}</span>
-            <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">{count === 1 ? 'issue' : 'issues'}</span>
+          <div className="flex items-center gap-1.5">
+            {topSev && (
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md capitalize"
+                style={{ background: `${SEV_COLORS[topSev]}10`, color: SEV_COLORS[topSev] }}>
+                {topSev}
+              </span>
+            )}
+            {isLearned && (
+              <span className="w-5 h-5 rounded-full bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center border border-emerald-200/50 dark:border-emerald-700/30">
+                <Icon d={IC.check} size={10} color="#34d399" />
+              </span>
+            )}
           </div>
         </div>
 
-        {/* Name */}
-        <h3 className="font-semibold text-[14px] text-slate-900 dark:text-white mb-2 leading-snug tracking-tight group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+        {/* Name + issue count */}
+        <h3 className="font-semibold text-[15px] text-slate-900 dark:text-white mb-1 leading-snug group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
           {label}
         </h3>
+        <p className="text-[12px] text-slate-400 dark:text-slate-500 mb-3">
+          <span className="font-semibold" style={{ color }}>{count}</span> issue{count !== 1 ? 's' : ''} detected
+        </p>
 
         {/* Severity pills */}
-        <div className="flex flex-wrap gap-1 mb-3">
-          {SEV_ORDER.filter(s => sevCounts[s] > 0).map(s => (
-            <span key={s} className="text-[10px] px-2 py-[2px] rounded-md font-bold"
-              style={{ background: `${SEV_COLORS[s]}10`, color: SEV_COLORS[s], border: `1px solid ${SEV_COLORS[s]}15` }}>
-              {sevCounts[s]} {s}
-            </span>
-          ))}
-        </div>
+        {Object.keys(sevCounts).filter(s => sevCounts[s] > 0).length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-3">
+            {SEV_ORDER.filter(s => sevCounts[s] > 0).map(s => (
+              <span key={s} className="text-[10px] px-2 py-0.5 rounded-md font-semibold"
+                style={{ background: `${SEV_COLORS[s]}10`, color: SEV_COLORS[s] }}>
+                {sevCounts[s]} {s}
+              </span>
+            ))}
+          </div>
+        )}
 
         {/* Footer */}
-        <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-white/5">
-          {fileCount > 0
-            ? <span className="text-[10px] text-slate-400 dark:text-slate-500 flex items-center gap-1">
-                <Icon d={IC.file} size={9} className="opacity-40" />{fileCount} file{fileCount !== 1 ? 's' : ''}
-              </span>
-            : <span />}
-          {isLearned
-            ? <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded-md border border-emerald-200/50 dark:border-emerald-700/30">
-                <Icon d={IC.check} size={10} color="#34d399" />Reviewed
-              </span>
-            : <span className="text-[10px] font-bold text-indigo-500 dark:text-indigo-400 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                Start Learning <span className="transition-transform duration-200 group-hover:translate-x-0.5 inline-block">→</span>
-              </span>}
+        <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-white/5">
+          <span className="text-[11px] text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
+            {fileCount > 0
+              ? <><Icon d={IC.file} size={10} className="opacity-50" />{fileCount} file{fileCount !== 1 ? 's' : ''}</>
+              : 'Tap to review'}
+          </span>
+          <span className={`text-[11px] font-semibold flex items-center gap-1 transition-all duration-200 ${
+            isLearned
+              ? 'text-emerald-600 dark:text-emerald-400'
+              : 'text-indigo-500 dark:text-indigo-400 opacity-0 group-hover:opacity-100'
+          }`}>
+            {isLearned ? 'Reviewed ✓' : <>Learn <span className="transition-transform duration-200 group-hover:translate-x-0.5 inline-block">→</span></>}
+          </span>
         </div>
       </div>
     </button>
@@ -1846,16 +1867,18 @@ function VulnHubView({ summary, loadingSummary, healthScore, maturityLevel, onSe
     <div className="flex-1 flex overflow-hidden">
 
       {/* ── Left: Repository List ── */}
-      <div className="w-56 flex-shrink-0 border-r border-slate-200/80 dark:border-white/6 flex flex-col overflow-hidden bg-white dark:bg-[#15171f]">
-        <div className="px-4 py-3 border-b border-slate-200/80 dark:border-white/6 flex-shrink-0 flex items-center gap-2">
-          <div className="w-5 h-5 rounded-md bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-center">
-            <Icon d={IC.code} size={10} color="#6366f1" />
+      <div className="w-60 flex-shrink-0 border-r border-slate-200/80 dark:border-white/6 flex flex-col overflow-hidden bg-white dark:bg-[#15171f]">
+        <div className="px-4 py-4 border-b border-slate-200/80 dark:border-white/6 flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-lg bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-center">
+              <Icon d={IC.code} size={12} color="#6366f1" />
+            </div>
+            <p className="text-[12px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Repositories</p>
           </div>
-          <p className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Repositories</p>
         </div>
-        <div className="flex-1 overflow-y-auto py-1">
+        <div className="flex-1 overflow-y-auto py-1.5">
           {repoNames.length === 0 && (
-            <p className="text-[11px] text-slate-400 dark:text-slate-500 px-4 py-6 italic text-center">No repositories found</p>
+            <p className="text-[12px] text-slate-400 dark:text-slate-500 px-4 py-6 italic text-center">No repositories found</p>
           )}
           {repoNames.map(name => {
             const repoJobs = repoGroups[name];
@@ -1869,27 +1892,26 @@ function VulnHubView({ summary, loadingSummary, healthScore, maturityLevel, onSe
               <button
                 key={name}
                 onClick={() => onSelectJob(latestJob?.job_id || latestJob?.id || '')}
-                className={`w-full text-left px-4 py-3 transition-all group relative ${
+                className={`w-full text-left px-4 py-3.5 transition-all group relative ${
                   isActive
-                    ? 'bg-indigo-50/50 dark:bg-indigo-900/15'
+                    ? 'bg-indigo-50/60 dark:bg-indigo-900/15'
                     : 'hover:bg-slate-50 dark:hover:bg-white/[0.03]'
                 }`}
               >
-                {/* Active indicator */}
                 {isActive && (
-                  <div className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full bg-indigo-500" />
+                  <div className="absolute left-0 top-2.5 bottom-2.5 w-[3px] rounded-r-full bg-indigo-500" />
                 )}
-                <p className={`text-[12px] font-bold truncate leading-snug ${
-                  isActive ? 'text-indigo-600 dark:text-indigo-300' : 'text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white'
+                <p className={`text-[13px] font-semibold truncate leading-snug ${
+                  isActive ? 'text-indigo-600 dark:text-indigo-300' : 'text-slate-700 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white'
                 }`}>{name}</p>
-                <div className="flex items-center gap-1.5 mt-1">
-                  <span className="text-[10px] font-bold" style={{ color: scoreColor }}>
+                <div className="flex items-center gap-2 mt-1.5">
+                  <span className="text-[11px] font-semibold" style={{ color: scoreColor }}>
                     {latestScore != null ? `${latestScore}/100` : '–'}
                   </span>
-                  <span className="w-0.5 h-0.5 rounded-full bg-slate-300 dark:bg-slate-600" />
-                  <span className="text-[10px] text-slate-400 dark:text-slate-600">{latestVulns} issues</span>
+                  <span className="w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-600" />
+                  <span className="text-[11px] text-slate-400 dark:text-slate-500">{latestVulns} issues</span>
                 </div>
-                {latestDate && <p className="text-[9px] text-slate-400 dark:text-slate-600 mt-0.5">{latestDate}</p>}
+                {latestDate && <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">{latestDate}</p>}
 
                 {/* Scan picker for active repo */}
                 {isActive && repoJobs.length > 1 && (
@@ -1935,38 +1957,61 @@ function VulnHubView({ summary, loadingSummary, healthScore, maturityLevel, onSe
             </div>
           </div>
         ) : (
-          <div className="px-5 py-5">
+          <div className="px-8 py-8">
 
             {/* Hub header */}
-            <div className="mb-6">
-              <div className="flex items-center justify-between flex-wrap gap-3 mb-1">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-center shadow-sm border border-indigo-200/30 dark:border-indigo-700/20">
-                    <Icon d={IC.shield} size={18} color="#6366f1" />
+            <div className="mb-8">
+              <div className="flex items-start justify-between gap-4 mb-4">
+                <div className="flex items-center gap-4">
+                  {/* Mini score ring */}
+                  <div className="relative w-14 h-14 flex-shrink-0">
+                    <svg viewBox="0 0 48 48" className="w-full h-full -rotate-90">
+                      <circle cx="24" cy="24" r="20" fill="none" strokeWidth="4"
+                        className="stroke-slate-100 dark:stroke-white/10" />
+                      {healthScore > 0 && (
+                        <circle cx="24" cy="24" r="20" fill="none"
+                          stroke={healthScore >= 70 ? '#34d399' : healthScore >= 40 ? '#f59e0b' : '#ef4444'}
+                          strokeWidth="4" strokeLinecap="round"
+                          strokeDasharray={`${2 * Math.PI * 20}`}
+                          strokeDashoffset={`${2 * Math.PI * 20 * (1 - healthScore / 100)}`}
+                          style={{ transition: 'stroke-dashoffset 0.8s ease' }} />
+                      )}
+                    </svg>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span className="text-[14px] font-bold"
+                        style={{ color: healthScore >= 70 ? '#34d399' : healthScore >= 40 ? '#f59e0b' : healthScore > 0 ? '#ef4444' : '#94a3b8' }}>
+                        {healthScore || '–'}
+                      </span>
+                    </div>
                   </div>
                   <div>
-                    <h2 className="text-[18px] font-semibold text-slate-900 dark:text-white tracking-tight">
+                    <h2 className="text-[22px] font-semibold text-slate-900 dark:text-white tracking-tight leading-tight">
                       {repoName || 'Security Learning Hub'}
                     </h2>
-                    <p className="text-[12px] text-slate-400 dark:text-slate-500 mt-0.5 flex items-center gap-2">
-                      <span>{catList.length} vulnerability type{catList.length !== 1 ? 's' : ''}</span>
+                    <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                      <span className="text-[13px] text-slate-400 dark:text-slate-500">
+                        {catList.length} vulnerability type{catList.length !== 1 ? 's' : ''}
+                      </span>
                       {healthScore > 0 && (
                         <>
-                          <span className="w-0.5 h-0.5 rounded-full bg-slate-300 dark:bg-slate-600" />
-                          <span>Score: <strong style={{ color: healthScore >= 70 ? '#34d399' : healthScore >= 40 ? '#f59e0b' : '#f87171' }}>{healthScore}/100</strong></span>
+                          <span className="w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-600" />
+                          <span className="text-[13px] font-medium"
+                            style={{ color: healthScore >= 70 ? '#34d399' : healthScore >= 40 ? '#f59e0b' : '#ef4444' }}>
+                            Score: {healthScore}/100
+                          </span>
                         </>
                       )}
-                    </p>
+                    </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-shrink-0">
                   {learnedCount > 0 && (
-                    <span className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-500 px-2.5 py-1 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200/50 dark:border-emerald-700/30 rounded-lg">
-                      <Icon d={IC.check} size={10} color="#34d399" />{learnedCount}/{catList.length} reviewed
+                    <span className="flex items-center gap-1.5 text-[12px] font-semibold text-emerald-600 dark:text-emerald-400 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200/50 dark:border-emerald-700/30 rounded-lg">
+                      <Icon d={IC.check} size={11} color="#34d399" />{learnedCount}/{catList.length} reviewed
                     </span>
                   )}
                   {healthScore > 0 && maturityLevel && (
-                    <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg border"
+                    <span className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border"
                       style={{ color: maturityLevel.text || '#a5b4fc', borderColor: `${maturityLevel.border || '#818cf8'}30`, background: `${maturityLevel.border || '#818cf8'}08` }}>
                       {maturityLevel.label}
                     </span>
@@ -1975,7 +2020,7 @@ function VulnHubView({ summary, loadingSummary, healthScore, maturityLevel, onSe
               </div>
               {/* Progress bar */}
               {catList.length > 0 && (
-                <div className="mt-3 h-1.5 rounded-full bg-slate-100 dark:bg-white/5 overflow-hidden">
+                <div className="h-1.5 rounded-full bg-slate-100 dark:bg-white/5 overflow-hidden">
                   <div className="h-full rounded-full transition-all duration-500 ease-out"
                     style={{
                       width: `${Math.round((learnedCount / catList.length) * 100)}%`,
@@ -1986,7 +2031,7 @@ function VulnHubView({ summary, loadingSummary, healthScore, maturityLevel, onSe
             </div>
 
             {/* Category grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
               {catList.map(c => (
                 <CategoryCard
                   key={c.slug}
@@ -1999,12 +2044,12 @@ function VulnHubView({ summary, loadingSummary, healthScore, maturityLevel, onSe
             </div>
 
             {/* Behavioral Insights */}
-            <div className="mt-8 space-y-5">
+            <div className="mt-10 space-y-6">
               {jobId && <LongitudinalPanel jobId={jobId} />}
               {repoName && (
-                <div className="space-y-2">
-                  <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                    <Icon d={IC.star} size={12} color="#f59e0b" />Skill Tree
+                <div className="space-y-3">
+                  <p className="text-[12px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                    <Icon d={IC.star} size={13} color="#f59e0b" />Skill Tree
                   </p>
                   <SkillTree repoName={repoName} />
                 </div>
@@ -2325,7 +2370,7 @@ export default function LearningCoachPage({ jobId: propJobId, repoName: propRepo
     <div className={`h-screen flex flex-col overflow-hidden ${isDark ? 'bg-[#0d0f17] text-white' : 'bg-[#f4f6fb] text-slate-900'}`}>
 
       {/* ── Header ── */}
-      <div className={`flex-shrink-0 flex items-center gap-4 px-5 py-2.5 border-b ${isDark ? 'border-white/6 bg-[#0d0f17]/95 backdrop-blur-xl' : 'border-slate-200/80 bg-white/95 backdrop-blur-xl shadow-sm shadow-slate-200/50'}`}>
+      <div className={`flex-shrink-0 flex items-center gap-4 px-6 py-3 border-b ${isDark ? 'border-white/6 bg-[#0d0f17]/95 backdrop-blur-xl' : 'border-slate-200/80 bg-white/95 backdrop-blur-xl shadow-sm shadow-slate-200/30'}`}>
 
         {/* Brand */}
         <div className="flex items-center gap-2.5 flex-shrink-0">
@@ -2334,7 +2379,7 @@ export default function LearningCoachPage({ jobId: propJobId, repoName: propRepo
           </div>
           <div>
             <span className="font-semibold text-[14px] leading-none tracking-tight">Security Coach</span>
-            <div className="text-[9px] text-slate-400 dark:text-slate-500 leading-tight mt-0.5 font-mono">Llama 4 Maverick</div>
+            <div className="text-[10px] text-slate-400 dark:text-slate-500 leading-tight mt-0.5 font-mono">Llama 4 Maverick</div>
           </div>
         </div>
 
@@ -2346,8 +2391,8 @@ export default function LearningCoachPage({ jobId: propJobId, repoName: propRepo
           {loadingJobs
             ? <Skeleton h="h-5" w="w-36" />
             : repoName
-              ? <span className="text-[12px] font-bold text-slate-700 dark:text-slate-200 truncate">{repoName}</span>
-              : <span className="text-[12px] text-slate-400 dark:text-slate-600 italic">No scan selected</span>
+              ? <span className="text-[13px] font-semibold text-slate-700 dark:text-slate-200 truncate">{repoName}</span>
+              : <span className="text-[13px] text-slate-400 dark:text-slate-600 italic">No scan selected</span>
           }
           {healthScore > 0 && !loadingInsights && (
             <span className="flex-shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold"
@@ -2368,11 +2413,11 @@ export default function LearningCoachPage({ jobId: propJobId, repoName: propRepo
             { id: 'report', label: 'Report', icon: IC.trendUp },
           ].map(v => (
             <button key={v.id} onClick={() => setView(v.id)}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-[11px] font-bold transition-all duration-200
+              className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[12px] font-semibold transition-all duration-200
                 ${view === v.id || (view === 'detail' && v.id === 'hub')
                   ? 'bg-white dark:bg-[#1a1d27] text-indigo-600 dark:text-indigo-400 shadow-sm ring-1 ring-slate-200/60 dark:ring-white/8'
                   : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}>
-              <Icon d={v.icon} size={12} />{v.label}
+              <Icon d={v.icon} size={13} />{v.label}
             </button>
           ))}
         </div>

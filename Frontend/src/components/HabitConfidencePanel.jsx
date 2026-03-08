@@ -41,7 +41,7 @@ function HabitCard({ habit, isDark }) {
 
   return (
     <div className={`rounded-xl border overflow-hidden ${
-      isDark ? 'border-white/10 bg-white/4' : 'border-gray-200 bg-white'
+      isDark ? 'border-white/10 bg-white/4' : 'border-neutral-200 bg-white'
     }`}>
       <button
         className={`w-full flex items-start justify-between gap-3 p-4 text-left transition-colors ${
@@ -143,7 +143,7 @@ function HabitCard({ habit, isDark }) {
 function Stat({ label, value, isDark }) {
   return (
     <div className={`rounded-lg px-3 py-2 ${
-      isDark ? 'bg-white/4' : 'bg-gray-50'
+      isDark ? 'bg-white/4' : 'bg-[#f8fafc]'
     }`}>
       <p className={`text-[10px] font-medium ${
         isDark ? 'text-white/40' : 'text-gray-500'
@@ -231,7 +231,7 @@ export default function HabitConfidencePanel({ repoName }) {
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between mb-2">
-        <h3 className={`text-sm font-bold ${
+        <h3 className={`text-[15px] font-semibold ${
           isDark ? 'text-white/80' : 'text-gray-900'
         }`}>Habit Patterns</h3>
         <span className={`text-xs ${
